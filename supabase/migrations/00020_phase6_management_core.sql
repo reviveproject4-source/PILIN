@@ -11,6 +11,8 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- 2. DECISIONS TABLE
+ALTER TABLE public.branches ADD CONSTRAINT uq_branches_id_business_id UNIQUE (id, business_id);
+
 CREATE TABLE IF NOT EXISTS decisions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     business_id UUID NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
