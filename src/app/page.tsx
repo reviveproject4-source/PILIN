@@ -3703,7 +3703,16 @@ export default function MinaraBOSDashboard() {
                     {(['OWNER', 'KEPALA_CABANG', 'PEGAWAI'] as const).map((r) => (
                       <button
                         key={r}
-                        onClick={() => setActiveRole(r)}
+                        onClick={() => {
+                          setActiveRole(r);
+                          if (r === 'PEGAWAI') {
+                            setActiveTab('pos');
+                          } else if (r === 'KEPALA_CABANG') {
+                            setActiveTab('management');
+                          } else {
+                            setActiveTab('dashboard');
+                          }
+                        }}
                         className={`px-2.5 py-1 rounded text-xs font-bold transition-all ${
                           activeRole === r
                             ? 'bg-blue-600 text-white shadow-sm'
