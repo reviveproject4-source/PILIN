@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Building2, Users, ShoppingBag, ShieldCheck, Shield, Lock, RefreshCw, 
   Upload, FileText, CheckCircle2, AlertTriangle, ArrowRight, KeyRound,
   TrendingUp, Clock, AlertCircle, Ban, Phone, MapPin, Layers,
-  DollarSign, Award, Percent, TrendingDown, Gift, Zap, MessageSquare, PieChart, Sparkles, Wrench, PackageCheck, ClipboardList, LayoutGrid, Trophy, Camera, Trash2, Send, Printer
+  DollarSign, Award, Percent, TrendingDown, Gift, Zap, MessageSquare, PieChart, Sparkles, Wrench, PackageCheck, ClipboardList, LayoutGrid, Trophy, Camera, Trash2, Send, Printer, Calendar
 } from 'lucide-react';
 import { normalizePhoneNumber } from '@/lib/normalizePhoneNumber';
 import { ServiceOrderStatus, QCStatus } from '@/lib/types';
@@ -357,72 +357,323 @@ export default function MinaraBOSDashboard() {
   };
 
   // Interactive Attendance / Presensi State (Pegawai & Kepala Cabang)
-  const [attendanceList, setAttendanceList] = useState<{
+  // ==========================================
+  // REVISED ATTENDANCE & LEAVE SYSTEM STATE
+  // ==========================================
+  interface DailyAttendanceRecord {
     id: string;
+    employee_id: string;
     employee_name: string;
     role_label: string;
-    type: 'MASUK' | 'KELUAR' | 'IZIN';
-    location: string;
-    photo_url: string;
-    timestamp: string;
-    notes?: string;
-    status: 'TEPAT_WAKTU' | 'TERLAMBAT' | 'IZIN';
-  }[]>([]);
+    tanggal: string; // 'YYYY-MM-DD'
+    masuk_waktu?: string; // '07:54'
+    masuk_timestamp_display?: string; // '02 September 2026 • 07:54 WIB'
+    masuk_foto?: string; // base64
+    masuk_lat?: number;
+    masuk_lng?: number;
+    masuk_location_info?: string;
+    status_masuk?: 'TEPAT_WAKTU' | 'TERLAMBAT';
+    masuk_raw_time?: number; // epoch ms
+    keluar_waktu?: string; // '18:21'
+    keluar_timestamp_display?: string; // '02 September 2026 • 18:21 WIB'
+    keluar_foto?: string; // base64
+    keluar_lat?: number;
+    keluar_lng?: number;
+    keluar_location_info?: string;
+    keluar_raw_time?: number; // epoch ms
+    work_duration_minutes?: number;
+    work_duration_str?: string; // '10 jam 27 menit'
+    overtime_minutes?: number;
+    overtime_str?: string; // '2 jam 27 menit'
+    created_at: string;
+  }
 
-  const [attInputName, setAttInputName] = useState('Dewi Lestari (Kasir)');
-  const [attInputType, setAttInputType] = useState<'MASUK' | 'KELUAR' | 'IZIN'>('MASUK');
-  const [attInputLocation, setAttInputLocation] = useState('Cabang Utama - Jakarta Pusat');
-  const [attInputPhotoUrl, setAttInputPhotoUrl] = useState('');
-  const [attInputNotes, setAttInputNotes] = useState('');
-  const [attSuccessMsg, setAttSuccessMsg] = useState<string | null>(null);
-  const [attCompressionInfo, setAttCompressionInfo] = useState<string | null>(null);
+  interface LeaveRequestRecord {
+    id: string;
+    employee_id: string;
+    employee_name: string;
+    role_label: string;
+    jenis_izin: string;
+    tanggal_izin: string;
+    alasan: string;
+    lampiran_name?: string;
+    status: 'MENUNGGU PERSETUJUAN' | 'DISETUJUI' | 'DITOLAK';
+    created_at: string;
+  }
 
-  const handleAttendanceFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const res = await ImageCompressorService.compressImage(file, 800, 800, 0.75);
-      setAttInputPhotoUrl(res.compressedBase64);
-      setAttCompressionInfo(`⚡ Foto Terkompresi Canvas: ${res.originalSizeKb} KB ➔ ${res.compressedSizeKb} KB (-${res.compressionRatioPercent}%)`);
+  const [dailyAttendanceRecords, setDailyAttendanceRecords] = useState<DailyAttendanceRecord[]>([]);
+  const [leaveRequestsList, setLeaveRequestsList] = useState<LeaveRequestRecord[]>([
+    {
+      id: 'LV-001',
+      employee_id: 'EMP-001',
+      employee_name: 'Rina Melati',
+      role_label: 'Kasir Utama',
+      jenis_izin: 'Sakit (Surat Dokter)',
+      tanggal_izin: new Date().toISOString().substring(0, 10),
+      alasan: 'Demam tinggi dan istirahat dokter 1 hari',
+      lampiran_name: 'Surat_Keterangan_Dokter.pdf',
+      status: 'DISETUJUI',
+      created_at: new Date().toISOString()
+    }
+  ]);
+
+  const [attToastMsg, setAttToastMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Live Camera Modal State for Attendance
+  const [showAttCameraModal, setShowAttCameraModal] = useState<boolean>(false);
+  const [attCameraMode, setAttCameraMode] = useState<'MASUK' | 'KELUAR'>('MASUK');
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [capturedAttPhoto, setCapturedAttPhoto] = useState<string | null>(null);
+  const [attGpsLocation, setAttGpsLocation] = useState<{ lat: number; lng: number; info: string } | null>(null);
+  const [attGpsError, setAttGpsError] = useState<string | null>(null);
+  const [attCameraError, setAttCameraError] = useState<string | null>(null);
+
+  // Leave Form Modal State
+  const [showLeaveFormModal, setShowLeaveFormModal] = useState<boolean>(false);
+  const [leaveFormType, setLeaveFormType] = useState<string>('Sakit (Surat Dokter)');
+  const [leaveFormDate, setLeaveFormDate] = useState<string>(new Date().toISOString().substring(0, 10));
+  const [leaveFormReason, setLeaveFormReason] = useState<string>('');
+  const [leaveFormFile, setLeaveFormFile] = useState<File | null>(null);
+
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  const stopCameraStream = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+      setCameraStream(null);
     }
   };
 
-  const handleSubmitAttendance = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    const nowFormatted = new Date().toLocaleDateString('id-ID', {
+  const fetchGpsLocation = () => {
+    setAttGpsError(null);
+    if (!navigator.geolocation) {
+      setAttGpsError('Perangkat Anda tidak mendukung GPS.');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        const infoStr = `📍 Komp. Bojong Depok Baru II, Cibinong, Kab. Bogor (GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+        setAttGpsLocation({ lat, lng, info: infoStr });
+      },
+      () => {
+        const defaultInfo = `📍 Komp. Bojong Depok Baru II, Cibinong, Kab. Bogor`;
+        setAttGpsLocation({ lat: -6.4789, lng: 106.8412, info: defaultInfo });
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  };
+
+  const openAttendanceCamera = async (mode: 'MASUK' | 'KELUAR') => {
+    const todayDateKey = new Date().toISOString().substring(0, 10);
+    const empId = loggedInEmp ? loggedInEmp.id : 'EMP-001';
+    const recToday = dailyAttendanceRecords.find(r => r.tanggal === todayDateKey && r.employee_id === empId);
+
+    if (mode === 'MASUK' && recToday?.masuk_waktu) {
+      setAttToastMsg({ type: 'error', text: 'Presensi masuk Anda sudah tercatat hari ini.' });
+      return;
+    }
+    if (mode === 'KELUAR' && !recToday?.masuk_waktu) {
+      setAttToastMsg({ type: 'error', text: 'Anda harus melakukan presensi masuk terlebih dahulu.' });
+      return;
+    }
+    if (mode === 'KELUAR' && recToday?.keluar_waktu) {
+      setAttToastMsg({ type: 'error', text: 'Presensi keluar Anda sudah tercatat.' });
+      return;
+    }
+
+    setAttCameraMode(mode);
+    setCapturedAttPhoto(null);
+    setAttCameraError(null);
+    setShowAttCameraModal(true);
+    fetchGpsLocation();
+
+    try {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 640 } }
+        });
+        setCameraStream(stream);
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      } else {
+        setAttCameraError('Kamera tidak didukung oleh peramban ini.');
+      }
+    } catch (err) {
+      setAttCameraError('Kamera diperlukan untuk mengambil foto presensi.');
+    }
+  };
+
+  const handleSnapAttPhoto = () => {
+    if (videoRef.current) {
+      const video = videoRef.current;
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        setCapturedAttPhoto(dataUrl);
+        stopCameraStream();
+      }
+    }
+  };
+
+  const handleRetakeAttPhoto = async () => {
+    setCapturedAttPhoto(null);
+    setAttCameraError(null);
+    try {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 640 } }
+        });
+        setCameraStream(stream);
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      }
+    } catch (err) {
+      setAttCameraError('Kamera diperlukan untuk mengambil foto presensi.');
+    }
+  };
+
+  const handleConfirmAttendanceRecord = () => {
+    if (!capturedAttPhoto) {
+      setAttToastMsg({ type: 'error', text: 'Foto presensi diperlukan.' });
+      return;
+    }
+    if (!attGpsLocation) {
+      setAttToastMsg({ type: 'error', text: 'Lokasi belum dapat diperoleh. Aktifkan izin lokasi lalu coba kembali.' });
+      return;
+    }
+
+    const now = new Date();
+    const dateFormatted = now.toLocaleDateString('id-ID', {
       weekday: 'long',
       day: 'numeric',
       month: 'long',
       year: 'numeric'
-    }) + ' • ' + new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' WIB';
+    });
+    const timeFormatted = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB';
+    const timeShort = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+    const fullDisplay = `${dateFormatted} • ${timeFormatted}`;
+    const dateKey = now.toISOString().substring(0, 10);
 
-    const empName = activeRole === 'KEPALA_CABANG' ? 'Agus Wijaya (Kepala Cabang)' : 'Rina Melati (Kasir Utama)';
-    const autoGpsLoc = '📍 Cabang Utama Jakarta (GPS Lat: -6.20887, Long: 106.84561)';
+    const empId = loggedInEmp ? loggedInEmp.id : 'EMP-001';
+    const empName = loggedInEmp ? loggedInEmp.nama : (activeRole === 'KEPALA_CABANG' ? 'Budi Santoso' : 'Rina Melati');
+    const roleLabel = activeRole === 'KEPALA_CABANG' ? 'Kepala Cabang' : 'Pegawai / Kasir';
 
-    let finalPhotoUrl = attInputPhotoUrl;
-    let compressNote = '';
+    setDailyAttendanceRecords(prev => {
+      const existingIdx = prev.findIndex(r => r.tanggal === dateKey && r.employee_id === empId);
 
-    if (finalPhotoUrl && finalPhotoUrl.startsWith('data:image')) {
-      const res = await ImageCompressorService.compressImage(finalPhotoUrl, 800, 800, 0.75);
-      finalPhotoUrl = res.compressedBase64;
-      compressNote = ` | Kompresi Canvas: ${res.originalSizeKb}KB ➔ ${res.compressedSizeKb}KB (-${res.compressionRatioPercent}%)`;
-    } else if (!finalPhotoUrl) {
-      finalPhotoUrl = 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=300';
-    }
+      if (attCameraMode === 'MASUK') {
+        const isLate = now.getHours() >= 8 && now.getMinutes() > 0;
+        const newRecord: DailyAttendanceRecord = {
+          id: `ATT-${Date.now()}`,
+          employee_id: empId,
+          employee_name: empName,
+          role_label: roleLabel,
+          tanggal: dateKey,
+          masuk_waktu: timeShort,
+          masuk_timestamp_display: fullDisplay,
+          masuk_foto: capturedAttPhoto,
+          masuk_lat: attGpsLocation.lat,
+          masuk_lng: attGpsLocation.lng,
+          masuk_location_info: attGpsLocation.info,
+          status_masuk: isLate ? 'TERLAMBAT' : 'TEPAT_WAKTU',
+          masuk_raw_time: now.getTime(),
+          created_at: now.toISOString()
+        };
 
-    const newRecord = {
-      id: `ATT-${Math.floor(100 + Math.random() * 900)}`,
+        if (existingIdx >= 0) {
+          const updated = [...prev];
+          updated[existingIdx] = { ...updated[existingIdx], ...newRecord };
+          return updated;
+        } else {
+          return [newRecord, ...prev];
+        }
+      } else {
+        if (existingIdx < 0) return prev;
+
+        const existingRecord = prev[existingIdx];
+        const masukTime = existingRecord.masuk_raw_time || now.getTime();
+        const diffMs = Math.max(0, now.getTime() - masukTime);
+        const diffMinutes = Math.floor(diffMs / (1000 * 60));
+
+        const durHours = Math.floor(diffMinutes / 60);
+        const durMins = diffMinutes % 60;
+        const workDurationStr = `${durHours} jam ${durMins} menit`;
+
+        let overtimeStr = '0 jam 0 menit';
+        let otMinsTotal = 0;
+        if (diffMinutes > 480) {
+          otMinsTotal = diffMinutes - 480;
+          const otH = Math.floor(otMinsTotal / 60);
+          const otM = otMinsTotal % 60;
+          overtimeStr = `${otH} jam ${otM} menit`;
+        }
+
+        const updatedRecord: DailyAttendanceRecord = {
+          ...existingRecord,
+          keluar_waktu: timeShort,
+          keluar_timestamp_display: fullDisplay,
+          keluar_foto: capturedAttPhoto,
+          keluar_lat: attGpsLocation.lat,
+          keluar_lng: attGpsLocation.lng,
+          keluar_location_info: attGpsLocation.info,
+          keluar_raw_time: now.getTime(),
+          work_duration_minutes: diffMinutes,
+          work_duration_str: workDurationStr,
+          overtime_minutes: otMinsTotal,
+          overtime_str: overtimeStr
+        };
+
+        const updated = [...prev];
+        updated[existingIdx] = updatedRecord;
+        return updated;
+      }
+    });
+
+    stopCameraStream();
+    setShowAttCameraModal(false);
+    setAttToastMsg({
+      type: 'success',
+      text: `✓ Presensi ${attCameraMode} berhasil dicatat!`
+    });
+  };
+
+  const handleLeaveFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!leaveFormReason.trim()) return;
+
+    const empId = loggedInEmp ? loggedInEmp.id : 'EMP-001';
+    const empName = loggedInEmp ? loggedInEmp.nama : (activeRole === 'KEPALA_CABANG' ? 'Budi Santoso' : 'Rina Melati');
+    const roleLabel = activeRole === 'KEPALA_CABANG' ? 'Kepala Cabang' : 'Pegawai / Kasir';
+
+    const newLeave: LeaveRequestRecord = {
+      id: `LV-${Math.floor(100 + Math.random() * 900)}`,
+      employee_id: empId,
       employee_name: empName,
-      role_label: activeRole === 'KEPALA_CABANG' ? 'Kepala Cabang' : 'Pegawai / Kasir',
-      type: attInputType,
-      location: autoGpsLoc,
-      photo_url: finalPhotoUrl,
-      timestamp: nowFormatted,
-      notes: `Watermark Auto-Stamp GPS, Real-Time Date & Compressed Selfie Photo${compressNote}`,
-      status: (attInputType === 'IZIN' ? 'IZIN' : new Date().getHours() >= 8 && new Date().getMinutes() > 0 ? 'TERLAMBAT' : 'TEPAT_WAKTU') as 'TEPAT_WAKTU' | 'TERLAMBAT' | 'IZIN'
+      role_label: roleLabel,
+      jenis_izin: leaveFormType,
+      tanggal_izin: leaveFormDate,
+      alasan: leaveFormReason,
+      lampiran_name: leaveFormFile ? leaveFormFile.name : undefined,
+      status: 'MENUNGGU PERSETUJUAN',
+      created_at: new Date().toISOString()
     };
 
-    setAttendanceList(prev => [newRecord, ...prev]);
-    setAttSuccessMsg(`✓ PRESENSI ${attInputType} BERHASIL! Foto Selfi Terkompresi (Canvas) + Watermark GPS & Waktu Real-time (${nowFormatted}) Otomatis Direkam!`);
+    setLeaveRequestsList(prev => [newLeave, ...prev]);
+    setShowLeaveFormModal(false);
+    setLeaveFormReason('');
+    setLeaveFormFile(null);
+    setAttToastMsg({
+      type: 'success',
+      text: '✓ Pengajuan izin berhasil terkirim. Status: MENUNGGU PERSETUJUAN.'
+    });
   };
 
   // Interactive Broadcast / Message Blast State (Pegawai & Kepala Cabang)
@@ -5794,236 +6045,270 @@ export default function MinaraBOSDashboard() {
             </div>
           )}
 
-          {/* PRESENSI & FOTO SELFI ABSEN (DASHBOARD PEGAWAI & KEPALA CABANG) */}
-          {activeTab === 'attendance' && (
-            <div className="space-y-6 animate-fadeIn">
-              <div className="bg-slate-900 border border-purple-500/30 rounded-xl p-5 flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className="p-3 bg-purple-500/10 rounded-xl text-purple-400 border border-purple-500/20">
-                    <Clock className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-bold text-white">Presensi Foto Selfie Kamera</h2>
-                  </div>
-                </div>
+          {/* PRESENSI PEGAWAI (REVISED 3 ACTIONS: MASUK, KELUAR, IJIN) */}
+          {activeTab === 'attendance' && (() => {
+            const todayKey = new Date().toISOString().substring(0, 10);
+            const currentEmpId = loggedInEmp ? loggedInEmp.id : 'EMP-001';
+            const todayRec = dailyAttendanceRecords.find(r => r.tanggal === todayKey && r.employee_id === currentEmpId);
 
-                <div className="bg-slate-950 px-4 py-2 rounded-xl border border-slate-800 text-right text-xs">
-                  <span className="text-slate-400 font-semibold block text-[11px]">Waktu Presensi Server:</span>
-                  <span className="text-purple-300 font-mono font-bold">
-                    📅 {new Date().toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} | 🕒 {new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                </div>
-              </div>
+            const hasCheckedIn = !!todayRec?.masuk_waktu;
+            const hasCheckedOut = !!todayRec?.keluar_waktu;
 
-              {attSuccessMsg && (
-                <div className="bg-emerald-950/80 border border-emerald-500/40 rounded-xl p-4 flex items-center justify-between animate-fadeIn">
+            return (
+              <div className="space-y-6 animate-fadeIn max-w-5xl mx-auto">
+                {/* HEADER SECTION */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex items-center justify-between shadow-lg">
                   <div className="flex items-center space-x-3">
-                    <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                    <p className="text-xs font-bold text-emerald-200">{attSuccessMsg}</p>
-                  </div>
-                  <button onClick={() => setAttSuccessMsg(null)} className="text-xs text-emerald-400 hover:text-emerald-200 underline">
-                    Tutup
-                  </button>
-                </div>
-              )}
-
-              <div className="grid grid-cols-12 gap-6">
-                {/* FORM PRESENSI KAMERA LANGSUNG & ENGINE WATERMARK PIHAK KE-3 (ZERO TYPING) */}
-                <div className="col-span-6 bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4 shadow-lg">
-                  <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
-                    <div>
-                      <h3 className="font-bold text-white text-sm flex items-center space-x-2">
-                        <Camera className="w-4 h-4 text-purple-400" />
-                        <span>Presensi Foto Selfie Kamera</span>
-                      </h3>
+                    <div className="p-3 bg-purple-500/10 rounded-xl text-purple-400 border border-purple-500/20">
+                      <Clock className="w-6 h-6" />
                     </div>
-                    <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30 font-mono">
-                      AUTO-STAMP GPS ACTIVE
+                    <div>
+                      <h2 className="text-xl font-extrabold text-white">Presensi Pegawai Hari Ini</h2>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-950 px-4 py-2 rounded-xl border border-slate-800 text-right text-xs">
+                    <span className="text-purple-300 font-mono font-bold">
+                      📅 {new Date().toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
                     </span>
                   </div>
+                </div>
 
-                  {/* TIPE PRESENSI (MASUK / KELUAR / IZIN) */}
-                  <div className="space-y-1 text-xs">
-                    <label className="text-slate-300 font-bold block">Pilih Status Presensi Harian *</label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {(['MASUK', 'KELUAR', 'IZIN'] as const).map(t => (
-                        <button
-                          key={t}
-                          type="button"
-                          onClick={() => setAttInputType(t)}
-                          className={`py-2 rounded-xl font-bold border transition-all text-xs flex items-center justify-center space-x-1 ${
-                            attInputType === t
-                              ? t === 'MASUK' ? 'bg-emerald-600 text-white border-emerald-500 shadow-md shadow-emerald-600/20'
-                                : t === 'KELUAR' ? 'bg-blue-600 text-white border-blue-500 shadow-md shadow-blue-600/20'
-                                : 'bg-amber-600 text-white border-amber-500 shadow-md shadow-amber-600/20'
-                              : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800'
-                          }`}
-                        >
-                          <span>{t === 'MASUK' ? '🟢' : t === 'KELUAR' ? '🔵' : '🟡'}</span>
-                          <span>PRESENSI {t}</span>
-                        </button>
-                      ))}
+                {/* TOAST / ALERT NOTIFICATION */}
+                {attToastMsg && (
+                  <div className={`p-4 rounded-xl border flex items-center justify-between text-xs font-bold animate-fadeIn ${
+                    attToastMsg.type === 'success' ? 'bg-emerald-950/90 border-emerald-500/40 text-emerald-200' : 'bg-rose-950/90 border-rose-500/40 text-rose-200'
+                  }`}>
+                    <div className="flex items-center space-x-2.5">
+                      {attToastMsg.type === 'success' ? <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" /> : <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />}
+                      <span>{attToastMsg.text}</span>
                     </div>
+                    <button onClick={() => setAttToastMsg(null)} className="underline hover:opacity-80">Tutup</button>
                   </div>
+                )}
 
-                  {/* AUTO-DETECTED IDENTITY & GEOLOCATION HUD DATA */}
-                  <div className="bg-slate-950 p-3.5 rounded-xl border border-purple-500/30 space-y-2 text-xs">
-                    <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                      <span className="text-slate-400 text-[11px]">Identitas Terdeteksi:</span>
-                      <strong className="text-white font-bold">{activeRole === 'KEPALA_CABANG' ? 'Agus Wijaya (Kepala Cabang)' : 'Rina Melati (Kasir Utama)'}</strong>
-                    </div>
-
-                    <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                      <span className="text-slate-400 text-[11px]">📍 Geolocation GPS (Pihak Ke-3):</span>
-                      <strong className="text-emerald-400 font-mono text-[11px]">Lat: -6.2088, Long: 106.8456 (Cabang Utama Jakarta)</strong>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-400 text-[11px]">⏰ Waktu Real-Time (NTP Clock):</span>
-                      <strong className="text-amber-300 font-mono text-[11px]">
-                        {new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })} • {new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB
-                      </strong>
-                    </div>
-                  </div>
-
-                  {/* UPLOAD / AMBIL FOTO SELFIE WITH AUTO-COMPRESSION */}
-                  <div className="flex items-center justify-between pt-1">
-                    <label className="cursor-pointer px-3 py-1.5 bg-purple-600/30 hover:bg-purple-600 text-purple-200 text-[11px] font-bold rounded-lg border border-purple-500/40 flex items-center space-x-1.5 transition-all shadow">
-                      <Camera className="w-3.5 h-3.5 text-amber-300" />
-                      <span>📸 Ambil / Upload Foto Selfie (Auto-Compress)</span>
-                      <input type="file" accept="image/*" capture="user" onChange={handleAttendanceFileUpload} className="hidden" />
-                    </label>
-
-                    {attInputPhotoUrl && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAttInputPhotoUrl('');
-                          setAttCompressionInfo(null);
-                        }}
-                        className="text-[10px] text-rose-400 hover:text-rose-300 underline"
-                      >
-                        Reset Foto
-                      </button>
-                    )}
-                  </div>
-
-                  {attCompressionInfo && (
-                    <div className="bg-purple-950/70 border border-purple-500/40 rounded-lg p-2 text-[10px] text-purple-300 font-mono flex items-center space-x-1.5 animate-fadeIn">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                      <span>{attCompressionInfo}</span>
-                    </div>
-                  )}
-
-                  {/* VIEWFINDER KAMERA LANGSUNG WITH REAL-TIME WATERMARK OVERLAY */}
-                  <div className="relative rounded-2xl overflow-hidden border-2 border-purple-500/50 shadow-2xl bg-black group">
-                    <img
-                      src={attInputPhotoUrl || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=600'}
-                      alt="Live Camera Viewfinder"
-                      className="w-full h-56 object-cover opacity-90 group-hover:scale-105 transition-all duration-500"
-                    />
-
-                    {/* LIVE CAMERA OVERLAY HUD */}
-                    <div className="absolute top-3 left-3 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-lg border border-white/20 text-[10px] text-white font-mono flex items-center space-x-1.5 shadow">
-                      <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
-                      <span>LIVE CAMERA STREAM ACTIVE</span>
-                    </div>
-
-                    {/* AUTOMATED WATERMARK OVERLAY ON PHOTO */}
-                    <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black via-black/80 to-transparent p-3 text-[10px] text-white font-mono space-y-0.5 border-t border-white/10">
-                      <p className="font-bold text-amber-300 flex items-center justify-between text-xs">
-                        <span>👤 {activeRole === 'KEPALA_CABANG' ? 'Agus Wijaya (Kepala Cabang)' : 'Rina Melati (Kasir)'}</span>
-                        <span className="px-1.5 py-0.5 bg-emerald-500 text-black font-bold rounded text-[9px]">WATERMARK VERIFIED</span>
-                      </p>
-                      <p className="text-emerald-400">📍 Cabang Utama Jakarta (GPS: -6.20887, 106.84561)</p>
-                      <p className="text-slate-300">📅 {new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} • Real-Time NTP</p>
-                    </div>
-                  </div>
-
-                  {/* ONE-CLICK SUBMIT BUTTON */}
+                {/* 3 MAIN ACTIONS GRID (MOBILE 390px OPTIMIZED) */}
+                <div className="grid grid-cols-3 gap-3">
+                  {/* 1. TOMBOL MASUK */}
                   <button
                     type="button"
-                    onClick={() => handleSubmitAttendance()}
-                    className="w-full py-3.5 bg-gradient-to-r from-purple-600 via-indigo-600 to-emerald-600 hover:from-purple-500 hover:to-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-xl shadow-purple-600/30 transition-all flex items-center justify-center space-x-2 border border-purple-400/40"
+                    disabled={hasCheckedIn}
+                    onClick={() => openAttendanceCamera('MASUK')}
+                    className={`py-4 px-3 rounded-2xl font-black text-sm transition-all flex flex-col items-center justify-center space-y-1.5 border shadow-lg ${
+                      hasCheckedIn
+                        ? 'bg-slate-900 text-slate-500 border-slate-800 cursor-not-allowed opacity-60'
+                        : 'bg-gradient-to-b from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white border-emerald-400/30 shadow-emerald-600/20 active:scale-95'
+                    }`}
                   >
-                    <Camera className="w-4 h-4 text-amber-300 animate-bounce" />
-                    <span>📸 AMBIL FOTO SELFI & SUBMIT PRESENSI {attInputType}</span>
+                    <span className="text-2xl">🟢</span>
+                    <span className="uppercase tracking-wider">MASUK</span>
+                    {hasCheckedIn && <span className="text-[10px] bg-slate-800 text-emerald-400 px-2 py-0.5 rounded font-mono font-normal">Sudah Masuk</span>}
+                  </button>
+
+                  {/* 2. TOMBOL KELUAR */}
+                  <button
+                    type="button"
+                    disabled={!hasCheckedIn || hasCheckedOut}
+                    onClick={() => openAttendanceCamera('KELUAR')}
+                    className={`py-4 px-3 rounded-2xl font-black text-sm transition-all flex flex-col items-center justify-center space-y-1.5 border shadow-lg ${
+                      !hasCheckedIn || hasCheckedOut
+                        ? 'bg-slate-900 text-slate-500 border-slate-800 cursor-not-allowed opacity-60'
+                        : 'bg-gradient-to-b from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white border-blue-400/30 shadow-blue-600/20 active:scale-95'
+                    }`}
+                  >
+                    <span className="text-2xl">🔵</span>
+                    <span className="uppercase tracking-wider">KELUAR</span>
+                    {hasCheckedOut && <span className="text-[10px] bg-slate-800 text-blue-400 px-2 py-0.5 rounded font-mono font-normal">Sudah Keluar</span>}
+                  </button>
+
+                  {/* 3. TOMBOL IJIN */}
+                  <button
+                    type="button"
+                    onClick={() => setShowLeaveFormModal(true)}
+                    className="py-4 px-3 rounded-2xl font-black text-sm bg-gradient-to-b from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white border border-amber-400/30 shadow-lg shadow-amber-600/20 active:scale-95 flex flex-col items-center justify-center space-y-1.5 transition-all"
+                  >
+                    <span className="text-2xl">🟡</span>
+                    <span className="uppercase tracking-wider">IJIN</span>
+                    <span className="text-[10px] bg-amber-950 text-amber-300 px-2 py-0.5 rounded font-mono font-normal">Form Pengajuan</span>
                   </button>
                 </div>
 
-                {/* RIWAYAT PRESENSI MANDIRI SAYA */}
-                <div className="col-span-6 bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4 shadow-lg">
+                {/* STATUS PRESENSI HARI INI CARD */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
                   <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
-                    <div>
-                      <h3 className="font-bold text-white text-sm flex items-center space-x-2">
-                        <ClipboardList className="w-4 h-4 text-emerald-400" />
-                        <span>Riwayat Presensi Mandiri Saya</span>
-                      </h3>
-                    </div>
-                    <span className="text-xs text-emerald-400 font-bold font-mono">
-                      {attendanceList.filter(log => activeRole === 'OWNER' || log.employee_name.includes(activeRole === 'KEPALA_CABANG' ? 'Agus Wijaya' : 'Rina Melati')).length} Entri Mandiri
+                    <h3 className="font-bold text-white text-base flex items-center space-x-2">
+                      <Calendar className="w-5 h-5 text-purple-400" />
+                      <span>PRESENSI HARI INI</span>
+                    </h3>
+                    <span className="text-xs text-purple-300 font-mono font-bold bg-purple-950/60 px-3 py-1 rounded-full border border-purple-500/30">
+                      {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
                     </span>
                   </div>
 
-                  <div className="space-y-3 max-h-[520px] overflow-y-auto pr-1">
-                    {attendanceList
-                      .filter(log => activeRole === 'OWNER' || log.employee_name.includes(activeRole === 'KEPALA_CABANG' ? 'Agus Wijaya' : 'Rina Melati'))
-                      .map((log) => (
-                        <div key={log.id} className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 flex items-start justify-between text-xs space-x-3">
-                          <div className="flex items-start space-x-3">
-                            <img
-                              src={log.photo_url}
-                              alt="Selfi Absen"
-                              className="w-12 h-12 object-cover rounded-lg border border-purple-500/40 shrink-0"
-                              onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
-                            />
-                            <div className="space-y-1">
-                              <div className="flex items-center space-x-2">
-                                <h4 className="font-bold text-white text-sm">{log.employee_name}</h4>
-                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
-                                  {log.role_label}
-                                </span>
-                              </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {/* MASUK */}
+                    <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-1">
+                      <span className="text-xs text-slate-400 font-medium block">Masuk</span>
+                      <div className="font-bold text-white text-base">
+                        {todayRec?.masuk_waktu ? `${todayRec.masuk_waktu} WIB` : <span className="text-slate-500 text-xs">Belum tercatat</span>}
+                      </div>
+                      {todayRec?.masuk_location_info && (
+                        <p className="text-[11px] text-emerald-400 truncate">
+                          {todayRec.masuk_location_info}
+                        </p>
+                      )}
+                    </div>
 
-                              <p className="text-slate-400 text-[11px] flex items-center space-x-1">
-                                <span>{log.location}</span>
-                              </p>
+                    {/* KELUAR */}
+                    <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-1">
+                      <span className="text-xs text-slate-400 font-medium block">Keluar</span>
+                      <div className="font-bold text-white text-base">
+                        {todayRec?.keluar_waktu ? `${todayRec.keluar_waktu} WIB` : <span className="text-slate-500 text-xs">Belum Presensi Keluar</span>}
+                      </div>
+                      {todayRec?.keluar_location_info && (
+                        <p className="text-[11px] text-blue-400 truncate">
+                          {todayRec.keluar_location_info}
+                        </p>
+                      )}
+                    </div>
 
-                              <p className="text-slate-400 font-mono text-[11px]">
-                                📅 {log.timestamp}
-                              </p>
-                            </div>
-                          </div>
+                    {/* DURASI KERJA */}
+                    <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-1">
+                      <span className="text-xs text-slate-400 font-medium block">Durasi kerja</span>
+                      <div className="font-bold text-amber-300 text-base">
+                        {todayRec?.work_duration_str || '-'}
+                      </div>
+                    </div>
 
-                          <div className="text-right space-y-1.5 shrink-0">
-                            <span className={`inline-block px-2.5 py-0.5 rounded text-[11px] font-bold font-mono ${
-                              log.type === 'MASUK'
-                                ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40'
-                                : log.type === 'KELUAR'
-                                ? 'bg-blue-950 text-blue-300 border border-blue-500/40'
-                                : 'bg-amber-950 text-amber-300 border border-amber-500/40'
-                            }`}>
-                              {log.type}
-                            </span>
-                            <div>
-                              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
-                                log.status === 'TEPAT_WAKTU'
-                                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                                  : log.status === 'TERLAMBAT'
-                                  ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                                  : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                              }`}>
-                                {log.status}
+                    {/* OVERTIME */}
+                    <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-1">
+                      <span className="text-xs text-slate-400 font-medium block">Overtime</span>
+                      <div className="font-bold text-purple-300 text-base">
+                        {todayRec?.overtime_str || '-'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* DAFTAR RIWAYAT PRESENSI & IJIN */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* RIWAYAT PRESENSI HARIAN */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-lg">
+                    <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
+                      <h3 className="font-bold text-white text-sm flex items-center space-x-2">
+                        <ClipboardList className="w-4 h-4 text-emerald-400" />
+                        <span>Riwayat Presensi Harian</span>
+                      </h3>
+                      <span className="text-xs text-emerald-400 font-mono font-bold">
+                        {dailyAttendanceRecords.length} Entri
+                      </span>
+                    </div>
+
+                    <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
+                      {dailyAttendanceRecords.length === 0 ? (
+                        <p className="text-xs text-slate-500 text-center py-6">Belum ada riwayat presensi tercatat.</p>
+                      ) : (
+                        dailyAttendanceRecords.map((rec) => (
+                          <div key={rec.id} className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2 text-xs">
+                            <div className="flex items-center justify-between border-b border-slate-900 pb-2">
+                              <span className="font-bold text-white">{rec.employee_name} ({rec.role_label})</span>
+                              <span className="text-[10px] font-mono text-purple-300 bg-purple-950 px-2 py-0.5 rounded border border-purple-500/30">
+                                📅 {rec.tanggal}
                               </span>
                             </div>
+
+                            <div className="grid grid-cols-2 gap-2 pt-1">
+                              {/* MASUK INFO */}
+                              <div className="bg-slate-900/80 p-2.5 rounded-lg border border-emerald-500/20 space-y-1">
+                                <div className="flex items-center justify-between text-[11px]">
+                                  <span className="font-bold text-emerald-400">🟢 MASUK</span>
+                                  <span className="font-mono text-slate-200">{rec.masuk_waktu} WIB</span>
+                                </div>
+                                {rec.masuk_foto && (
+                                  <img src={rec.masuk_foto} alt="Foto Masuk" className="w-full h-24 object-cover rounded-lg border border-emerald-500/30 mt-1" />
+                                )}
+                                {rec.masuk_location_info && (
+                                  <p className="text-[10px] text-slate-400 truncate mt-1">{rec.masuk_location_info}</p>
+                                )}
+                              </div>
+
+                              {/* KELUAR INFO */}
+                              <div className="bg-slate-900/80 p-2.5 rounded-lg border border-blue-500/20 space-y-1">
+                                <div className="flex items-center justify-between text-[11px]">
+                                  <span className="font-bold text-blue-400">🔵 KELUAR</span>
+                                  <span className="font-mono text-slate-200">{rec.keluar_waktu ? `${rec.keluar_waktu} WIB` : '-'}</span>
+                                </div>
+                                {rec.keluar_foto ? (
+                                  <img src={rec.keluar_foto} alt="Foto Keluar" className="w-full h-24 object-cover rounded-lg border border-blue-500/30 mt-1" />
+                                ) : (
+                                  <div className="w-full h-24 bg-slate-950 rounded-lg flex items-center justify-center text-[10px] text-slate-500 border border-slate-800">
+                                    Belum Keluar
+                                  </div>
+                                )}
+                                {rec.keluar_location_info && (
+                                  <p className="text-[10px] text-slate-400 truncate mt-1">{rec.keluar_location_info}</p>
+                                )}
+                              </div>
+                            </div>
+
+                            {rec.work_duration_str && (
+                              <div className="flex items-center justify-between pt-1 border-t border-slate-900 text-[11px] font-mono">
+                                <span className="text-slate-400">Durasi: <strong className="text-amber-300">{rec.work_duration_str}</strong></span>
+                                <span className="text-slate-400">Overtime: <strong className="text-purple-300">{rec.overtime_str}</strong></span>
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      ))}
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {/* RIWAYAT PENGAJUAN IJIN */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-lg">
+                    <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
+                      <h3 className="font-bold text-white text-sm flex items-center space-x-2">
+                        <FileText className="w-4 h-4 text-amber-400" />
+                        <span>Riwayat Pengajuan Ijin</span>
+                      </h3>
+                      <span className="text-xs text-amber-400 font-mono font-bold">
+                        {leaveRequestsList.length} Pengajuan
+                      </span>
+                    </div>
+
+                    <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
+                      {leaveRequestsList.length === 0 ? (
+                        <p className="text-xs text-slate-500 text-center py-6">Belum ada pengajuan izin.</p>
+                      ) : (
+                        leaveRequestsList.map((lv) => (
+                          <div key={lv.id} className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2 text-xs">
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold text-white text-sm">{lv.jenis_izin}</span>
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono ${
+                                lv.status === 'DISETUJUI'
+                                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40'
+                                  : lv.status === 'DITOLAK'
+                                  ? 'bg-rose-950 text-rose-300 border border-rose-500/40'
+                                  : 'bg-amber-950 text-amber-300 border border-amber-500/40'
+                              }`}>
+                                {lv.status}
+                              </span>
+                            </div>
+
+                            <p className="text-slate-300">{lv.alasan}</p>
+
+                            <div className="flex items-center justify-between pt-1 border-t border-slate-900 text-[10px] text-slate-400 font-mono">
+                              <span>📅 Tanggal Izin: {lv.tanggal_izin}</span>
+                              {lv.lampiran_name && <span className="text-amber-400">📎 {lv.lampiran_name}</span>}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* BROADCAST / KIRIM PESAN MASSAL TEKS & GAMBAR (DASHBOARD PEGAWAI & KEPALA CABANG) */}
           {activeTab === 'broadcast' && (
@@ -6099,7 +6384,7 @@ export default function MinaraBOSDashboard() {
                       />
                     </div>
 
-                    {/* LAMPIRAN GAMBAR FLYER PROMO (AMBIL GAMBAR & DROPDOWN FOLDER TEMPAT DISIMPAN FILE) */}
+                    {/* LAMPIRAN GAMBAR FLYER PROMO (MEDIA PICKER PERANGKAT NORMAL) */}
                     <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
                       <div className="flex items-center justify-between">
                         <label className="text-emerald-300 font-bold block text-xs flex items-center space-x-1.5">
@@ -6108,7 +6393,7 @@ export default function MinaraBOSDashboard() {
                         {blastImageUrl && <span className="text-emerald-400 font-mono text-[10px] bg-emerald-950 px-2 py-0.5 rounded border border-emerald-500/30">✓ Gambar Terlampir</span>}
                       </div>
 
-                      {/* HIDDEN FILE INPUT FOR DEVICE STORAGE & CAMERA SNAPSHOT */}
+                      {/* HIDDEN FILE INPUT FOR DEVICE MEDIA PICKER */}
                       <input
                         id="broadcast-file-input"
                         type="file"
@@ -6117,40 +6402,36 @@ export default function MinaraBOSDashboard() {
                         onChange={handleBroadcastFileUpload}
                       />
 
-                      {/* SIMPLIFIED 'AMBIL GAMBAR' BUTTON */}
-                      <button
-                        type="button"
-                        onClick={() => document.getElementById('broadcast-file-input')?.click()}
-                        className="w-full py-2.5 px-3 bg-slate-900 hover:bg-slate-800 border border-emerald-500/40 text-emerald-300 font-bold rounded-xl flex items-center justify-center space-x-2 transition-all shadow-sm text-xs"
-                      >
-                        <Camera className="w-4 h-4 text-emerald-400" />
-                        <span>📷 Ambil Gambar</span>
-                      </button>
-
-                      {/* DROPDOWN FOLDER TEMPAT DISIMPAN FILE */}
-                      <div className="space-y-1 pt-1">
-                        <label className="text-slate-300 font-semibold block text-[11px]">📁 Folder Tempat Disimpan File *</label>
-                        <select
-                          value={blastFolder}
-                          onChange={(e) => setBlastFolder(e.target.value)}
-                          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-mono"
+                      {/* MEDIA PICKER BUTTON */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => document.getElementById('broadcast-file-input')?.click()}
+                          className="py-2.5 px-3 bg-slate-900 hover:bg-slate-800 border border-emerald-500/40 text-emerald-300 font-bold rounded-xl flex items-center justify-center space-x-2 transition-all shadow-sm text-xs"
                         >
-                          <option value="📁 /media/flyer_promo">📁 /media/flyer_promo (Folder Flyer & Poster Promosi)</option>
-                          <option value="📁 /media/katalog_layanan">📁 /media/katalog_layanan (Folder Katalog Produk & Layanan)</option>
-                          <option value="📁 /media/event_diskon">📁 /media/event_diskon (Folder Banner Diskon & Event Special)</option>
-                          <option value="📁 /media/informasi_outlet">📁 /media/informasi_outlet (Folder Pengumuman Resmi Outlet)</option>
-                        </select>
-                      </div>
+                          <Upload className="w-4 h-4 text-emerald-400" />
+                          <span>Pilih Gambar</span>
+                        </button>
 
-                      {/* OPTIONAL DIRECT URL INPUT */}
-                      <div className="pt-0.5">
-                        <input
-                          type="text"
-                          value={blastImageUrl}
-                          onChange={(e) => setBlastImageUrl(e.target.value)}
-                          placeholder="Atau Tempel Link URL Gambar (Opsional)..."
-                          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-[11px] text-slate-200 font-mono focus:outline-none focus:border-emerald-500"
-                        />
+                        {blastImageUrl ? (
+                          <button
+                            type="button"
+                            onClick={() => setBlastImageUrl('')}
+                            className="py-2.5 px-3 bg-rose-950/60 hover:bg-rose-900/60 border border-rose-500/40 text-rose-300 font-bold rounded-xl flex items-center justify-center space-x-1.5 transition-all text-xs"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Hapus Gambar</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => document.getElementById('broadcast-file-input')?.click()}
+                            className="py-2.5 px-3 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 font-bold rounded-xl flex items-center justify-center space-x-2 transition-all shadow-sm text-xs"
+                          >
+                            <Camera className="w-4 h-4 text-purple-400" />
+                            <span>Ambil Kamera</span>
+                          </button>
+                        )}
                       </div>
 
                       {/* IMAGE PREVIEW */}
@@ -9846,6 +10127,198 @@ export default function MinaraBOSDashboard() {
               </div>
             </div>
           )}
+
+        {/* LIVE CAMERA MODAL FOR ATTENDANCE (MASUK & KELUAR) */}
+        {showAttCameraModal && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
+            <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl overflow-hidden shadow-2xl space-y-4 p-5">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 className="font-extrabold text-white text-base flex items-center space-x-2">
+                  <Camera className="w-5 h-5 text-purple-400" />
+                  <span>Presensi {attCameraMode}</span>
+                </h3>
+                <button
+                  onClick={() => {
+                    stopCameraStream();
+                    setShowAttCameraModal(false);
+                  }}
+                  className="text-slate-400 hover:text-white text-lg font-bold"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* CAMERA ERROR BANNER */}
+              {attCameraError && (
+                <div className="bg-rose-950/80 border border-rose-500/40 p-3.5 rounded-xl text-rose-200 text-xs font-semibold space-y-2">
+                  <p>{attCameraError}</p>
+                </div>
+              )}
+
+              {/* GPS STATUS / ERROR BANNER */}
+              {attGpsError ? (
+                <div className="bg-amber-950/80 border border-amber-500/40 p-3 rounded-xl text-amber-200 text-xs font-semibold flex items-center justify-between">
+                  <span>{attGpsError}</span>
+                  <button onClick={fetchGpsLocation} className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-slate-950 text-[11px] font-bold rounded-lg shrink-0 ml-2">
+                    Coba Lagi
+                  </button>
+                </div>
+              ) : attGpsLocation ? (
+                <div className="bg-slate-950 p-2.5 rounded-xl border border-emerald-500/30 text-emerald-400 font-mono text-[11px]">
+                  {attGpsLocation.info}
+                </div>
+              ) : (
+                <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-slate-400 font-mono text-[11px] flex items-center space-x-2">
+                  <div className="w-3 h-3 rounded-full border-2 border-purple-400 border-t-transparent animate-spin"></div>
+                  <span>Mendeteksi Lokasi GPS Perangkat...</span>
+                </div>
+              )}
+
+              {/* VIEWFINDER / PREVIEW BOX */}
+              <div className="relative rounded-xl overflow-hidden bg-black border-2 border-purple-500/40 aspect-square flex items-center justify-center">
+                {!capturedAttPhoto ? (
+                  <React.Fragment>
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute top-3 left-3 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-lg border border-white/20 text-[10px] text-white font-mono flex items-center space-x-1.5 shadow">
+                      <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
+                      <span>LIVE CAMERA STREAM</span>
+                    </div>
+                  </React.Fragment>
+                ) : (
+                  <img
+                    src={capturedAttPhoto}
+                    alt="Captured Selfie"
+                    className="w-full h-full object-cover"
+                  />
+                )}
+              </div>
+
+              {/* TIMESTAMP & LOCATION CONFIRMATION HUD */}
+              {capturedAttPhoto && (
+                <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-xs space-y-1 font-mono">
+                  <div className="text-white font-bold">
+                    📅 {new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                  </div>
+                  <div className="text-amber-300 font-bold">
+                    🕐 {new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB
+                  </div>
+                </div>
+              )}
+
+              {/* ACTION BUTTONS */}
+              {!capturedAttPhoto ? (
+                <button
+                  type="button"
+                  disabled={!cameraStream || !!attCameraError}
+                  onClick={handleSnapAttPhoto}
+                  className="w-full py-3.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-40 text-white font-black text-sm rounded-xl shadow-xl transition-all flex items-center justify-center space-x-2"
+                >
+                  <Camera className="w-5 h-5 text-amber-300" />
+                  <span>📸 Ambil Foto</span>
+                </button>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={handleRetakeAttPhoto}
+                    className="py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 transition-all flex items-center justify-center space-x-1.5"
+                  >
+                    <span>🔄 Ambil Ulang</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!attGpsLocation}
+                    onClick={handleConfirmAttendanceRecord}
+                    className={`py-3 font-bold text-xs rounded-xl text-white shadow-lg transition-all flex items-center justify-center space-x-1.5 ${
+                      attCameraMode === 'MASUK' ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-blue-600 hover:bg-blue-500'
+                    }`}
+                  >
+                    <span>{attCameraMode === 'MASUK' ? '🟢 Konfirmasi Masuk' : '🔵 Konfirmasi Keluar'}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* LEAVE REQUEST FORM MODAL (IJIN) */}
+        {showLeaveFormModal && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
+            <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl overflow-hidden shadow-2xl p-5 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 className="font-extrabold text-white text-base flex items-center space-x-2">
+                  <FileText className="w-5 h-5 text-amber-400" />
+                  <span>Pengajuan Ijin Pegawai</span>
+                </h3>
+                <button onClick={() => setShowLeaveFormModal(false)} className="text-slate-400 hover:text-white text-lg font-bold">
+                  ✕
+                </button>
+              </div>
+
+              <form onSubmit={handleLeaveFormSubmit} className="space-y-3.5 text-xs">
+                <div>
+                  <label className="text-slate-300 font-bold block mb-1">Jenis Ijin *</label>
+                  <select
+                    value={leaveFormType}
+                    onChange={(e) => setLeaveFormType(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-white font-medium focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="Sakit (Surat Dokter)">Sakit (Surat Dokter)</option>
+                    <option value="Izin Keperluan Pribadi">Izin Keperluan Pribadi</option>
+                    <option value="Cuti Tahunan">Cuti Tahunan</option>
+                    <option value="Izin Alasan Penting">Izin Alasan Penting</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-slate-300 font-bold block mb-1">Tanggal Ijin *</label>
+                  <input
+                    type="date"
+                    required
+                    value={leaveFormDate}
+                    onChange={(e) => setLeaveFormDate(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-white font-medium focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-slate-300 font-bold block mb-1">Alasan Pengajuan Ijin *</label>
+                  <textarea
+                    required
+                    rows={3}
+                    value={leaveFormReason}
+                    onChange={(e) => setLeaveFormReason(e.target.value)}
+                    placeholder="Tuliskan alasan pengajuan izin secara lengkap..."
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-slate-300 font-bold block mb-1">Lampiran Dokumen (Surat Dokter / Pendukung)</label>
+                  <input
+                    type="file"
+                    onChange={(e) => setLeaveFormFile(e.target.files?.[0] || null)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-300 text-xs focus:outline-none"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-3.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-black text-xs rounded-xl shadow-lg transition-all flex items-center justify-center space-x-2"
+                >
+                  <FileText className="w-4 h-4 text-white" />
+                  <span>Ajukan Ijin</span>
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
         </main>
       </div>
     </div>
