@@ -347,3 +347,5 @@ export interface CustomerBehaviorProfile {
   rfm: RFMMetrics;
   detectedSignals: CustomerSignalCode[];
 }
+
+export type { EmploymentStatus, Division, Position, Employee } from '@/domains/people/people.types';
