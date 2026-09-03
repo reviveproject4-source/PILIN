@@ -1,4 +1,4 @@
--- Migration: 00036_people_employee_foundation.sql
+-- Migration: 00039_people_employee_foundation.sql
 -- Description: Employee Foundation / People Domain Schema, Rules, Indexes, Permissions, and RLS Policies
 
 -- 1. DIVISIONS TABLE
