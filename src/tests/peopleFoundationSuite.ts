@@ -18,7 +18,8 @@ export async function runPeopleFoundationSuite(): Promise<{ passed: number; fail
     }
   }
 
-  // Clear mock repository before test run
+  // Enable mock mode for unit test suite
+  PeopleRepository.setMockMode(true);
   PeopleRepository.clearMockData();
 
   const TENANT_A = '11111111-1111-1111-1111-111111111111';
