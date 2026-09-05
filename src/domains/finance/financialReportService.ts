@@ -1,10 +1,11 @@
 export interface ProfitAndLossReport {
   period: string;
   totalRevenue: number;       // Cash In from COMPLETED transactions
+  totalHpp: number;           // Cost of Goods Sold (HPP)
   totalExpenses: number;      // Cash Out from registered expenses
-  grossProfit: number;
-  netProfit: number;
-  profitMarginPercent: number;
+  grossProfit: number;        // totalRevenue - totalHpp
+  netProfit: number;          // grossProfit - totalExpenses
+  profitMarginPercent: number;// (netProfit / totalRevenue) * 100
 }
 
 export interface MultiPeriodSummary {
@@ -29,14 +30,16 @@ export interface StaffPayrollCalculation {
 export class FinancialReportService {
 
   /**
-   * Computes Simple Profit & Loss Report
+   * Computes Production-Correct Profit & Loss Report
    */
   static calculateProfitAndLoss(
     completedTransactionsTotal: number,
-    expensesTotal: number,
+    totalHpp: number = 0,
+    expensesTotal: number = 0,
     periodLabel: string = 'Current Month'
   ): ProfitAndLossReport {
-    const netProfit = completedTransactionsTotal - expensesTotal;
+    const grossProfit = completedTransactionsTotal - totalHpp;
+    const netProfit = grossProfit - expensesTotal;
     let profitMarginPercent = 0;
 
     if (completedTransactionsTotal > 0) {
@@ -46,8 +49,9 @@ export class FinancialReportService {
     return {
       period: periodLabel,
       totalRevenue: completedTransactionsTotal,
+      totalHpp,
       totalExpenses: expensesTotal,
-      grossProfit: completedTransactionsTotal,
+      grossProfit,
       netProfit,
       profitMarginPercent: Math.round(profitMarginPercent * 100) / 100
     };

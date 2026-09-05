@@ -43,7 +43,7 @@ console.log('--- 2. FINANCIAL CALCULATION VERIFICATION ---');
 const completedTxRevenue = 1000000;
 const expenses = 300000;
 
-const pnl = FinancialReportService.calculateProfitAndLoss(completedTxRevenue, expenses, 'Aug 2026');
+const pnl = FinancialReportService.calculateProfitAndLoss(completedTxRevenue, 0, expenses, 'Aug 2026');
 
 console.log(`Revenue Calculated: Rp ${pnl.totalRevenue.toLocaleString()}`);
 console.log(`Expenses Calculated: Rp ${pnl.totalExpenses.toLocaleString()}`);

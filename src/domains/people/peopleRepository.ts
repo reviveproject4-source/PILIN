@@ -507,6 +507,56 @@ export class PeopleRepository {
     return data as Employee;
   }
 
+  // ==================== HELPER LOOKUPS ====================
+
+  static async listBranches(business_id: string): Promise<{ id: string; name: string; code?: string }[]> {
+    if (this.isMockMode()) {
+      return [
+        { id: 'branch-001', name: 'Cabang Utama (Alpha)', code: 'BR-001' },
+        { id: 'branch-002', name: 'Cabang Sub-Urban (Beta)', code: 'BR-002' },
+        { id: 'branch-003', name: 'Cabang Ritel (Gamma)', code: 'BR-003' },
+      ];
+    }
+
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from('branches')
+      .select('id, name, code')
+      .eq('business_id', business_id)
+      .order('name', { ascending: true });
+
+    if (error) {
+      throw new Error(`[Database Error] Failed to list branches: ${error.message}`);
+    }
+    return (data || []) as { id: string; name: string; code?: string }[];
+  }
+
+  static async listAuthUsers(business_id: string): Promise<{ user_id: string; email: string; role_name?: string }[]> {
+    if (this.isMockMode()) {
+      return [
+        { user_id: 'user-owner-01', email: 'owner@pilin.co.id', role_name: 'Owner' },
+        { user_id: 'user-kc-01', email: 'kc.alpha@pilin.co.id', role_name: 'Kepala Cabang' },
+        { user_id: 'user-staff-01', email: 'budi.kasir@pilin.co.id', role_name: 'Pegawai' },
+        { user_id: 'user-staff-02', email: 'siti.laundry@pilin.co.id', role_name: 'Pegawai' },
+      ];
+    }
+
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from('tenant_memberships')
+      .select('user_id, role_id')
+      .eq('tenant_id', business_id);
+
+    if (error) {
+      throw new Error(`[Database Error] Failed to list auth users: ${error.message}`);
+    }
+
+    return (data || []).map(m => ({
+      user_id: m.user_id,
+      email: `user-${m.user_id.substring(0, 8)}@pilin.co.id`,
+    }));
+  }
+
   static clearMockData() {
     this.mockDivisions = [];
     this.mockPositions = [];

@@ -137,13 +137,7 @@ export class PeopleDomainService {
 
     // 5. Supervisor check
     if (dto.supervisor_id) {
-      const supervisor = await PeopleRepository.getEmployeeById(dto.supervisor_id);
-      if (!supervisor || supervisor.business_id !== dto.business_id) {
-        throw new Error('Supervisor must belong to the same business tenant');
-      }
-      if (supervisor.employment_status !== 'ACTIVE' || !supervisor.is_active) {
-        throw new Error('Supervisor must be an ACTIVE employee');
-      }
+      await PeopleDomainService.validateSupervisorChain(dto.business_id, undefined, dto.supervisor_id);
     }
 
     const status = dto.employment_status || 'ACTIVE';
@@ -192,19 +186,10 @@ export class PeopleDomainService {
       finalDivisionId = position.division_id;
     }
 
-    // 2. Supervisor check
+    // 2. Supervisor check & multi-hop cycle detection
     const finalSupervisorId = dto.supervisor_id !== undefined ? dto.supervisor_id : existing.supervisor_id;
     if (finalSupervisorId) {
-      if (finalSupervisorId === id) {
-        throw new Error('Employee cannot be their own supervisor');
-      }
-      const supervisor = await PeopleRepository.getEmployeeById(finalSupervisorId);
-      if (!supervisor || supervisor.business_id !== existing.business_id) {
-        throw new Error('Supervisor must belong to the same business tenant');
-      }
-      if (supervisor.employment_status !== 'ACTIVE' || !supervisor.is_active) {
-        throw new Error('Supervisor must be an ACTIVE employee');
-      }
+      await PeopleDomainService.validateSupervisorChain(existing.business_id, id, finalSupervisorId);
     }
 
     const updated = await PeopleRepository.updateEmployee(id, {
@@ -258,5 +243,48 @@ export class PeopleDomainService {
       employment_status: 'RESIGNED',
       is_active: false,
     });
+  }
+
+  // ==================== SUPERVISOR CHAIN VALIDATION ====================
+
+  static async validateSupervisorChain(
+    businessId: string, 
+    employeeId: string | undefined, 
+    targetSupervisorId: string
+  ): Promise<void> {
+    const supervisor = await PeopleRepository.getEmployeeById(targetSupervisorId);
+    if (!supervisor || supervisor.business_id !== businessId) {
+      throw new Error('Supervisor must belong to the same business tenant');
+    }
+    if (supervisor.employment_status !== 'ACTIVE' || !supervisor.is_active) {
+      throw new Error('Supervisor must be an ACTIVE employee');
+    }
+
+    if (!employeeId) return; // New employee being created, cannot be in existing chain
+
+    if (targetSupervisorId === employeeId) {
+      throw new Error('Employee cannot be their own supervisor');
+    }
+
+    const visited = new Set<string>();
+    visited.add(employeeId);
+
+    let currentId: string | undefined = targetSupervisorId;
+    let depth = 0;
+    const maxDepth = 50;
+
+    while (currentId && depth < maxDepth) {
+      if (visited.has(currentId)) {
+        throw new Error('Circular reporting line detected: Employee cannot report to an employee who reports back to them');
+      }
+      visited.add(currentId);
+
+      const currEmp = await PeopleRepository.getEmployeeById(currentId);
+      if (!currEmp || !currEmp.supervisor_id) {
+        break;
+      }
+      currentId = currEmp.supervisor_id;
+      depth++;
+    }
   }
 }

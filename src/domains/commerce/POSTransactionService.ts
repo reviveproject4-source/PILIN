@@ -1,10 +1,32 @@
 import { TransactionStatus } from '../../lib/types';
+import { ServiceCatalogService } from '../catalog/serviceCatalogService';
+
+export interface POSTransactionItemInput {
+  service_id: string;
+  qty: number;
+  unit_price: number;
+  discount?: number;
+}
+
+export interface POSTransactionItemRecord {
+  id: string;
+  transaction_id: string;
+  service_id: string;
+  qty: number;
+  unit_price: number;
+  unit_hpp: number; // Immutable HPP snapshot at checkout
+  discount: number;
+  subtotal: number;
+  line_hpp: number; // qty * unit_hpp
+}
 
 export interface POSTransaction {
   id: string;
   business_id: string;
   branch_id: string;
   total_amount: number;
+  total_hpp?: number; // Sum of line_hpp
+  items?: POSTransactionItemRecord[];
   status: TransactionStatus;
   created_by: string;
   approved_by?: string;
@@ -70,6 +92,84 @@ export class POSTransactionService {
 
   static getTransactionById(id: string): POSTransaction | undefined {
     return this.mockTransactions.find(t => t.id === id);
+  }
+
+  static resetTransactionsForTest(): void {
+    this.mockTransactions = [];
+  }
+
+  /**
+   * P0-1 HPP Snapshot Checkout
+   * Creates a transaction and snapshots the unit_hpp from ServiceCatalogService
+   */
+  static createTransaction(data: {
+    business_id: string;
+    branch_id: string;
+    created_by: string;
+    items: POSTransactionItemInput[];
+  }): POSTransaction {
+    const itemRecords: POSTransactionItemRecord[] = [];
+    let totalAmount = 0;
+    let totalHpp = 0;
+
+    const trxId = `trx-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    for (const input of data.items) {
+      if (input.qty <= 0) {
+        throw new Error('Transaction item quantity must be greater than zero');
+      }
+      if (input.unit_price < 0) {
+        throw new Error('Transaction item price cannot be negative');
+      }
+
+      // Snapshot unit_hpp from master catalog at transaction creation time
+      const catalogItem = ServiceCatalogService.getServiceById(input.service_id);
+      const unitHpp = catalogItem ? catalogItem.hpp : 0;
+
+      const discount = input.discount || 0;
+      const subtotal = input.qty * input.unit_price - discount;
+      const lineHpp = input.qty * unitHpp;
+
+      totalAmount += subtotal;
+      totalHpp += lineHpp;
+
+      itemRecords.push({
+        id: `item-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+        transaction_id: trxId,
+        service_id: input.service_id,
+        qty: input.qty,
+        unit_price: input.unit_price,
+        unit_hpp: unitHpp, // Immutable HPP snapshot
+        discount,
+        subtotal,
+        line_hpp: lineHpp,
+      });
+    }
+
+    const newTrx: POSTransaction = {
+      id: trxId,
+      business_id: data.business_id,
+      branch_id: data.branch_id,
+      total_amount: totalAmount,
+      total_hpp: totalHpp,
+      items: itemRecords,
+      status: 'COMPLETED',
+      created_by: data.created_by,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    this.mockTransactions.unshift(newTrx);
+    return newTrx;
+  }
+
+  static getTotalCompletedHpp(): number {
+    return this.mockTransactions.reduce((sum, t) => {
+      if (t.status === 'COMPLETED') {
+        return sum + (t.total_hpp || 0);
+      }
+      return sum;
+    }, 0);
   }
 
   /**

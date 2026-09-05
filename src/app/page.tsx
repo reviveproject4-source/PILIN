@@ -16,6 +16,7 @@ import { HypnosellingEngine } from '@/domains/retention/hypnosellingEngine';
 import { AnalyticsService } from '@/domains/intelligence/analyticsService';
 import { WorkDomainService } from '@/domains/work/workDomainService';
 import { ManagementControlDashboard } from '@/components/management/ManagementControlDashboard';
+import { PeopleManagementDashboard } from '@/components/people/PeopleManagementDashboard';
 import { ManagementRole } from '@/domains/management/managementAuthorization';
 import { ServiceCatalogService } from '@/domains/catalog/serviceCatalogService';
 import { CustomerDomainService } from '@/domains/customer/customerService';
@@ -35,7 +36,7 @@ import { SalesCommissionService } from '@/domains/commercial/salesCommissionServ
 export default function MinaraBOSDashboard() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<
-    'dashboard' | 'pos' | 'work' | 'customers' | 'finance' | 'revenue' | 'gamification' | 'management' | 'control' | 'intelligence' | 'sapaan' | 'importer' | 'overview' | 'expense' | 'reminder_report' | 'attendance' | 'broadcast' | 'gmf'
+    'dashboard' | 'pos' | 'work' | 'customers' | 'finance' | 'revenue' | 'gamification' | 'management' | 'people' | 'control' | 'intelligence' | 'sapaan' | 'importer' | 'overview' | 'expense' | 'reminder_report' | 'attendance' | 'broadcast' | 'gmf'
   >('dashboard');
   const [activeRole, setActiveRole] = useState<ManagementRole>('OWNER');
   const [selectedIndustry, setSelectedIndustry] = useState<IndustryCategory>('SPA_SALON');
@@ -2845,6 +2846,16 @@ export default function MinaraBOSDashboard() {
                 </button>
 
                 <button
+                  onClick={() => setActiveTab('people')}
+                  className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg text-left transition-all ${
+                    activeTab === 'people' ? 'bg-amber-600 text-slate-950 font-bold shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                  }`}
+                >
+                  <Users className="w-4 h-4 text-blue-400" />
+                  <span>Manajemen Pegawai Organisasi</span>
+                </button>
+
+                <button
                   onClick={() => setActiveTab('overview')}
                   className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-lg text-left transition-all ${
                     activeTab === 'overview' ? 'bg-amber-600 text-slate-950 font-bold shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
@@ -3933,6 +3944,16 @@ export default function MinaraBOSDashboard() {
                 </div>
               </div>
             </div>
+          )}
+
+          {/* PEOPLE / EMPLOYEE MANAGEMENT DOMAIN SURFACE */}
+          {activeTab === 'people' && (
+            <PeopleManagementDashboard
+              businessId="tenant-001"
+              branchId={selectedBranchId !== 'ALL_BRANCHES' ? selectedBranchId : 'branch-001'}
+              actorUserId="user-owner-01"
+              actorRole={activeRole}
+            />
           )}
 
           {/* MANAGEMENT CONTROL SURFACE (PHASE 6 & 7 INTEGRATION) */}
