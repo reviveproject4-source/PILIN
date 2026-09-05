@@ -1,6 +1,6 @@
 export type SystemRoleCode = 'owner' | 'kepala_cabang' | 'pegawai';
 
-export type TransactionStatus = 'DRAFT' | 'PENDING_PAYMENT' | 'COMPLETED' | 'VOID_REQUESTED' | 'VOIDED';
+export type TransactionStatus = 'DRAFT' | 'PENDING_PAYMENT' | 'COMPLETED' | 'VOID_REQUESTED' | 'VOIDED' | 'REFUNDED';
 
 export type PaymentMethod = 'cash' | 'transfer';
 

@@ -1,5 +1,6 @@
 import { TransactionStatus } from '../../lib/types';
 import { ServiceCatalogService } from '../catalog/serviceCatalogService';
+import { POSTransactionRepository } from './POSTransactionRepository';
 
 export interface POSTransactionItemInput {
   service_id: string;
@@ -24,6 +25,8 @@ export interface POSTransaction {
   id: string;
   business_id: string;
   branch_id: string;
+  customer_id?: string;
+  kasir_employee_id?: string;
   total_amount: number;
   total_hpp?: number; // Sum of line_hpp
   items?: POSTransactionItemRecord[];
@@ -38,6 +41,7 @@ export interface POSTransaction {
 }
 
 export class POSTransactionService {
+  private static forceMockMode = false;
   private static mockTransactions: POSTransaction[] = [
     {
       id: 'trx-00000000-0000-0000-0000-000000000001',
@@ -86,6 +90,10 @@ export class POSTransactionService {
     },
   ];
 
+  static setMockMode(enabled: boolean): void {
+    this.forceMockMode = enabled;
+  }
+
   static getTransactions(): POSTransaction[] {
     return [...this.mockTransactions];
   }
@@ -99,14 +107,85 @@ export class POSTransactionService {
   }
 
   /**
-   * P0-1 HPP Snapshot Checkout
-   * Creates a transaction and snapshots the unit_hpp from ServiceCatalogService
+   * P0-2 Database Persistent POS Checkout via Repository
+   */
+  static async checkoutDb(params: {
+    branch_id: string;
+    items: POSTransactionItemInput[];
+    customer_id?: string;
+    payment_method?: string;
+    discount?: number;
+    client_trx_id?: string;
+  }): Promise<POSTransaction> {
+    return await POSTransactionRepository.createTransactionInDb(params);
+  }
+
+  /**
+   * P0-2 Database Fetch Transactions
+   */
+  static async fetchTransactionsDb(branchId?: string): Promise<POSTransaction[]> {
+    return await POSTransactionRepository.fetchTransactionsFromDb(branchId);
+  }
+
+  /**
+   * P0-2 Database Refund Execution
+   */
+  static async processRefundDb(params: {
+    transactionId: string;
+    refundAmount: number;
+    reason: string;
+    approverRole: string;
+    approverId: string;
+    tenantLowerThreshold?: number;
+  }): Promise<POSTransaction> {
+    const existing = await POSTransactionRepository.fetchTransactionByIdFromDb(params.transactionId);
+    if (!existing) {
+      throw new Error('Transaction not found for refund');
+    }
+
+    if (existing.status !== 'COMPLETED') {
+      throw new Error(`Only COMPLETED transactions can be refunded. Current status: ${existing.status}`);
+    }
+
+    if (params.refundAmount <= 0 || params.refundAmount > existing.total_amount) {
+      throw new Error(`Invalid refund amount. Must be between 1 and ${existing.total_amount}`);
+    }
+
+    // GD-19 Strict SoD Assertion: Creator cannot approve own refund
+    if (existing.created_by && existing.created_by === params.approverId) {
+      throw new Error('Creator cannot approve own transaction refund (GD-19 Strict SoD)');
+    }
+
+    const requiredTier = this.evaluateRefundApprovalTier(params.refundAmount, params.tenantLowerThreshold);
+    const roleLower = params.approverRole.toLowerCase();
+
+    if (requiredTier === 'TIER_2_OWNER' && roleLower !== 'owner') {
+      throw new Error('Unauthorized refund approval: Tier 2 Owner authority required for refund >= threshold (GD-09 / OD-03)');
+    }
+
+    if (requiredTier === 'TIER_3_MANAGER' && roleLower !== 'manager' && roleLower !== 'owner' && roleLower !== 'kepala_cabang') {
+      throw new Error('Unauthorized refund approval: Tier 3 Manager or Owner authority required (GD-09)');
+    }
+
+    return await POSTransactionRepository.processRefundInDb({
+      transactionId: params.transactionId,
+      refundAmount: params.refundAmount,
+      reason: params.reason,
+      requiredTier,
+      approverId: params.approverId,
+    });
+  }
+
+  /**
+   * P0-1 HPP Snapshot Checkout (Synchronous In-Memory for Domain Unit Tests)
    */
   static createTransaction(data: {
     business_id: string;
     branch_id: string;
     created_by: string;
     items: POSTransactionItemInput[];
+    customer_id?: string;
+    payment_method?: string;
   }): POSTransaction {
     const itemRecords: POSTransactionItemRecord[] = [];
     let totalAmount = 0;
@@ -150,6 +229,7 @@ export class POSTransactionService {
       id: trxId,
       business_id: data.business_id,
       branch_id: data.branch_id,
+      customer_id: data.customer_id,
       total_amount: totalAmount,
       total_hpp: totalHpp,
       items: itemRecords,
@@ -174,12 +254,6 @@ export class POSTransactionService {
 
   /**
    * GD-09 / OD-03: Evaluates refund approval tier
-   * Default:
-   * - amount < Rp 500,000 -> TIER_3_MANAGER
-   * - amount >= Rp 500,000 -> TIER_2_OWNER
-   * Optional Tenant Lower Threshold:
-   * - If configured and < Rp 500,000, amount >= tenantThreshold -> TIER_2_OWNER
-   * - Tenant threshold MUST NOT exceed Rp 500,000
    */
   static evaluateRefundApprovalTier(
     amount: number,
@@ -202,8 +276,6 @@ export class POSTransactionService {
 
   /**
    * Refund / Void Boundary Enforcement
-   * Pre-completion transactions (DRAFT, PENDING_PAYMENT) -> Void lifecycle (GD-08)
-   * COMPLETED / PAID transactions -> Refund approval flow (GD-09)
    */
   static requestVoid(transactionId: string, actorRole: string, actorId: string): POSTransaction {
     const trx = this.mockTransactions.find(t => t.id === transactionId);

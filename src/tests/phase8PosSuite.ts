@@ -1,5 +1,6 @@
 import { ServiceCatalogService } from '../domains/catalog/serviceCatalogService';
 import { POSTransactionService } from '../domains/commerce/POSTransactionService';
+import { POSTransactionRepository } from '../domains/commerce/POSTransactionRepository';
 import { FinancialReportService } from '../domains/finance/financialReportService';
 
 export function runPhase8PosSuite() {
@@ -188,6 +189,48 @@ export function runPhase8PosSuite() {
   const totalCompletedHpp = POSTransactionService.getTotalCompletedHpp();
   assert(totalCompletedHpp === 60000 + 45000, 'TEST 8J: Aggregate completed HPP matches active checkout transactions: 105,000 (60,000 + 45,000)');
 
+  // --- TEST 9: P0-2 DB Repository & Service Wiring Assertions ---
+  assert(typeof POSTransactionRepository.createTransactionInDb === 'function', 'TEST 9A: POSTransactionRepository.createTransactionInDb is defined');
+  assert(typeof POSTransactionRepository.fetchTransactionsFromDb === 'function', 'TEST 9B: POSTransactionRepository.fetchTransactionsFromDb is defined');
+  assert(typeof POSTransactionRepository.fetchTransactionByIdFromDb === 'function', 'TEST 9C: POSTransactionRepository.fetchTransactionByIdFromDb is defined');
+  assert(typeof POSTransactionRepository.processRefundInDb === 'function', 'TEST 9D: POSTransactionRepository.processRefundInDb is defined');
+  assert(typeof POSTransactionService.checkoutDb === 'function', 'TEST 9E: POSTransactionService.checkoutDb is defined');
+  assert(typeof POSTransactionService.fetchTransactionsDb === 'function', 'TEST 9F: POSTransactionService.fetchTransactionsDb is defined');
+  assert(typeof POSTransactionService.processRefundDb === 'function', 'TEST 9G: POSTransactionService.processRefundDb is defined');
+
+  // --- TEST 10: Basic Refund Foundation Assertions ---
+  const refundedTrx = POSTransactionService.processRefund({
+    transactionId: trx1.id,
+    refundAmount: trx1.total_amount,
+    reason: 'Customer cancelled service',
+    approverRole: 'owner',
+    approverId: 'owner-001',
+  });
+  assert(refundedTrx.status === 'REFUNDED', 'TEST 10A: COMPLETED transaction successfully transitions to REFUNDED status');
+  assert(refundedTrx.total_amount === 150000, 'TEST 10B: Original total_amount remains intact (150,000) post-refund');
+  assert(refundedTrx.total_hpp === 60000, 'TEST 10C: Original total_hpp remains intact (60,000) post-refund');
+  assert(refundedTrx.items !== undefined && refundedTrx.items.length === 1, 'TEST 10D: Transaction items remain intact post-refund');
+
+  // Excluded from active completed HPP aggregate
+  const activeCompletedHppPostRefund = POSTransactionService.getTotalCompletedHpp();
+  assert(activeCompletedHppPostRefund === 45000, 'TEST 10E: REFUNDED transaction excluded from active completed HPP total (reduces from 105,000 to 45,000)');
+
+  // SoD / Tier rejection check
+  let unauthorizedRefundBlocked = false;
+  try {
+    POSTransactionService.processRefund({
+      transactionId: trx2.id,
+      refundAmount: 170000, // Valid amount for trx2 (total_amount 170,000)
+      reason: 'Refund authorization test',
+      approverRole: 'cashier',
+      approverId: 'cashier-002',
+      tenantLowerThreshold: 100000, // Triggers Tier 2 Owner threshold
+    });
+  } catch (err: any) {
+    unauthorizedRefundBlocked = err.message.includes('Tier 2 Owner authority required');
+  }
+  assert(unauthorizedRefundBlocked, 'TEST 10F: Unauthorized refund approval attempt by cashier rejected cleanly');
+
   console.log('\n============================================================');
   console.log(`SUITE COMPLETE: ${passed} PASSED | ${failed} FAILED`);
   console.log('============================================================\n');
@@ -200,4 +243,3 @@ export function runPhase8PosSuite() {
 if (require.main === module) {
   runPhase8PosSuite();
 }
-
