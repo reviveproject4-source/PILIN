@@ -2271,30 +2271,27 @@ export default function MinaraBOSDashboard() {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6 relative overflow-hidden font-sans">
-        {/* BACKGROUND GLOW ACCENTS */}
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-orange-600/10 rounded-full blur-3xl pointer-events-none"></div>
+      <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col items-center justify-center p-6 font-sans">
         {/* LOGO & BRAND CARD */}
-        <div className="w-full max-w-lg bg-slate-900/90 border border-slate-800 rounded-2xl p-8 shadow-2xl space-y-6 backdrop-blur-xl relative z-10 animate-fadeIn">
-          <div className="text-center space-y-3">
-            <div className="inline-flex p-3 rounded-2xl bg-slate-950 border border-slate-800 shadow-inner">
-              <img src="/logo.png" alt="PILIN Logo" className="w-20 h-20 object-contain rounded-xl shadow" />
+        <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl p-8 shadow-sm space-y-6 text-center">
+          <div className="space-y-2">
+            <div className="inline-flex p-3 rounded-2xl bg-slate-100 border border-slate-200">
+              <img src="/logo.png" alt="PILIN Logo" className="w-16 h-16 object-contain rounded-xl" />
             </div>
-            <h1 className="text-3xl font-black text-white tracking-wider">PILIN</h1>
-            <p className="text-xs text-orange-400 font-mono font-semibold">Sistem Operasional & Manajemen Cabang Terintegrasi</p>
+            <h1 className="text-2xl font-bold text-[#0F2547]">PILIN ERP</h1>
           </div>
 
           {loginErrorMsg && (
-            <div className="bg-rose-950/80 border border-rose-500/40 rounded-xl p-3 text-xs text-rose-300 font-bold text-center animate-fadeIn">
+            <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-xs text-rose-700 font-semibold text-center">
               ⚠️ {loginErrorMsg}
             </div>
           )}
 
-          {/* FORM LOG-IN PENGGUNA TERDAFTAR (DATA DIDAPATKAN DARI SALES ONBOARDING) */}
-          <form onSubmit={handleExecuteLogin} className="space-y-4 text-xs">
+          {/* FORM LOG-IN PENGGUNA TERDAFTAR */}
+          <form onSubmit={handleExecuteLogin} className="space-y-4 text-xs text-left">
               {/* ROLE SELECTOR TABS */}
               <div>
-                <label className="text-slate-400 font-semibold block mb-1.5">Pilih Akses Role Log-in *</label>
+                <label className="text-slate-700 font-semibold block mb-1.5">Pilih Akses Role Log-in *</label>
                 <div className="grid grid-cols-3 gap-2">
                   <button
                     type="button"
@@ -2303,10 +2300,10 @@ export default function MinaraBOSDashboard() {
                       setLoginUsername('');
                       setLoginPassword('');
                     }}
-                    className={`py-2.5 rounded-xl text-xs font-bold transition-all border ${
+                    className={`py-2 rounded-xl text-xs font-semibold transition-all border ${
                       loginRoleSelect === 'PEGAWAI'
-                        ? 'bg-blue-600 text-white border-blue-400 shadow-md shadow-blue-500/20'
-                        : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+                        ? 'bg-[#0F2547] text-white border-[#0F2547] shadow-sm'
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                     }`}
                   >
                     👤 Pegawai
@@ -2318,10 +2315,10 @@ export default function MinaraBOSDashboard() {
                       setLoginUsername('');
                       setLoginPassword('');
                     }}
-                    className={`py-2.5 rounded-xl text-xs font-bold transition-all border ${
+                    className={`py-2 rounded-xl text-xs font-semibold transition-all border ${
                       loginRoleSelect === 'KEPALA_CABANG'
-                        ? 'bg-emerald-600 text-white border-emerald-400 shadow-md shadow-emerald-500/20'
-                        : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+                        ? 'bg-[#0F2547] text-white border-[#0F2547] shadow-sm'
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                     }`}
                   >
                     🏢 Kepala Cabang
@@ -2333,10 +2330,10 @@ export default function MinaraBOSDashboard() {
                       setLoginUsername('');
                       setLoginPassword('');
                     }}
-                    className={`py-2.5 rounded-xl text-xs font-bold transition-all border ${
+                    className={`py-2 rounded-xl text-xs font-semibold transition-all border ${
                       loginRoleSelect === 'OWNER'
-                        ? 'bg-amber-600 text-white border-amber-400 shadow-md shadow-amber-500/20'
-                        : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+                        ? 'bg-[#F26522] text-white border-[#F26522] shadow-sm'
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                     }`}
                   >
                     👑 Owner
@@ -2346,8 +2343,8 @@ export default function MinaraBOSDashboard() {
 
               {/* USERNAME / EMPLOYEE SELECTION INPUT */}
               <div>
-                <label className="text-slate-300 font-semibold block mb-1">
-                  {loginRoleSelect === 'OWNER' ? 'Alamat Email Owner (Manual Input) *' : 'Nama Pegawai Terdaftar (Dari Master Data Owner) *'}
+                <label className="text-slate-700 font-semibold block mb-1">
+                  {loginRoleSelect === 'OWNER' ? 'Alamat Email Owner *' : 'Nama Pegawai Terdaftar *'}
                 </label>
 
                 {loginRoleSelect === 'OWNER' ? (

@@ -418,68 +418,53 @@ export function PeopleManagementDashboard({
 
   if (!canView) {
     return (
-      <div style={{ padding: '32px', background: '#090d16', minHeight: '100vh', color: '#f8fafc' }}>
-        <div style={{ background: '#7f1d1d', border: '1px solid #ef4444', padding: '20px', borderRadius: '8px', color: '#fca5a5' }}>
-          <h2 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0 }}>Akses Dibatasi</h2>
-          <p style={{ margin: '8px 0 0 0', fontSize: '14px' }}>Anda tidak memiliki izin (people:employee:view) untuk mengakses kelola pegawai organisasi.</p>
+      <div className="p-8 bg-slate-50 min-h-screen text-slate-900">
+        <div className="bg-rose-50 border border-rose-200 p-5 rounded-xl color-rose-800">
+          <h2 className="text-lg font-bold text-rose-900">Akses Dibatasi</h2>
+          <p className="mt-1 text-xs text-rose-700">Anda tidak memiliki izin untuk mengakses kelola pegawai organisasi.</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div style={{ padding: '24px', background: '#090d16', minHeight: '100vh', color: '#f8fafc', fontFamily: 'sans-serif' }}>
+    <div className="p-6 bg-slate-50 min-h-screen text-slate-900 font-sans">
       
       {/* Top Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', borderBottom: '1px solid #1e293b', paddingBottom: '16px' }}>
+      <div className="flex flex-wrap justify-between items-center mb-6 border-b border-slate-200 pb-4 gap-4">
         <div>
-          <h1 style={{ fontSize: '24px', fontWeight: 'bold', margin: 0, color: '#ffffff' }}>Manajemen Pegawai Organisasi</h1>
+          <h1 className="text-2xl font-bold text-[#0F2547] tracking-tight">Manajemen Pegawai</h1>
         </div>
         
         {/* Navigation Tabs */}
-        <div style={{ display: 'flex', gap: '8px', background: '#1e293b', padding: '4px', borderRadius: '8px' }}>
+        <div className="flex gap-1.5 bg-slate-200/70 p-1 rounded-lg">
           <button
             onClick={() => setActiveTab('EMPLOYEE')}
-            style={{
-              padding: '8px 16px',
-              borderRadius: '6px',
-              border: 'none',
-              cursor: 'pointer',
-              fontWeight: '600',
-              fontSize: '13px',
-              background: activeTab === 'EMPLOYEE' ? '#2563eb' : 'transparent',
-              color: activeTab === 'EMPLOYEE' ? '#ffffff' : '#94a3b8',
-            }}
+            className={`px-4 py-2 rounded-md font-semibold text-xs transition-all ${
+              activeTab === 'EMPLOYEE'
+                ? 'bg-[#0F2547] text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
           >
             Pegawai ({employees.length})
           </button>
           <button
             onClick={() => setActiveTab('DIVISION')}
-            style={{
-              padding: '8px 16px',
-              borderRadius: '6px',
-              border: 'none',
-              cursor: 'pointer',
-              fontWeight: '600',
-              fontSize: '13px',
-              background: activeTab === 'DIVISION' ? '#2563eb' : 'transparent',
-              color: activeTab === 'DIVISION' ? '#ffffff' : '#94a3b8',
-            }}
+            className={`px-4 py-2 rounded-md font-semibold text-xs transition-all ${
+              activeTab === 'DIVISION'
+                ? 'bg-[#0F2547] text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
           >
             Divisi ({divisions.length})
           </button>
           <button
             onClick={() => setActiveTab('POSITION')}
-            style={{
-              padding: '8px 16px',
-              borderRadius: '6px',
-              border: 'none',
-              cursor: 'pointer',
-              fontWeight: '600',
-              fontSize: '13px',
-              background: activeTab === 'POSITION' ? '#2563eb' : 'transparent',
-              color: activeTab === 'POSITION' ? '#ffffff' : '#94a3b8',
-            }}
+            className={`px-4 py-2 rounded-md font-semibold text-xs transition-all ${
+              activeTab === 'POSITION'
+                ? 'bg-[#0F2547] text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
           >
             Jabatan ({positions.length})
           </button>

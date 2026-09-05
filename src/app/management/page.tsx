@@ -13,79 +13,49 @@ export default function ManagementPage() {
   const [mainView, setMainView] = useState<'MANAGEMENT' | 'PEOPLE'>('PEOPLE');
 
   return (
-    <div>
+    <div className="min-h-screen bg-slate-50 text-slate-900">
       {/* Control Switcher Bar for Role & Context Inspection */}
-      <div style={{ background: '#090d16', padding: '12px 24px', borderBottom: '1px solid #1e293b', display: 'flex', gap: '20px', alignItems: 'center', fontSize: '13px', color: '#94a3b8', flexWrap: 'wrap', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-          <div>
-            <label style={{ marginRight: '6px' }}>Tenant ID:</label>
-            <input
-              value={businessId}
-              onChange={(e) => setBusinessId(e.target.value)}
-              style={{ background: '#1e293b', border: '1px solid #334155', color: '#fff', padding: '4px 8px', borderRadius: '4px' }}
-            />
+      <div className="bg-[#0F2547] px-6 py-3.5 border-b border-slate-800 flex flex-wrap items-center justify-between gap-4 text-xs font-medium text-slate-200 shadow-sm">
+        <div className="flex items-center space-x-6">
+          <div className="flex items-center space-x-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#F26522]"></span>
+            <span className="font-bold text-white tracking-wide text-sm">PILIN Management Portal</span>
           </div>
-          <div>
-            <label style={{ marginRight: '6px' }}>Branch ID:</label>
-            <input
-              value={branchId}
-              onChange={(e) => setBranchId(e.target.value)}
-              style={{ background: '#1e293b', border: '1px solid #334155', color: '#fff', padding: '4px 8px', borderRadius: '4px' }}
-            />
-          </div>
-          <div>
-            <label style={{ marginRight: '6px' }}>User ID:</label>
-            <input
-              value={actorUserId}
-              onChange={(e) => setActorUserId(e.target.value)}
-              style={{ background: '#1e293b', border: '1px solid #334155', color: '#fff', padding: '4px 8px', borderRadius: '4px' }}
-            />
-          </div>
-          <div>
-            <label style={{ marginRight: '6px', fontWeight: 'bold', color: '#fbbf24' }}>Simulated Role:</label>
+          <div className="flex items-center space-x-2 border-l border-slate-700 pl-6">
+            <label className="text-slate-300 font-medium">Role Akses:</label>
             <select
               value={actorRole}
               onChange={(e) => setActorRole(e.target.value as ManagementRole)}
-              style={{ background: '#1e293b', border: '1px solid #334155', color: '#fbbf24', padding: '4px 8px', borderRadius: '4px', fontWeight: 'bold' }}
+              className="bg-[#0B1A32] border border-slate-700 text-[#F26522] px-3 py-1.5 rounded-lg font-bold focus:outline-none focus:ring-1 focus:ring-[#F26522]"
             >
               <option value="OWNER">OWNER</option>
-              <option value="KEPALA_CABANG">KEPALA_CABANG</option>
+              <option value="KEPALA_CABANG">KEPALA CABANG</option>
               <option value="PEGAWAI">PEGAWAI</option>
             </select>
           </div>
         </div>
 
         {/* View Switcher */}
-        <div style={{ display: 'flex', gap: '8px', background: '#1e293b', padding: '4px', borderRadius: '6px' }}>
+        <div className="flex items-center bg-[#0B1A32] p-1 rounded-lg border border-slate-800">
           <button
             onClick={() => setMainView('PEOPLE')}
-            style={{
-              padding: '6px 14px',
-              borderRadius: '4px',
-              border: 'none',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-              fontSize: '12px',
-              background: mainView === 'PEOPLE' ? '#2563eb' : 'transparent',
-              color: mainView === 'PEOPLE' ? '#ffffff' : '#94a3b8',
-            }}
+            className={`px-4 py-1.5 rounded-md font-semibold transition-all ${
+              mainView === 'PEOPLE'
+                ? 'bg-[#F26522] text-white shadow-sm'
+                : 'text-slate-300 hover:text-white'
+            }`}
           >
             👥 People / Pegawai
           </button>
           <button
             onClick={() => setMainView('MANAGEMENT')}
-            style={{
-              padding: '6px 14px',
-              borderRadius: '4px',
-              border: 'none',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-              fontSize: '12px',
-              background: mainView === 'MANAGEMENT' ? '#2563eb' : 'transparent',
-              color: mainView === 'MANAGEMENT' ? '#ffffff' : '#94a3b8',
-            }}
+            className={`px-4 py-1.5 rounded-md font-semibold transition-all ${
+              mainView === 'MANAGEMENT'
+                ? 'bg-[#F26522] text-white shadow-sm'
+                : 'text-slate-300 hover:text-white'
+            }`}
           >
-            📊 Control & Executions
+            📊 Control & Monitoring
           </button>
         </div>
       </div>

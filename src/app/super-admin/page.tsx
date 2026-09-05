@@ -349,31 +349,30 @@ export default function SuperAdminPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6 font-sans animate-pulse">
-        <Loader2 className="w-10 h-10 text-orange-500 animate-spin mb-4" />
-        <h1 className="text-sm font-bold text-white">Memuat Sistem Otorisasi Platform...</h1>
+      <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col items-center justify-center p-6 font-sans">
+        <Loader2 className="w-8 h-8 text-[#F26522] animate-spin mb-4" />
+        <h1 className="text-sm font-semibold text-[#0F2547]">Memuat Otorisasi Platform...</h1>
       </div>
     );
   }
 
   if (isSuperAdmin === false) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6 relative overflow-hidden font-sans">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-rose-600/10 rounded-full blur-3xl pointer-events-none"></div>
-        <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl space-y-6 relative z-10 text-center">
-          <div className="inline-flex p-4 rounded-full bg-rose-950/50 border border-rose-500/30 text-rose-400 mb-2">
-            <AlertTriangle className="w-12 h-12" />
+      <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col items-center justify-center p-6 font-sans">
+        <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl p-8 shadow-sm space-y-6 text-center">
+          <div className="inline-flex p-4 rounded-full bg-rose-50 border border-rose-200 text-rose-600 mb-2">
+            <AlertTriangle className="w-10 h-10" />
           </div>
-          <h1 className="text-2xl font-black text-white tracking-wider">Akses Terbatas</h1>
+          <h1 className="text-2xl font-bold text-[#0F2547]">Akses Dibatasi</h1>
           
-          <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 text-xs font-mono text-rose-300 text-center">
+          <div className="bg-slate-100 border border-slate-200 rounded-xl p-4 text-xs font-mono text-slate-700 text-center">
             Halaman ini memerlukan otorisasi Super Administrator. Pastikan akun Anda terdaftar di platform_role_assignments.
           </div>
 
           <div className="pt-4 space-y-3">
             <a 
               href="/"
-              className="w-full block py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl transition-all border border-slate-700"
+              className="w-full block py-2.5 bg-[#0F2547] hover:bg-[#0B1A32] text-white font-semibold text-xs rounded-xl transition-all"
             >
               Kembali ke Beranda
             </a>
@@ -384,11 +383,11 @@ export default function SuperAdminPage() {
               window.location.hostname === '127.0.0.1' || 
               window.location.hostname.includes('gitpod') || 
               window.location.hostname.includes('webcontainer')) && (
-              <div className="pt-4 border-t border-slate-800">
+              <div className="pt-4 border-t border-slate-200">
                 <button
                   type="button"
                   onClick={handleSimulateLogin}
-                  className="w-full py-2 bg-orange-600 hover:bg-orange-500 text-slate-950 font-bold text-xs rounded-xl transition-all"
+                  className="w-full py-2.5 bg-[#F26522] hover:bg-[#e05a10] text-white font-semibold text-xs rounded-xl transition-all"
                 >
                   ⚡ Simulasikan Login Super Admin (Local Dev)
                 </button>
@@ -411,15 +410,15 @@ export default function SuperAdminPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex font-sans">
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex font-sans">
       {/* Sidebar khusus Super Admin */}
-      <aside className="w-64 bg-slate-900 border-r border-slate-800 p-4 flex flex-col justify-between shrink-0">
+      <aside className="w-64 bg-[#0F2547] text-white border-r border-slate-800 p-4 flex flex-col justify-between shrink-0 shadow-md">
         <div className="space-y-6">
-          <div className="flex items-center space-x-3 px-2 py-1.5 border-b border-slate-800 pb-4">
-            <ShieldCheck className="w-8 h-8 text-orange-500" />
-            <h1 className="text-md font-black text-white uppercase tracking-wider">PILIN PLATFORM</h1>
+          <div className="flex items-center space-x-3 px-2 py-2 border-b border-slate-800/80">
+            <ShieldCheck className="w-7 h-7 text-[#F26522]" />
+            <h1 className="text-sm font-bold text-white tracking-wider">PILIN PLATFORM</h1>
           </div>
-          <nav className="space-y-1">
+          <nav className="space-y-1.5">
             {menuItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeMenu === item.name;
@@ -427,13 +426,13 @@ export default function SuperAdminPage() {
                 <button
                   key={item.name}
                   onClick={() => setActiveMenu(item.name)}
-                  className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-left text-xs font-bold transition-all border ${
+                  className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-left text-xs font-semibold transition-all ${
                     isActive 
-                      ? 'bg-orange-600/10 border-orange-500 text-orange-400 shadow-inner' 
-                      : 'border-transparent text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                      ? 'bg-[#F26522] text-white shadow-sm' 
+                      : 'text-slate-300 hover:bg-white/10 hover:text-white'
                   }`}
                 >
-                  <Icon className={`w-4 h-4 ${isActive ? 'text-orange-400' : 'text-slate-400'}`} />
+                  <Icon className="w-4 h-4" />
                   <span>{item.name}</span>
                 </button>
               );
@@ -443,7 +442,7 @@ export default function SuperAdminPage() {
 
         <div className="space-y-3">
           {isSimulated && (
-            <div className="bg-orange-950/40 border border-orange-500/30 rounded-xl p-3 text-[10px] text-orange-400 font-mono text-center">
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-2.5 text-[11px] text-amber-300 font-mono text-center">
               Mode Simulasi Aktif
             </div>
           )}
