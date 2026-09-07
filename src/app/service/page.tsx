@@ -320,34 +320,6 @@ export default function ServicePage() {
                 </div>
               </div>
             )}
-
-            {/* Contextual CTA Link */}
-            <div className="mt-12 text-center">
-              <Link
-                href="/pricing"
-                className="inline-flex items-center justify-center bg-[#F26522] hover:bg-[#d95516] text-white font-bold text-sm px-8 py-3.5 rounded-xl shadow-md transition-all"
-              >
-                <span>Cek Pilihan Paket PILIN ERP</span>
-                <ArrowRight className="w-4 h-4 ml-2" />
-              </Link>
-            </div>
-          </div>
-        </section>
-
-        {/* CUSTOMER ENGAGEMENT SECTION */}
-        <section className="py-16 md:py-24 bg-slate-50/70 border-b border-slate-100">
-          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-4">
-            <div className="inline-block bg-[#F26522]/10 text-[#F26522] text-xs font-extrabold px-3.5 py-1 rounded-md uppercase tracking-wider">
-              Pengelolaan Hubungan Customer
-            </div>
-
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0F2547] tracking-tight">
-              Transaksi Bukan Akhir dari Hubungan.
-            </h2>
-
-            <p className="text-base text-slate-600 max-w-2xl mx-auto leading-relaxed">
-              Customer yang pernah membeli telah mengenal bisnis Anda. PILIN membantu bisnis memahami riwayat transaksi dan menjaga hubungan agar peluang customer kembali tidak terlewatkan.
-            </p>
           </div>
         </section>
       </main>
