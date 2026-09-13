@@ -18,6 +18,8 @@ export function runPhase8RefundSuite() {
     }
   }
 
+  POSTransactionService.seedTestFixtures();
+
   // --- TEST 1: Default Refund Approval Tiers (GD-09 / OD-03) ---
   const tier499k = POSTransactionService.evaluateRefundApprovalTier(499999);
   assert(tier499k === 'TIER_3_MANAGER', 'Refund < Rp 500,000 (499,999) routes to Tier 3 Manager (GD-09)');

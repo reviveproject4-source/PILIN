@@ -37,7 +37,24 @@ export interface FileValidationInput {
 }
 
 export class EvidenceService {
-  private static mockEvidences = new Map<string, EvidenceRecord>();
+  private static mockEvidences = new Map<string, EvidenceRecord>([
+    [
+      'evd-101',
+      {
+        id: 'evd-101',
+        action_plan_id: 'SO-2026-001',
+        business_id: 'tenant-001',
+        branch_id: 'branch-001',
+        submitted_by_user_id: 'user-prod-01',
+        evidence_type: 'OPERATIONAL_PHOTO',
+        storage_reference: 'tenant-001/branch-001/SO-2026-001/evd-101/foto-pembersihan.jpg',
+        description: '[SPK: SO-2026-001] Foto pembersihan permukaan & pengerjaan tahap 1',
+        verification_state: 'PENDING',
+        submitted_at: new Date().toISOString(),
+      }
+    ]
+  ]);
+
   public static readonly ALLOWED_MIME_TYPES = [
     'image/jpeg',
     'image/png',
@@ -54,6 +71,40 @@ export class EvidenceService {
 
   static getEvidence(id: string): EvidenceRecord | undefined {
     return this.mockEvidences.get(id);
+  }
+
+  static getEvidences(business_id?: string, branch_id?: string): EvidenceRecord[] {
+    const list = Array.from(this.mockEvidences.values());
+    return list.filter(evd => {
+      if (business_id && evd.business_id !== business_id) return false;
+      if (branch_id && branch_id !== 'ALL_BRANCHES' && evd.branch_id !== branch_id) return false;
+      return true;
+    });
+  }
+
+  static addOperationalEvidence(params: {
+    spkId: string;
+    description: string;
+    business_id?: string;
+    branch_id?: string;
+    submitted_by?: string;
+  }): EvidenceRecord {
+    const evdId = `evd-${Date.now()}`;
+    const cleanSpk = params.spkId || 'SO-2026-001';
+    const record: EvidenceRecord = {
+      id: evdId,
+      action_plan_id: cleanSpk,
+      business_id: params.business_id || 'tenant-001',
+      branch_id: params.branch_id || 'branch-001',
+      submitted_by_user_id: params.submitted_by || 'user-prod-01',
+      evidence_type: 'OPERATIONAL_PHOTO',
+      storage_reference: `${params.business_id || 'tenant-001'}/${params.branch_id || 'branch-001'}/${cleanSpk}/${evdId}/foto.jpg`,
+      description: `[SPK: ${cleanSpk}] ${params.description}`,
+      verification_state: 'PENDING',
+      submitted_at: new Date().toISOString(),
+    };
+    this.mockEvidences.set(evdId, record);
+    return record;
   }
 
   /**
@@ -209,8 +260,8 @@ export class EvidenceService {
     const auth = ManagementAuthorization.authorize('VERIFY_EVIDENCE', params.actor_role);
     if (!auth.isAuthorized) throw new Error(auth.reason);
 
-    if (params.actor_role !== 'OWNER') {
-      throw new Error('EVIDENCE_VERIFICATION_OWNER_ONLY: Only Owner is authorized to verify evidence.');
+    if (params.actor_role !== 'OWNER' && params.actor_role !== 'KEPALA_CABANG') {
+      throw new Error('EVIDENCE_VERIFICATION_AUTHORIZATION: Only Owner or Kepala Cabang is authorized to verify evidence.');
     }
 
     const evidence = this.mockEvidences.get(params.evidence_id);

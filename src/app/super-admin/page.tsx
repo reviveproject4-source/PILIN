@@ -7,6 +7,7 @@ import {
   AlertTriangle, ShieldCheck, LogOut, Loader2 
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { 
   onboardTenantAction, 
   getDashboardMetricsAction, 
@@ -377,22 +378,6 @@ export default function SuperAdminPage() {
               Kembali ke Beranda
             </a>
             
-            {/* Show Developer Mode Simulation Toggle (only on localhost/dev domain) */}
-            {typeof window !== 'undefined' && 
-             (window.location.hostname === 'localhost' || 
-              window.location.hostname === '127.0.0.1' || 
-              window.location.hostname.includes('gitpod') || 
-              window.location.hostname.includes('webcontainer')) && (
-              <div className="pt-4 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={handleSimulateLogin}
-                  className="w-full py-2.5 bg-[#F26522] hover:bg-[#e05a10] text-white font-semibold text-xs rounded-xl transition-all"
-                >
-                  ⚡ Simulasikan Login Super Admin (Local Dev)
-                </button>
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -410,13 +395,16 @@ export default function SuperAdminPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex font-sans">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex font-sans transition-colors">
       {/* Sidebar khusus Super Admin */}
-      <aside className="w-64 bg-[#0F2547] text-white border-r border-slate-800 p-4 flex flex-col justify-between shrink-0 shadow-md">
+      <aside className="w-64 bg-[#0F2547] dark:bg-[#0B1A32] text-white border-r border-slate-800 p-4 flex flex-col justify-between shrink-0 shadow-md">
         <div className="space-y-6">
-          <div className="flex items-center space-x-3 px-2 py-2 border-b border-slate-800/80">
-            <ShieldCheck className="w-7 h-7 text-[#F26522]" />
-            <h1 className="text-sm font-bold text-white tracking-wider">PILIN PLATFORM</h1>
+          <div className="flex items-center justify-between px-2 py-2 border-b border-slate-800/80">
+            <div className="flex items-center space-x-3">
+              <ShieldCheck className="w-7 h-7 text-[#F26522]" />
+              <h1 className="text-sm font-bold text-white tracking-wider">PILIN PLATFORM</h1>
+            </div>
+            <ThemeToggle className="p-1.5" />
           </div>
           <nav className="space-y-1.5">
             {menuItems.map((item) => {
@@ -441,11 +429,6 @@ export default function SuperAdminPage() {
         </div>
 
         <div className="space-y-3">
-          {isSimulated && (
-            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-2.5 text-[11px] text-amber-300 font-mono text-center">
-              Mode Simulasi Aktif
-            </div>
-          )}
           <button
             onClick={handleSignOut}
             className="w-full flex items-center justify-center space-x-2 px-3 py-2.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all"

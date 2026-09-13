@@ -76,19 +76,19 @@ export function ManagementDashboardMockup() {
 
           <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
             <div>
-              <div className="font-bold text-[#0F2547] text-xs sm:text-sm mb-2">Ringkasan Cabang</div>
+              <div className="font-bold text-[#0F2547] text-xs sm:text-sm mb-2">Ringkasan Performa Agregat</div>
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between p-2 bg-slate-50 rounded border border-slate-100">
-                  <span className="font-semibold text-slate-700">Cabang Cibinong</span>
-                  <span className="font-bold text-[#0F2547]">Rp 74.200.000</span>
+                  <span className="font-semibold text-slate-700">Total Omset Terkonsolidasi</span>
+                  <span className="font-bold text-[#0F2547]">Rp 128.450.000</span>
                 </div>
                 <div className="flex justify-between p-2 bg-slate-50 rounded border border-slate-100">
-                  <span className="font-semibold text-slate-700">Cabang Depok</span>
-                  <span className="font-bold text-[#0F2547]">Rp 54.250.000</span>
+                  <span className="font-semibold text-slate-700">Estimasi Gross Profit Agregat</span>
+                  <span className="font-bold text-emerald-600">Rp 56.450.000</span>
                 </div>
               </div>
             </div>
-            <div className="text-[10px] text-slate-400 font-mono text-right mt-3">Contoh Dashboard PILIN ERP</div>
+            <div className="text-[10px] text-slate-400 font-mono text-right mt-3">Ringkasan Agregat PILIN ERP</div>
           </div>
         </div>
       </div>
@@ -147,17 +147,17 @@ export function BusinessInsightMockup() {
 
       <div className="space-y-2.5">
         <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900">
-          <span className="font-bold block">1. Perubahan Penjualan</span>
+          <span className="font-bold block">Perubahan Penjualan</span>
           <span>Penjualan minggu ini turun dibanding periode sebelumnya.</span>
         </div>
 
         <div className="p-3 bg-blue-50 rounded-xl border border-blue-200 text-blue-900">
-          <span className="font-bold block">2. Status Inventory</span>
+          <span className="font-bold block">Status Inventory</span>
           <span>12 produk memiliki perputaran rendah dan memerlukan tindakan.</span>
         </div>
 
         <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-900">
-          <span className="font-bold block">3. Tindak Lanjut Customer</span>
+          <span className="font-bold block">Tindak Lanjut Customer</span>
           <span>Customer terakhir melakukan transaksi 42 hari lalu.</span>
         </div>
       </div>

@@ -8,6 +8,7 @@ import {
 import { PeopleRepository } from '@/domains/people/peopleRepository';
 import { PeopleDomainService } from '@/domains/people/peopleDomainService';
 import { PEOPLE_PERMISSIONS } from '@/domains/people/peoplePermissions';
+import { PresensiModule } from './PresensiModule';
 
 interface PeopleManagementDashboardProps {
   businessId: string;
@@ -15,6 +16,7 @@ interface PeopleManagementDashboardProps {
   actorUserId: string;
   actorRole: 'OWNER' | 'KEPALA_CABANG' | 'PEGAWAI';
   actorPermissions?: string[];
+  initialTab?: 'EMPLOYEE' | 'DIVISION' | 'POSITION' | 'PRESENSI';
 }
 
 export function PeopleManagementDashboard({
@@ -23,9 +25,16 @@ export function PeopleManagementDashboard({
   actorUserId,
   actorRole,
   actorPermissions = [],
+  initialTab = 'EMPLOYEE',
 }: PeopleManagementDashboardProps) {
   // Navigation State
-  const [activeTab, setActiveTab] = useState<'EMPLOYEE' | 'DIVISION' | 'POSITION'>('EMPLOYEE');
+  const [activeTab, setActiveTab] = useState<'EMPLOYEE' | 'DIVISION' | 'POSITION' | 'PRESENSI'>(initialTab);
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
 
   // Master Data States
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -72,6 +81,8 @@ export function PeopleManagementDashboard({
     position_id: string;
     supervisor_id: string;
     auth_user_id: string;
+    base_salary: number | '';
+    incentive_rate: number | '';
   }>({
     employee_code: '',
     full_name: '',
@@ -86,6 +97,8 @@ export function PeopleManagementDashboard({
     position_id: '',
     supervisor_id: '',
     auth_user_id: '',
+    base_salary: '',
+    incentive_rate: '',
   });
 
   // Division Form State
@@ -256,7 +269,7 @@ export function PeopleManagementDashboard({
       code: `POS-00${positions.length + 1}`,
       name: '',
       division_id: divisions.length > 0 ? divisions[0].id : '',
-      level: 'STAFF',
+      level: '',
       description: '',
     });
     setShowPositionModal(true);
@@ -268,7 +281,7 @@ export function PeopleManagementDashboard({
       code: pos.code,
       name: pos.name,
       division_id: pos.division_id,
-      level: pos.level || 'STAFF',
+      level: pos.level || '',
       description: pos.description || '',
     });
     setShowPositionModal(true);
@@ -320,6 +333,8 @@ export function PeopleManagementDashboard({
       position_id: positions.length > 0 ? positions[0].id : '',
       supervisor_id: '',
       auth_user_id: '',
+      base_salary: '',
+      incentive_rate: '',
     });
     setShowEmployeeModal(true);
   };
@@ -340,6 +355,8 @@ export function PeopleManagementDashboard({
       position_id: emp.position_id || '',
       supervisor_id: emp.supervisor_id || '',
       auth_user_id: emp.auth_user_id || '',
+      base_salary: emp.base_salary !== undefined && emp.base_salary !== null ? emp.base_salary : '',
+      incentive_rate: emp.incentive_rate !== undefined && emp.incentive_rate !== null ? emp.incentive_rate : '',
     });
     setShowEmployeeModal(true);
   };
@@ -356,6 +373,9 @@ export function PeopleManagementDashboard({
   const handleSaveEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const baseSalaryVal = empForm.base_salary !== '' ? Number(empForm.base_salary) : undefined;
+      const incentiveRateVal = empForm.incentive_rate !== '' ? Number(empForm.incentive_rate) : undefined;
+
       if (editingEmployee) {
         await PeopleDomainService.updateEmployee(actorUserId, editingEmployee.id, {
           full_name: empForm.full_name,
@@ -369,6 +389,8 @@ export function PeopleManagementDashboard({
           division_id: empForm.division_id || undefined,
           position_id: empForm.position_id || undefined,
           supervisor_id: empForm.supervisor_id || undefined,
+          base_salary: baseSalaryVal,
+          incentive_rate: incentiveRateVal,
         });
         setFeedback({ type: 'success', text: `Data pegawai '${empForm.full_name}' berhasil diperbarui.` });
       } else {
@@ -387,6 +409,8 @@ export function PeopleManagementDashboard({
           position_id: empForm.position_id || undefined,
           supervisor_id: empForm.supervisor_id || undefined,
           auth_user_id: empForm.auth_user_id || undefined,
+          base_salary: baseSalaryVal,
+          incentive_rate: incentiveRateVal,
         });
         setFeedback({ type: 'success', text: `Pegawai baru '${empForm.full_name}' berhasil didaftarkan.` });
       }
@@ -467,6 +491,16 @@ export function PeopleManagementDashboard({
             }`}
           >
             Jabatan ({positions.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('PRESENSI')}
+            className={`px-4 py-2 rounded-md font-semibold text-xs transition-all ${
+              activeTab === 'PRESENSI'
+                ? 'bg-[#0F2547] text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            📋 Laporan Presensi
           </button>
         </div>
       </div>
@@ -584,6 +618,7 @@ export function PeopleManagementDashboard({
                   <th style={{ padding: '12px 16px' }}>Nama Pegawai</th>
                   <th style={{ padding: '12px 16px' }}>Jabatan & Divisi</th>
                   <th style={{ padding: '12px 16px' }}>Cabang</th>
+                  <th style={{ padding: '12px 16px' }}>Kompensasi Gaji</th>
                   <th style={{ padding: '12px 16px' }}>Atasan (Supervisor)</th>
                   <th style={{ padding: '12px 16px' }}>Akun Auth</th>
                   <th style={{ padding: '12px 16px' }}>Status</th>
@@ -593,11 +628,11 @@ export function PeopleManagementDashboard({
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={8} style={{ padding: '24px', textAlign: 'center', color: '#94a3b8' }}>Memuat data pegawai...</td>
+                    <td colSpan={9} style={{ padding: '24px', textAlign: 'center', color: '#94a3b8' }}>Memuat data pegawai...</td>
                   </tr>
                 ) : filteredEmployees.length === 0 ? (
                   <tr>
-                    <td colSpan={8} style={{ padding: '24px', textAlign: 'center', color: '#94a3b8' }}>Tidak ada data pegawai yang sesuai.</td>
+                    <td colSpan={9} style={{ padding: '24px', textAlign: 'center', color: '#94a3b8' }}>Tidak ada data pegawai yang sesuai.</td>
                   </tr>
                 ) : (
                   filteredEmployees.map(emp => (
@@ -612,6 +647,14 @@ export function PeopleManagementDashboard({
                         <div style={{ fontSize: '11px', color: '#64748b' }}>{emp.division_name}</div>
                       </td>
                       <td style={{ padding: '12px 16px', color: '#cbd5e1' }}>{emp.branch_name}</td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <div style={{ color: '#86efac', fontWeight: 'bold', fontSize: '12px' }}>
+                          Gaji: Rp {emp.base_salary ? emp.base_salary.toLocaleString('id-ID') : '0'}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#60a5fa' }}>
+                          Insentif SPK: Rp {emp.incentive_rate ? emp.incentive_rate.toLocaleString('id-ID') : '0'}
+                        </div>
+                      </td>
                       <td style={{ padding: '12px 16px', color: '#cbd5e1' }}>{emp.supervisor_name}</td>
                       <td style={{ padding: '12px 16px' }}>
                         {emp.auth_user_id ? (
@@ -799,6 +842,18 @@ export function PeopleManagementDashboard({
         </div>
       )}
 
+      {/* TAB 4: LAPORAN PRESENSI PEGAWAI */}
+      {activeTab === 'PRESENSI' && (
+        <div style={{ marginTop: '16px' }}>
+          <PresensiModule
+            businessId={businessId}
+            branchId={branchId}
+            actorUserId={actorUserId}
+            actorRole={actorRole}
+          />
+        </div>
+      )}
+
       {/* MODAL: CREATE / EDIT EMPLOYEE */}
       {showEmployeeModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
@@ -889,6 +944,32 @@ export function PeopleManagementDashboard({
                         <option key={e.id} value={e.id}>{e.full_name} ({e.employee_code})</option>
                       ))}
                   </select>
+                </div>
+              </div>
+
+              {/* Data Gaji & Kompensasi Fields */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', color: '#86efac', marginBottom: '4px', fontWeight: 'bold' }}>Gaji Pokok / Kompensasi Dasar (Rp)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="Contoh: 3500000"
+                    value={empForm.base_salary}
+                    onChange={e => setEmpForm({ ...empForm, base_salary: e.target.value === '' ? '' : Number(e.target.value) })}
+                    style={{ width: '100%', background: '#1e293b', border: '1px solid #334155', color: '#fff', padding: '8px', borderRadius: '4px', fontSize: '13px' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', color: '#60a5fa', marginBottom: '4px', fontWeight: 'bold' }}>Rate Insentif per SPK Selesai (Rp)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="Contoh: 25000"
+                    value={empForm.incentive_rate}
+                    onChange={e => setEmpForm({ ...empForm, incentive_rate: e.target.value === '' ? '' : Number(e.target.value) })}
+                    style={{ width: '100%', background: '#1e293b', border: '1px solid #334155', color: '#fff', padding: '8px', borderRadius: '4px', fontSize: '13px' }}
+                  />
                 </div>
               </div>
 

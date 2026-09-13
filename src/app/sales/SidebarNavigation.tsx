@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { LayoutDashboard, Users, FolderKanban, CalendarRange, LogOut } from 'lucide-react';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 interface SidebarProps {
   userEmail: string;
@@ -37,13 +38,14 @@ export default function SidebarNavigation({ userEmail }: SidebarProps) {
     <aside className="w-64 bg-[#0F2547] text-white flex flex-col justify-between h-full border-r border-slate-800 shadow-md">
       <div className="flex flex-col">
         {/* Logo Section */}
-        <div className="h-16 flex items-center px-6 border-b border-slate-800/60">
+        <div className="h-16 flex items-center justify-between px-6 border-b border-slate-800/60">
           <div className="flex items-center space-x-2">
             <span className="w-3 h-3 rounded-sm bg-[#F26522]"></span>
             <span className="text-xl font-bold tracking-tight text-white">
               PILIN <span className="text-[#F26522] text-sm uppercase font-semibold">Sales</span>
             </span>
           </div>
+          <ThemeToggle className="p-1.5" />
         </div>
 
         {/* Navigation Items */}

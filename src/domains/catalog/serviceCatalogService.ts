@@ -5,6 +5,9 @@ export interface ServiceCatalogItem {
   sku: string;
   base_harga: number;
   hpp: number;
+  hpp_mode?: 'PERCENTAGE' | 'ACTUAL_COST';
+  hpp_percent?: number;
+  item_type?: 'PRODUCT' | 'SERVICE';
   bahan_baku?: string;
 }
 
@@ -16,6 +19,9 @@ const DEFAULT_CATALOG: ServiceCatalogItem[] = [
     sku: 'SKU-SRV-001',
     base_harga: 75000,
     hpp: 30000,
+    hpp_mode: 'PERCENTAGE',
+    hpp_percent: 40,
+    item_type: 'SERVICE',
     bahan_baku: 'Sabun Khusus 50ml, Kain Lap Microfiber 1 pcs'
   },
   {
@@ -25,6 +31,9 @@ const DEFAULT_CATALOG: ServiceCatalogItem[] = [
     sku: 'SKU-SRV-002',
     base_harga: 120000,
     hpp: 45000,
+    hpp_mode: 'ACTUAL_COST',
+    hpp_percent: 0,
+    item_type: 'SERVICE',
     bahan_baku: 'Cat Khusus Leather 30ml, Liquid Cleaner 100ml'
   },
   {
@@ -34,6 +43,9 @@ const DEFAULT_CATALOG: ServiceCatalogItem[] = [
     sku: 'SKU-SRV-003',
     base_harga: 250000,
     hpp: 100000,
+    hpp_mode: 'PERCENTAGE',
+    hpp_percent: 40,
+    item_type: 'SERVICE',
     bahan_baku: 'Minyak Pelembab Leather 50ml, Nano Coating Spray 10ml'
   },
   {
@@ -43,13 +55,16 @@ const DEFAULT_CATALOG: ServiceCatalogItem[] = [
     sku: 'SKU-SRV-004',
     base_harga: 95000,
     hpp: 35000,
+    hpp_mode: 'ACTUAL_COST',
+    hpp_percent: 0,
+    item_type: 'SERVICE',
     bahan_baku: 'Shampoo Spray 30ml, Microfiber Fast Dry 1 pcs'
   },
 ];
 
 export class ServiceCatalogService {
   /**
-   * Master Service Catalog matching PostgreSQL Migration 00007_services_and_branch_catalog.sql
+   * Master Service Catalog matching PostgreSQL Migration 00007_services_and_branch_catalog.sql & 00049_add_hpp_mode_to_services.sql
    */
   private static masterCatalog: ServiceCatalogItem[] = [...DEFAULT_CATALOG];
 
@@ -104,17 +119,32 @@ export class ServiceCatalogService {
   static addMasterService(item: {
     nama: string;
     base_harga: number;
-    hpp: number;
+    hpp?: number;
+    hpp_mode?: 'PERCENTAGE' | 'ACTUAL_COST';
+    hpp_percent?: number;
+    item_type?: 'PRODUCT' | 'SERVICE';
     bahan_baku?: string;
   }): ServiceCatalogItem {
+    const mode = item.hpp_mode || 'ACTUAL_COST';
+    const percent = item.hpp_percent ?? 0;
+    const itemType = item.item_type || 'PRODUCT';
+    let computedHpp = item.hpp || 0;
+
+    if (mode === 'PERCENTAGE' && percent > 0) {
+      computedHpp = Math.round((item.base_harga * percent) / 100);
+    }
+
     const newItem: ServiceCatalogItem = {
-      id: `srv-${Date.now()}`,
+      id: `srv-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`,
       business_id: '00000000-0000-0000-0000-000000000001',
       nama: item.nama,
       sku: `SKU-SRV-${String(this.masterCatalog.length + 1).padStart(3, '0')}`,
       base_harga: item.base_harga,
-      hpp: item.hpp,
-      bahan_baku: item.bahan_baku || 'Bahan Baku Standar'
+      hpp: computedHpp,
+      hpp_mode: mode,
+      hpp_percent: percent,
+      item_type: itemType,
+      bahan_baku: item.bahan_baku || (itemType === 'SERVICE' ? 'Jasa Operasional' : 'Bahan Baku Standar')
     };
 
     this.masterCatalog.push(newItem);
@@ -158,5 +188,46 @@ export class ServiceCatalogService {
       this.saveToStorage();
     }
     return deleted;
+  }
+
+  static updateMasterService(id: string, item: {
+    nama?: string;
+    base_harga?: number;
+    hpp?: number;
+    hpp_mode?: 'PERCENTAGE' | 'ACTUAL_COST';
+    hpp_percent?: number;
+    item_type?: 'PRODUCT' | 'SERVICE';
+    bahan_baku?: string;
+  }): ServiceCatalogItem | undefined {
+    const existing = this.masterCatalog.find((s) => s.id === id);
+    if (!existing) return undefined;
+
+    const mode = item.hpp_mode !== undefined ? item.hpp_mode : (existing.hpp_mode || 'ACTUAL_COST');
+    const percent = item.hpp_percent !== undefined ? item.hpp_percent : (existing.hpp_percent ?? 0);
+    const hargaJual = item.base_harga !== undefined ? item.base_harga : existing.base_harga;
+    let computedHpp = item.hpp !== undefined ? item.hpp : existing.hpp;
+
+    if (mode === 'PERCENTAGE' && percent > 0) {
+      computedHpp = Math.round((hargaJual * percent) / 100);
+    }
+
+    const updatedItem: ServiceCatalogItem = {
+      ...existing,
+      nama: item.nama !== undefined ? item.nama : existing.nama,
+      base_harga: hargaJual,
+      hpp: computedHpp,
+      hpp_mode: mode,
+      hpp_percent: percent,
+      item_type: item.item_type !== undefined ? item.item_type : existing.item_type,
+      bahan_baku: item.bahan_baku !== undefined ? item.bahan_baku : existing.bahan_baku,
+    };
+
+    const idx = this.masterCatalog.findIndex((s) => s.id === id);
+    if (idx >= 0) {
+      this.masterCatalog[idx] = updatedItem;
+      this.saveToStorage();
+    }
+
+    return updatedItem;
   }
 }

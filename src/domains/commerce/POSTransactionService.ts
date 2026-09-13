@@ -42,53 +42,57 @@ export interface POSTransaction {
 
 export class POSTransactionService {
   private static forceMockMode = false;
-  private static mockTransactions: POSTransaction[] = [
-    {
-      id: 'trx-00000000-0000-0000-0000-000000000001',
-      business_id: '00000000-0000-0000-0000-000000000001',
-      branch_id: '00000000-0000-0000-0000-000000000010',
-      total_amount: 350000,
-      status: 'COMPLETED',
-      created_by: 'cashier-001',
-      created_at: new Date('2026-08-10').toISOString(),
-    },
-    {
-      id: 'trx-00000000-0000-0000-0000-000000000002',
-      business_id: '00000000-0000-0000-0000-000000000001',
-      branch_id: '00000000-0000-0000-0000-000000000010',
-      total_amount: 750000,
-      status: 'COMPLETED',
-      created_by: 'cashier-001',
-      created_at: new Date('2026-08-11').toISOString(),
-    },
-    {
-      id: 'trx-00000000-0000-0000-0000-000000000003',
-      business_id: '00000000-0000-0000-0000-000000000001',
-      branch_id: '00000000-0000-0000-0000-000000000010',
-      total_amount: 200000,
-      status: 'PENDING_PAYMENT',
-      created_by: 'cashier-001',
-      created_at: new Date('2026-08-12').toISOString(),
-    },
-    {
-      id: 'trx-00000000-0000-0000-0000-000000000004',
-      business_id: '00000000-0000-0000-0000-000000000001',
-      branch_id: '00000000-0000-0000-0000-000000000010',
-      total_amount: 150000,
-      status: 'COMPLETED',
-      created_by: 'cashier-001',
-      created_at: new Date('2026-08-13').toISOString(),
-    },
-    {
-      id: 'trx-00000000-0000-0000-0000-000000000005',
-      business_id: '00000000-0000-0000-0000-000000000001',
-      branch_id: '00000000-0000-0000-0000-000000000010',
-      total_amount: 400000,
-      status: 'COMPLETED',
-      created_by: 'cashier-001',
-      created_at: new Date('2026-08-14').toISOString(),
-    },
-  ];
+  private static mockTransactions: POSTransaction[] = [];
+
+  static seedTestFixtures(): void {
+    this.mockTransactions = [
+      {
+        id: 'trx-00000000-0000-0000-0000-000000000001',
+        business_id: '00000000-0000-0000-0000-000000000001',
+        branch_id: '00000000-0000-0000-0000-000000000010',
+        total_amount: 350000,
+        status: 'COMPLETED',
+        created_by: 'cashier-001',
+        created_at: new Date('2026-08-10').toISOString(),
+      },
+      {
+        id: 'trx-00000000-0000-0000-0000-000000000002',
+        business_id: '00000000-0000-0000-0000-000000000001',
+        branch_id: '00000000-0000-0000-0000-000000000010',
+        total_amount: 750000,
+        status: 'COMPLETED',
+        created_by: 'cashier-001',
+        created_at: new Date('2026-08-11').toISOString(),
+      },
+      {
+        id: 'trx-00000000-0000-0000-0000-000000000003',
+        business_id: '00000000-0000-0000-0000-000000000001',
+        branch_id: '00000000-0000-0000-0000-000000000010',
+        total_amount: 200000,
+        status: 'PENDING_PAYMENT',
+        created_by: 'cashier-001',
+        created_at: new Date('2026-08-12').toISOString(),
+      },
+      {
+        id: 'trx-00000000-0000-0000-0000-000000000004',
+        business_id: '00000000-0000-0000-0000-000000000001',
+        branch_id: '00000000-0000-0000-0000-000000000010',
+        total_amount: 150000,
+        status: 'COMPLETED',
+        created_by: 'cashier-001',
+        created_at: new Date('2026-08-13').toISOString(),
+      },
+      {
+        id: 'trx-00000000-0000-0000-0000-000000000005',
+        business_id: '00000000-0000-0000-0000-000000000001',
+        branch_id: '00000000-0000-0000-0000-000000000010',
+        total_amount: 400000,
+        status: 'COMPLETED',
+        created_by: 'cashier-001',
+        created_at: new Date('2026-08-14').toISOString(),
+      },
+    ];
+  }
 
   static setMockMode(enabled: boolean): void {
     this.forceMockMode = enabled;
@@ -203,7 +207,10 @@ export class POSTransactionService {
 
       // Snapshot unit_hpp from master catalog at transaction creation time
       const catalogItem = ServiceCatalogService.getServiceById(input.service_id);
-      const unitHpp = catalogItem ? catalogItem.hpp : 0;
+      let unitHpp = catalogItem ? catalogItem.hpp : 0;
+      if (catalogItem && catalogItem.hpp_mode === 'PERCENTAGE' && (catalogItem.hpp_percent ?? 0) > 0) {
+        unitHpp = Math.round((input.unit_price * (catalogItem.hpp_percent || 0)) / 100);
+      }
 
       const discount = input.discount || 0;
       const subtotal = input.qty * input.unit_price - discount;

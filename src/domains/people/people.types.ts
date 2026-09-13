@@ -43,6 +43,8 @@ export interface Employee {
   division_id?: string | null;
   position_id?: string | null;
   supervisor_id?: string | null;
+  base_salary?: number | null;
+  incentive_rate?: number | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -100,6 +102,8 @@ export interface CreateEmployeeDTO {
   division_id?: string;
   position_id?: string;
   supervisor_id?: string;
+  base_salary?: number;
+  incentive_rate?: number;
 }
 
 export interface UpdateEmployeeDTO {
@@ -116,5 +120,7 @@ export interface UpdateEmployeeDTO {
   division_id?: string;
   position_id?: string;
   supervisor_id?: string;
+  base_salary?: number;
+  incentive_rate?: number;
   is_active?: boolean;
 }

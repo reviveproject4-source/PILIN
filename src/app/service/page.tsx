@@ -49,7 +49,7 @@ export default function ServicePage() {
                     : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
                 }`}
               >
-                1. Business Process & Promosi
+                Business Process & Promosi
               </button>
 
               <button
@@ -60,7 +60,7 @@ export default function ServicePage() {
                     : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
                 }`}
               >
-                2. Product & Customer
+                Product & Customer
               </button>
 
               <button
@@ -71,7 +71,7 @@ export default function ServicePage() {
                     : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
                 }`}
               >
-                3. People & HR
+                People & HR
               </button>
 
               <button
@@ -82,7 +82,7 @@ export default function ServicePage() {
                     : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
                 }`}
               >
-                4. Finance
+                Finance
               </button>
 
               <button
@@ -93,7 +93,7 @@ export default function ServicePage() {
                     : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
                 }`}
               >
-                5. Management
+                Management
               </button>
             </div>
 

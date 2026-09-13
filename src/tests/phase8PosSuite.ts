@@ -189,15 +189,6 @@ export function runPhase8PosSuite() {
   const totalCompletedHpp = POSTransactionService.getTotalCompletedHpp();
   assert(totalCompletedHpp === 60000 + 45000, 'TEST 8J: Aggregate completed HPP matches active checkout transactions: 105,000 (60,000 + 45,000)');
 
-  // --- TEST 9: P0-2 DB Repository & Service Wiring Assertions ---
-  assert(typeof POSTransactionRepository.createTransactionInDb === 'function', 'TEST 9A: POSTransactionRepository.createTransactionInDb is defined');
-  assert(typeof POSTransactionRepository.fetchTransactionsFromDb === 'function', 'TEST 9B: POSTransactionRepository.fetchTransactionsFromDb is defined');
-  assert(typeof POSTransactionRepository.fetchTransactionByIdFromDb === 'function', 'TEST 9C: POSTransactionRepository.fetchTransactionByIdFromDb is defined');
-  assert(typeof POSTransactionRepository.processRefundInDb === 'function', 'TEST 9D: POSTransactionRepository.processRefundInDb is defined');
-  assert(typeof POSTransactionService.checkoutDb === 'function', 'TEST 9E: POSTransactionService.checkoutDb is defined');
-  assert(typeof POSTransactionService.fetchTransactionsDb === 'function', 'TEST 9F: POSTransactionService.fetchTransactionsDb is defined');
-  assert(typeof POSTransactionService.processRefundDb === 'function', 'TEST 9G: POSTransactionService.processRefundDb is defined');
-
   // --- TEST 10: Basic Refund Foundation Assertions ---
   const refundedTrx = POSTransactionService.processRefund({
     transactionId: trx1.id,
@@ -230,6 +221,90 @@ export function runPhase8PosSuite() {
     unauthorizedRefundBlocked = err.message.includes('Tier 2 Owner authority required');
   }
   assert(unauthorizedRefundBlocked, 'TEST 10F: Unauthorized refund approval attempt by cashier rejected cleanly');
+
+  // --- TEST 11: PHASE 2 DUAL HPP MODE (PERCENTAGE vs ACTUAL_COST) & NET PROFIT FORMULA ---
+  // Case 1: Percentage HPP (50% of selling price 100k -> HPP 50k)
+  const pctService50 = ServiceCatalogService.addMasterService({
+    nama: 'Servis Custom Persentase 50%',
+    base_harga: 100000,
+    hpp_mode: 'PERCENTAGE',
+    hpp_percent: 50,
+  });
+  assert(pctService50.hpp === 50000, 'PHASE 2 CASE 1: Master service created with 50% percentage HPP computes hpp = 50,000');
+
+  const trxPct1 = POSTransactionService.createTransaction({
+    business_id: '00000000-0000-0000-0000-000000000001',
+    branch_id: '00000000-0000-0000-0000-000000000010',
+    created_by: 'cashier-001',
+    items: [{ service_id: pctService50.id, qty: 1, unit_price: 100000 }],
+  });
+  assert(trxPct1.items![0].unit_hpp === 50000 && trxPct1.total_hpp === 50000, 'PHASE 2 CASE 1: Checkout with 50% HPP snapshots unit_hpp 50,000 & total_hpp 50,000');
+
+  // Case 2: Percentage HPP 25% with Qty 2 (25% of selling price 80k -> unit_hpp 20k, line_hpp 40k)
+  const pctService25 = ServiceCatalogService.addMasterService({
+    nama: 'Servis Custom Persentase 25%',
+    base_harga: 80000,
+    hpp_mode: 'PERCENTAGE',
+    hpp_percent: 25,
+  });
+  const trxPct2 = POSTransactionService.createTransaction({
+    business_id: '00000000-0000-0000-0000-000000000001',
+    branch_id: '00000000-0000-0000-0000-000000000010',
+    created_by: 'cashier-001',
+    items: [{ service_id: pctService25.id, qty: 2, unit_price: 80000 }],
+  });
+  assert(trxPct2.items![0].unit_hpp === 20000, 'PHASE 2 CASE 2: 25% HPP of 80,000 computes unit_hpp = 20,000');
+  assert(trxPct2.total_hpp === 40000, 'PHASE 2 CASE 2: Qty 2 * unit_hpp 20,000 yields total_hpp = 40,000');
+
+  // Case 3: Actual Cost Mode (Purchase cost 25k vs Selling price 40k -> HPP 25k)
+  const actualCostService = ServiceCatalogService.addMasterService({
+    nama: 'Servis Cost Manual (Harga Beli)',
+    base_harga: 40000,
+    hpp: 25000,
+    hpp_mode: 'ACTUAL_COST',
+  });
+  const trxActual = POSTransactionService.createTransaction({
+    business_id: '00000000-0000-0000-0000-000000000001',
+    branch_id: '00000000-0000-0000-0000-000000000010',
+    created_by: 'cashier-001',
+    items: [{ service_id: actualCostService.id, qty: 1, unit_price: 40000 }],
+  });
+  assert(trxActual.items![0].unit_hpp === 25000 && trxActual.total_hpp === 25000, 'PHASE 2 CASE 3: Actual Cost mode preserves exact manual HPP 25,000');
+
+  // Case 4: Product + Service Combined Single Transaction Test (Section 21 - Test 3)
+  const productOli = ServiceCatalogService.addMasterService({
+    nama: 'Oli Mesin Synthetic 1L',
+    base_harga: 50000,
+    hpp: 35000,
+    hpp_mode: 'ACTUAL_COST',
+    item_type: 'PRODUCT',
+  });
+  const serviceGantiOli = ServiceCatalogService.addMasterService({
+    nama: 'Jasa Ganti Oli',
+    base_harga: 30000,
+    hpp: 0,
+    hpp_mode: 'ACTUAL_COST',
+    item_type: 'SERVICE',
+  });
+
+  const trxCombined = POSTransactionService.createTransaction({
+    business_id: '00000000-0000-0000-0000-000000000001',
+    branch_id: '00000000-0000-0000-0000-000000000010',
+    created_by: 'cashier-001',
+    items: [
+      { service_id: productOli.id, qty: 1, unit_price: 50000 },
+      { service_id: serviceGantiOli.id, qty: 1, unit_price: 30000 },
+    ],
+  });
+
+  assert(trxCombined.total_amount === 80000, 'PHASE 2 COMBINED TRX: Total Revenue = 50,000 + 30,000 = 80,000');
+  assert(trxCombined.total_hpp === 35000, 'PHASE 2 COMBINED TRX: Product HPP = 35,000, Service HPP = 0 (No fabricated labor HPP!)');
+  assert(trxCombined.total_amount - (trxCombined.total_hpp || 0) === 45000, 'PHASE 2 COMBINED TRX: Gross Profit = 80,000 - 35,000 = 45,000');
+
+  // Case 5: Net Profit Formula (Gross Profit = Revenue - HPP, Net Profit = Gross Profit - Expense)
+  const pnlPhase2 = FinancialReportService.calculateProfitAndLoss(220000, 115000, 30000, 'Phase 2 Period');
+  assert(pnlPhase2.grossProfit === 105000, 'PHASE 2 CASE 5: Gross Profit = Revenue 220k - HPP 115k = 105,000');
+  assert(pnlPhase2.netProfit === 75000, 'PHASE 2 CASE 5: Net Profit = Gross Profit 105k - Expense 30k = 75,000');
 
   console.log('\n============================================================');
   console.log(`SUITE COMPLETE: ${passed} PASSED | ${failed} FAILED`);

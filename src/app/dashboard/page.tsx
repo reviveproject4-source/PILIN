@@ -1,93 +1,124 @@
 'use client';
 
-import React, { useState } from 'react';
-import Link from 'next/link';
+import React, { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { OwnerDashboard } from '@/components/management/OwnerDashboard';
 import { ManagementControlDashboard } from '@/components/management/ManagementControlDashboard';
+import { PegawaiTaskWorkspace } from '@/components/people/PegawaiTaskWorkspace';
 import { PeopleManagementDashboard } from '@/components/people/PeopleManagementDashboard';
-import { ManagementRole } from '@/domains/management/managementAuthorization';
-import { ArrowLeft, Building2, Users, LayoutDashboard, ExternalLink } from 'lucide-react';
+import { FinanceHppDashboard } from '@/components/finance/FinanceHppDashboard';
+import { ProductMasterDashboard } from '@/components/catalog/ProductMasterDashboard';
+import { PresensiModule } from '@/components/people/PresensiModule';
+import { KasirTransactionWorkspace } from '@/components/commerce/KasirTransactionWorkspace';
+import { TeamProduksiWorkspace } from '@/components/production/TeamProduksiWorkspace';
+import { DashboardTopBar, DashboardRole } from '@/components/layout/DashboardTopBar';
+import { ShoppingCart, Wrench, CheckCircle2, Clock, FileText, Send, AlertTriangle } from 'lucide-react';
 
-export default function DashboardPortalPage() {
-  const [activeRole, setActiveRole] = useState<ManagementRole>('OWNER');
-  const [activeTab, setActiveTab] = useState<'MANAGEMENT' | 'PEOPLE'>('MANAGEMENT');
+function DashboardContent() {
+  const searchParams = useSearchParams();
+  const roleParam = searchParams.get('role') as DashboardRole | null;
+  const [activeRole, setActiveRole] = useState<DashboardRole>('OWNER');
 
-  return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col">
-      {/* Top Header Bar */}
-      <header className="bg-[#0F2547] text-white px-6 py-4 border-b border-slate-800 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center space-x-4">
-          <Link
-            href="/"
-            className="flex items-center space-x-2 text-slate-300 hover:text-white transition-colors bg-slate-800/80 px-3 py-1.5 rounded-lg text-sm font-medium"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Ke Website PILIN</span>
-          </Link>
-          <div className="h-5 w-px bg-slate-700"></div>
-          <div className="flex items-center space-x-3">
-            <span className="w-3 h-3 rounded-full bg-[#F26522]"></span>
-            <span className="font-bold text-white tracking-wide text-lg">PILIN ERP Operational Portal</span>
-          </div>
-        </div>
+  useEffect(() => {
+    if (roleParam === 'PEGAWAI') {
+      setActiveRole('TEAM_PRODUKSI');
+    } else if (roleParam && ['OWNER', 'KEPALA_CABANG', 'KASIR', 'TEAM_PRODUKSI'].includes(roleParam)) {
+      setActiveRole(roleParam);
+    }
+  }, [roleParam]);
 
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2 bg-slate-900/60 border border-slate-700/80 px-3 py-1.5 rounded-lg">
-            <label className="text-slate-300 text-xs font-semibold uppercase tracking-wider">Akses Role:</label>
-            <select
-              value={activeRole}
-              onChange={(e) => setActiveRole(e.target.value as ManagementRole)}
-              className="bg-[#0F2547] text-[#F26522] font-bold text-sm focus:outline-none cursor-pointer"
-            >
-              <option value="OWNER">OWNER</option>
-              <option value="KEPALA_CABANG">KEPALA CABANG</option>
-              <option value="PEGAWAI">PEGAWAI</option>
-            </select>
-          </div>
+  // 1. OWNER ROLE DASHBOARD
+  if (activeRole === 'OWNER') {
+    return (
+      <OwnerDashboard
+        businessId="tenant-001"
+        branchId="branch-001"
+        actorUserId="user-owner-01"
+        onRoleChange={(role) => setActiveRole(role as DashboardRole)}
+      />
+    );
+  }
 
-          <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-800">
-            <button
-              onClick={() => setActiveTab('MANAGEMENT')}
-              className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center space-x-2 ${
-                activeTab === 'MANAGEMENT'
-                  ? 'bg-[#F26522] text-white shadow'
-                  : 'text-slate-300 hover:text-white'
-              }`}
-            >
-              <LayoutDashboard className="w-3.5 h-3.5" />
-              <span>Management Control</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('PEOPLE')}
-              className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center space-x-2 ${
-                activeTab === 'PEOPLE'
-                  ? 'bg-[#F26522] text-white shadow'
-                  : 'text-slate-300 hover:text-white'
-              }`}
-            >
-              <Users className="w-3.5 h-3.5" />
-              <span>People & Employee</span>
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content Area */}
-      <main className="flex-1 p-6 max-w-7xl w-full mx-auto">
-        {activeTab === 'MANAGEMENT' ? (
-          <ManagementControlDashboard
-            actorUserId="user-owner-01"
-            actorRole={activeRole}
+  // 2. PEGAWAI ROLE -> REDIRECT TO TEAM_PRODUKSI
+  if (activeRole === 'PEGAWAI') {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+        <DashboardTopBar role="TEAM_PRODUKSI" />
+        <main className="flex-1 p-6 max-w-7xl w-full mx-auto space-y-6">
+          <TeamProduksiWorkspace
+            actorUserId="user-prod-01"
+            actorName="Tim Produksi Staf"
             businessId="tenant-001"
             branchId="branch-001"
           />
-        ) : (
-          <PeopleManagementDashboard
-            actorUserId="user-owner-01"
-            actorRole={activeRole}
+        </main>
+      </div>
+    );
+  }
+
+  // 3. KASIR DEDICATED TRANSACTION DASHBOARD
+  if (activeRole === 'KASIR') {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+        <DashboardTopBar role="KASIR" />
+        <main className="flex-1 p-6 max-w-7xl w-full mx-auto space-y-6">
+          <KasirTransactionWorkspace
+            actorUserId="user-kasir-01"
+            actorName="Siti Rahma"
             businessId="tenant-001"
+            branchId="branch-001"
           />
-        )}
+        </main>
+      </div>
+    );
+  }
+
+  // 4. TEAM PRODUKSI DEDICATED WORKSPACE
+  if (activeRole === 'TEAM_PRODUKSI') {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+        <DashboardTopBar role="TEAM_PRODUKSI" />
+        <main className="flex-1 p-6 max-w-7xl w-full mx-auto space-y-6">
+          <TeamProduksiWorkspace
+            actorUserId="user-prod-01"
+            actorName="Tim Produksi Staf"
+            businessId="tenant-001"
+            branchId="branch-001"
+          />
+        </main>
+      </div>
+    );
+  }
+
+  // 5. KEPALA CABANG ROLE DASHBOARD (DEFAULT FALLBACK FOR KC)
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+      <DashboardTopBar role="KEPALA_CABANG" />
+      <main className="flex-1 p-6 max-w-7xl w-full mx-auto">
+        <ManagementControlDashboard
+          actorUserId="user-kc-01"
+          actorRole="KEPALA_CABANG"
+          businessId="tenant-001"
+          branchId="branch-001"
+        />
       </main>
     </div>
   );
 }
+
+export default function DashboardPortalPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-8">
+        <div className="text-center space-y-3">
+          <div className="w-10 h-10 border-4 border-[#F26522] border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <div className="text-xs font-bold tracking-wider uppercase text-slate-400">Memuat Dashboard PILIN ERP...</div>
+        </div>
+      </div>
+    }>
+      <DashboardContent />
+    </Suspense>
+  );
+}
+
+

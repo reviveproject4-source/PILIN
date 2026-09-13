@@ -25,7 +25,45 @@ export interface WorkOrderQueueItem {
 }
 
 export class WorkQueueService {
-  private static mockOrders: WorkOrderQueueItem[] = [];
+  private static mockOrders: WorkOrderQueueItem[] = [
+    {
+      id: 'so-2026-001',
+      order_number: 'SO-2026-001',
+      customer_name: 'Budi Santoso',
+      service_name: 'Cuci & Detailing Sepatu Premium',
+      worker_name: 'Tim Produksi Staf',
+      branch_id: 'branch-001',
+      branch_name: 'Cabang Utama Jakarta',
+      status: 'IN_PROGRESS',
+      qc_status: 'FAILED',
+      elapsed_minutes: 145, // Exceeds target_minutes (120) -> SPK Terlambat (SLA)
+      target_minutes: 120,
+      created_at: new Date(Date.now() - 3 * 3600000).toISOString(),
+      activity_log: [
+        { id: 'log-01', stage_code: 'RECEIVED', worker_name: 'Siti Rahma', timestamp: '10:00 WIB' },
+        { id: 'log-02', stage_code: 'DIAGNOSIS', worker_name: 'Tim Produksi Staf', timestamp: '10:15 WIB' },
+        { id: 'log-03', stage_code: 'IN_PROGRESS', worker_name: 'Tim Produksi Staf', timestamp: '10:30 WIB' },
+      ],
+    },
+    {
+      id: 'so-2026-002',
+      order_number: 'SO-2026-002',
+      customer_name: 'Dewi Lestari',
+      service_name: 'Reparasasi & Deep Cleaning Tas',
+      worker_name: 'Budi (Teknisi)',
+      branch_id: 'branch-001',
+      branch_name: 'Cabang Utama Jakarta',
+      status: 'QC',
+      qc_status: 'FAILED',
+      elapsed_minutes: 60,
+      target_minutes: 180,
+      created_at: new Date(Date.now() - 1 * 3600000).toISOString(),
+      activity_log: [
+        { id: 'log-04', stage_code: 'RECEIVED', worker_name: 'Siti Rahma', timestamp: '11:00 WIB' },
+        { id: 'log-05', stage_code: 'QC', worker_name: 'Budi (Teknisi)', timestamp: '12:00 WIB' },
+      ],
+    },
+  ];
 
   static getOrders(branchId?: string): WorkOrderQueueItem[] {
     if (!branchId || branchId === 'ALL_BRANCHES') {
@@ -34,13 +72,27 @@ export class WorkQueueService {
     return this.mockOrders.filter(o => !o.branch_id || o.branch_id === branchId);
   }
 
-  static updateOrderStatus(id: string, targetStatus: ServiceOrderStatus, workerName?: string): { success: boolean; message: string } {
+  static updateOrderStatus(
+    id: string,
+    targetStatus: ServiceOrderStatus,
+    authenticatedPerformerName?: string
+  ): { success: boolean; message: string } {
     const order = this.mockOrders.find(o => o.id === id);
     if (!order) return { success: false, message: 'Service Order tidak ditemukan.' };
 
-    const activeWorker = workerName && workerName.trim() ? workerName.trim() : order.worker_name || 'Staf Operator';
+    // Server-side status transition validation via WorkDomainService
+    const validation = WorkDomainService.validateServiceOrderTransition(order.status, targetStatus);
+    if (!validation.isValid) {
+      return { success: false, message: validation.reason || `Transisi status dari ${order.status} ke ${targetStatus} tidak valid.` };
+    }
+
+    // Actual performer MUST be bound to authenticated user context (not arbitrary dropdown selection)
+    const activePerformer = authenticatedPerformerName && authenticatedPerformerName.trim()
+      ? authenticatedPerformerName.trim()
+      : order.worker_name || 'Authenticated Performer';
+
     order.status = targetStatus;
-    order.worker_name = activeWorker;
+    order.worker_name = activePerformer;
 
     if (!order.activity_log) {
       order.activity_log = [];
@@ -50,11 +102,11 @@ export class WorkQueueService {
     order.activity_log.push({
       id: `log-${Date.now()}-${Math.floor(Math.random()*1000)}`,
       stage_code: targetStatus,
-      worker_name: activeWorker,
+      worker_name: activePerformer,
       timestamp: `${new Date().toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' })} ${nowFormatted}`
     });
 
-    return { success: true, message: `Status order ${order.order_number} berhasil diperbarui ke ${targetStatus} oleh ${activeWorker}.` };
+    return { success: true, message: `Status order ${order.order_number} berhasil diperbarui ke ${targetStatus} oleh ${activePerformer}.` };
   }
 
   static updateOrderQC(id: string, qc: QCStatus): { success: boolean; message: string } {
