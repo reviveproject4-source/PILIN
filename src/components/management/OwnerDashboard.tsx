@@ -22,6 +22,7 @@ interface OwnerDashboardProps {
   branchId?: string;
   actorUserId?: string;
   onRoleChange?: (role: 'OWNER' | 'KEPALA_CABANG' | 'PEGAWAI') => void;
+  onLogout?: () => void;
 }
 
 export function OwnerDashboard({
@@ -29,6 +30,7 @@ export function OwnerDashboard({
   branchId = 'branch-001',
   actorUserId = 'user-owner-01',
   onRoleChange,
+  onLogout,
 }: OwnerDashboardProps) {
   const [activeSidebarMenu, setActiveSidebarMenu] = useState<string>('EXECUTIVE_OVERVIEW');
   const [masterDataSubTab, setMasterDataSubTab] = useState<'PEGAWAI' | 'CATALOG'>('PEGAWAI');
@@ -37,7 +39,7 @@ export function OwnerDashboard({
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans flex flex-col selection:bg-[#F26522] selection:text-white transition-colors duration-200">
       {/* Clean Top Bar Header (Locked Target Final) */}
-      <DashboardTopBar role="OWNER" />
+      <DashboardTopBar role="OWNER" onLogout={onLogout} />
 
       {/* Main Body Grid Layout: Left Sidebar + Right Dashboard */}
       <div className="flex-1 flex overflow-hidden">
