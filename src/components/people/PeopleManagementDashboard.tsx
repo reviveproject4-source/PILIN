@@ -53,7 +53,8 @@ export function PeopleManagementDashboard({
   const [filterPosition, setFilterPosition] = useState<string>('ALL');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
 
-  // Modal States
+  // Modal & Submit States
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [showEmployeeModal, setShowEmployeeModal] = useState<boolean>(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
 
@@ -255,6 +256,8 @@ export function PeopleManagementDashboard({
   // Save Employee Handler
   const handleSaveEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     setFeedback(null);
 
     try {
@@ -336,6 +339,8 @@ export function PeopleManagementDashboard({
       await loadData();
     } catch (err: any) {
       setFeedback({ type: 'error', text: err.message || 'Gagal menyimpan data pegawai.' });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -1012,9 +1017,12 @@ export function PeopleManagementDashboard({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#10B981] hover:bg-emerald-600 text-white font-bold rounded-xl shadow-md"
+                  disabled={isSubmitting}
+                  className={`px-5 py-2 bg-[#10B981] hover:bg-emerald-600 text-white font-bold rounded-xl shadow-md ${
+                    isSubmitting ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
                 >
-                  Simpan Data Pegawai
+                  {isSubmitting ? 'Menyimpan...' : 'Simpan Data Pegawai'}
                 </button>
               </div>
             </form>

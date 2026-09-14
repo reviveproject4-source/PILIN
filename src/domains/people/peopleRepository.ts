@@ -315,9 +315,23 @@ export class PeopleRepository {
 
   static async listEmployees(business_id: string, filters?: { branch_id?: string; division_id?: string; status?: string }): Promise<Employee[]> {
     const stored = this.getStoredData<Employee[]>(`pilin_employees_${business_id}`, []);
-    const list = stored.length > 0 ? stored : (this.mockEmployees.length > 0 ? this.mockEmployees : this.listEmployeesMock(business_id));
+    const rawList = stored.length > 0 ? stored : (this.mockEmployees.length > 0 ? this.mockEmployees : this.listEmployeesMock(business_id));
 
-    return list.filter(e => {
+    // DEDUPLICATION SAFEGUARD: Ensure unique records by ID and employee_code
+    const uniqueList: Employee[] = [];
+    const seenIds = new Set<string>();
+    const seenCodes = new Set<string>();
+
+    for (const emp of rawList) {
+      const codeKey = emp.employee_code ? emp.employee_code.trim().toUpperCase() : '';
+      if (!seenIds.has(emp.id) && (!codeKey || !seenCodes.has(codeKey))) {
+        seenIds.add(emp.id);
+        if (codeKey) seenCodes.add(codeKey);
+        uniqueList.push(emp);
+      }
+    }
+
+    return uniqueList.filter(e => {
       if (filters?.branch_id && filters.branch_id !== 'ALL' && e.branch_id !== filters.branch_id) return false;
       if (filters?.division_id && filters.division_id !== 'ALL' && e.division_id !== filters.division_id) return false;
       if (filters?.status && filters.status !== 'ALL' && e.employment_status !== filters.status) return false;
@@ -399,15 +413,48 @@ export class PeopleRepository {
   static async createEmployee(dto: CreateEmployeeDTO): Promise<Employee> {
     const formattedCode = dto.employee_code.trim().toUpperCase();
 
+    const current = await this.listEmployees(dto.business_id);
+
+    // DEDUPLICATION: Check if employee code or identical name+branch already exists
+    const existingIdx = current.findIndex(e => e.employee_code === formattedCode);
+
     const branches = await this.listBranches(dto.business_id);
     const divisions = await this.listDivisions(dto.business_id);
     const positions = await this.listPositions(dto.business_id);
-    const employees = await this.listEmployees(dto.business_id);
+    const employees = current;
 
     const branchObj = branches.find(b => b.id === dto.branch_id);
     const divObj = divisions.find(d => d.id === dto.division_id);
     const posObj = positions.find(p => p.id === dto.position_id);
     const superObj = employees.find(e => e.id === dto.supervisor_id);
+
+    if (existingIdx >= 0) {
+      // Update existing record instead of creating duplicate
+      const existing = current[existingIdx];
+      const updatedEmp: Employee = {
+        ...existing,
+        full_name: dto.full_name.trim(),
+        nickname: dto.nickname?.trim() || existing.nickname,
+        phone: dto.phone?.trim() || existing.phone,
+        email: dto.email?.trim() || existing.email,
+        employment_status: dto.employment_status || existing.employment_status,
+        branch_id: dto.branch_id || existing.branch_id,
+        branch_name: branchObj ? branchObj.name : (dto.branch_id || existing.branch_name),
+        division_id: dto.division_id || existing.division_id,
+        division_name: divObj ? divObj.name : (dto.division_id || existing.division_name),
+        position_id: dto.position_id || existing.position_id,
+        position_name: posObj ? posObj.name : (dto.position_id || existing.position_name),
+        supervisor_id: dto.supervisor_id || existing.supervisor_id,
+        supervisor_name: superObj ? superObj.full_name : existing.supervisor_name,
+        base_salary: dto.base_salary !== undefined ? dto.base_salary : existing.base_salary,
+        incentive_rate: dto.incentive_rate !== undefined ? dto.incentive_rate : existing.incentive_rate,
+        updated_at: new Date().toISOString(),
+      };
+      current[existingIdx] = updatedEmp;
+      this.mockEmployees = current;
+      this.setStoredData(`pilin_employees_${dto.business_id}`, current);
+      return updatedEmp;
+    }
 
     const newEmp: Employee = {
       id: `emp-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -438,7 +485,6 @@ export class PeopleRepository {
       updated_at: new Date().toISOString(),
     };
 
-    const current = await this.listEmployees(dto.business_id);
     const updated = [newEmp, ...current];
     this.mockEmployees = updated;
     this.setStoredData(`pilin_employees_${dto.business_id}`, updated);
