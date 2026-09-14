@@ -4,7 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { PilinLogo } from './Navbar';
-import { Phone, MapPin, ExternalLink, ArrowRight } from 'lucide-react';
+import { Phone, ExternalLink, ArrowRight } from 'lucide-react';
 
 export default function Footer() {
   const pathname = usePathname();
@@ -65,7 +65,7 @@ export default function Footer() {
           </div>
 
           <div>
-            <div className="font-bold text-white text-sm mb-4">Kontak & Alamat</div>
+            <div className="font-bold text-white text-sm mb-4">Kontak Resmi</div>
             <div className="space-y-3 text-xs text-slate-300">
               <div className="flex items-start space-x-2">
                 <Phone className="w-4 h-4 text-[#F26522] flex-shrink-0 mt-0.5" />
@@ -94,16 +94,6 @@ export default function Footer() {
                   >
                     bit.ly/konsultasipilin
                   </a>
-                </div>
-              </div>
-
-              <div className="flex items-start space-x-2">
-                <MapPin className="w-4 h-4 text-[#F26522] flex-shrink-0 mt-0.5" />
-                <div>
-                  <div className="font-semibold text-white">Alamat Kantor</div>
-                  <div className="text-slate-400 text-[11px] leading-relaxed">
-                    Perum. BDB II, Blok AL, Sukahati, Cibinong, Kab. Bogor 16913
-                  </div>
                 </div>
               </div>
             </div>

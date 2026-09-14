@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Navbar from '@/components/website/Navbar';
 import Footer from '@/components/website/Footer';
-import { Phone, MapPin, ExternalLink, MessageCircle } from 'lucide-react';
+import { Phone, ExternalLink, MessageCircle } from 'lucide-react';
 
 export default function ContactPage() {
   const [clientName, setClientName] = useState('');
@@ -78,16 +78,6 @@ export default function ContactPage() {
                       >
                         https://bit.ly/konsultasipilin
                       </a>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start space-x-3 p-4 bg-white rounded-xl border border-slate-200">
-                    <MapPin className="w-5 h-5 text-[#F26522] flex-shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-bold text-[#0F2547] block">Alamat Kantor</span>
-                      <div className="text-slate-600 text-xs leading-relaxed mt-0.5">
-                        Perum. BDB II, Blok AL, Sukahati, Cibinong, Kab. Bogor 16913
-                      </div>
                     </div>
                   </div>
 
