@@ -90,14 +90,17 @@ export class PeopleRepository {
       this.mockBranches = stored;
       return stored;
     }
-    const initial: BranchItem[] = [
-      { id: 'branch-001', business_id, name: 'Cabang Utama (Alpha)', code: 'BR-001', address: 'Jl. Sudirman No. 12' },
-      { id: 'branch-002', business_id, name: 'Cabang Sub-Urban (Beta)', code: 'BR-002', address: 'Jl. Ahmad Yani No. 45' },
-      { id: 'branch-003', business_id, name: 'Cabang Ritel (Gamma)', code: 'BR-003', address: 'Jl. Gatot Subroto No. 88' },
-    ];
-    this.mockBranches = initial;
-    this.setStoredData(`pilin_branches_${business_id}`, initial);
-    return initial;
+    if (business_id === 'demo-tenant' || business_id === 'demo') {
+      const initial: BranchItem[] = [
+        { id: 'branch-001', business_id, name: 'Cabang Utama (Alpha)', code: 'BR-001', address: 'Jl. Sudirman No. 12' },
+        { id: 'branch-002', business_id, name: 'Cabang Sub-Urban (Beta)', code: 'BR-002', address: 'Jl. Ahmad Yani No. 45' },
+        { id: 'branch-003', business_id, name: 'Cabang Ritel (Gamma)', code: 'BR-003', address: 'Jl. Gatot Subroto No. 88' },
+      ];
+      this.mockBranches = initial;
+      this.setStoredData(`pilin_branches_${business_id}`, initial);
+      return initial;
+    }
+    return [];
   }
 
   static async createBranch(business_id: string, dto: { name: string; code?: string; address?: string }): Promise<BranchItem> {
@@ -340,59 +343,66 @@ export class PeopleRepository {
   }
 
   private static listEmployeesMock(business_id: string): Employee[] {
-    const initial: Employee[] = [
-      {
-        id: 'emp-001',
-        business_id,
-        auth_user_id: 'user-kc-01',
-        employee_code: 'EMP-001',
-        full_name: 'Hendra Wijaya',
-        nickname: 'Hendra',
-        phone: '081234567890',
-        email: 'hendra.kc@pilin.co.id',
-        employment_status: 'ACTIVE',
-        branch_id: 'branch-001',
-        branch_name: 'Cabang Utama (Alpha)',
-        division_id: 'div-001',
-        division_name: 'Operasional & Servis',
-        position_id: 'pos-001',
-        position_name: 'Kepala Cabang',
-        supervisor_id: null,
-        supervisor_name: '-',
-        base_salary: 6500000,
-        incentive_rate: 15000,
-        is_active: true,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-      {
-        id: 'emp-002',
-        business_id,
-        auth_user_id: 'user-staff-01',
-        employee_code: 'EMP-002',
-        full_name: 'Siti Rahma',
-        nickname: 'Siti',
-        phone: '081987654321',
-        email: 'siti.kasir@pilin.co.id',
-        employment_status: 'ACTIVE',
-        branch_id: 'branch-001',
-        branch_name: 'Cabang Utama (Alpha)',
-        division_id: 'div-003',
-        division_name: 'Keuangan & Akuntansi',
-        position_id: 'pos-003',
-        position_name: 'Staf Kasir & Keuangan',
-        supervisor_id: 'emp-001',
-        supervisor_name: 'Hendra Wijaya',
-        base_salary: 4200000,
-        incentive_rate: 10000,
-        is_active: true,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-    ];
-    this.mockEmployees = initial;
-    this.setStoredData(`pilin_employees_${business_id}`, initial);
-    return initial;
+    const stored = this.getStoredData<Employee[]>(`pilin_employees_${business_id}`, []);
+    if (stored.length > 0) {
+      return stored;
+    }
+    if (business_id === 'demo-tenant' || business_id === 'demo') {
+      const initial: Employee[] = [
+        {
+          id: 'emp-001',
+          business_id,
+          auth_user_id: 'user-kc-01',
+          employee_code: 'EMP-001',
+          full_name: 'Hendra Wijaya',
+          nickname: 'Hendra',
+          phone: '081234567890',
+          email: 'hendra.kc@pilin.co.id',
+          employment_status: 'ACTIVE',
+          branch_id: 'branch-001',
+          branch_name: 'Cabang Utama (Alpha)',
+          division_id: 'div-001',
+          division_name: 'Operasional & Servis',
+          position_id: 'pos-001',
+          position_name: 'Kepala Cabang',
+          supervisor_id: null,
+          supervisor_name: '-',
+          base_salary: 6500000,
+          incentive_rate: 15000,
+          is_active: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        {
+          id: 'emp-002',
+          business_id,
+          auth_user_id: 'user-staff-01',
+          employee_code: 'EMP-002',
+          full_name: 'Siti Rahma',
+          nickname: 'Siti',
+          phone: '081987654321',
+          email: 'siti.kasir@pilin.co.id',
+          employment_status: 'ACTIVE',
+          branch_id: 'branch-001',
+          branch_name: 'Cabang Utama (Alpha)',
+          division_id: 'div-003',
+          division_name: 'Keuangan & Akuntansi',
+          position_id: 'pos-003',
+          position_name: 'Staf Kasir & Keuangan',
+          supervisor_id: 'emp-001',
+          supervisor_name: 'Hendra Wijaya',
+          base_salary: 4200000,
+          incentive_rate: 10000,
+          is_active: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ];
+      this.mockEmployees = initial;
+      this.setStoredData(`pilin_employees_${business_id}`, initial);
+      return initial;
+    }
+    return [];
   }
 
   static async getEmployeeById(id: string): Promise<Employee | null> {

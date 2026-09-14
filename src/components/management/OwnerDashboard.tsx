@@ -16,6 +16,8 @@ import { AnalisisInteligensiBisnis } from '../intelligence/AnalisisInteligensiBi
 import { IdentitasUsahaDashboard } from './IdentitasUsahaDashboard';
 import { DashboardTopBar } from '../layout/DashboardTopBar';
 import { PeopleRepository } from '@/domains/people/peopleRepository';
+import { TenantService } from '@/domains/tenant/tenantService';
+import { TenantOnboardingModal } from '../tenant/TenantOnboardingModal';
 
 interface OwnerDashboardProps {
   businessId?: string;
@@ -37,6 +39,17 @@ export function OwnerDashboard({
   const [activeSidebarMenu, setActiveSidebarMenu] = useState<string>('EXECUTIVE_OVERVIEW');
   const [masterDataSubTab, setMasterDataSubTab] = useState<'PEGAWAI' | 'CATALOG'>('PEGAWAI');
   const [activeRole] = useState<'OWNER' | 'KEPALA_CABANG' | 'PEGAWAI'>('OWNER');
+
+  const [isOnboarded, setIsOnboarded] = useState<boolean>(true);
+  const [trialInfo, setTrialInfo] = useState<{ isActive: boolean; daysRemaining: number; endDateFormatted: string; businessName: string } | null>(null);
+
+  useEffect(() => {
+    if (!isDemo) {
+      const onboarded = TenantService.isOnboarded();
+      setIsOnboarded(onboarded);
+      setTrialInfo(TenantService.getTrialInfo());
+    }
+  }, [isDemo]);
 
   useEffect(() => {
     if (isDemo && !['EXECUTIVE_OVERVIEW', 'ANALISIS_INTELIGENSI'].includes(activeSidebarMenu)) {
@@ -137,10 +150,42 @@ export function OwnerDashboard({
 
         {/* RIGHT DASHBOARD CONTENT AREA */}
         <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 space-y-6">
+          {!isDemo && !isOnboarded && (
+            <TenantOnboardingModal
+              onSuccess={() => {
+                setIsOnboarded(true);
+                setTrialInfo(TenantService.getTrialInfo());
+              }}
+            />
+          )}
+
           {isDemo && (
             <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded-xl flex items-center justify-between text-amber-500 dark:text-amber-400 text-xs font-bold shadow-sm">
               <span>👁️ DEMO PREVIEW OWNER ERP — Mode Simulasi Tampilan Website (Terbatas pada Executive Overview & Analisis Inteligensi)</span>
               <span className="text-[10px] bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/40 uppercase tracking-wider font-extrabold">Demo Only</span>
+            </div>
+          )}
+
+          {!isDemo && isOnboarded && trialInfo && (
+            <div className="bg-slate-900 border border-emerald-500/30 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs shadow-md">
+              <div className="flex items-center space-x-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center font-black text-sm">
+                  ✨
+                </div>
+                <div>
+                  <div className="font-extrabold text-white text-sm">
+                    Masa Uji Coba (Trial 14 Hari) — {trialInfo.businessName}
+                  </div>
+                  <div className="text-[11px] text-slate-300 font-mono mt-0.5">
+                    Status: Aktif • Berakhir pada {trialInfo.endDateFormatted} ({trialInfo.daysRemaining} hari tersisa)
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="text-[10px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-3 py-1 rounded-lg uppercase tracking-wide">
+                  TRIAL 14 HARI
+                </span>
+              </div>
             </div>
           )}
 
@@ -187,9 +232,9 @@ export function OwnerDashboard({
                       {isDemo && <span className="text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.2 rounded font-bold">DEMO DATA</span>}
                     </div>
                     <div className="text-2xl font-black text-slate-900 dark:text-white mt-1">
-                      {isDemo ? 'Rp 485.500.000' : 'Rp 285.420.000'}
+                      {isDemo ? 'Rp 485.500.000' : 'Rp 0'}
                     </div>
-                    <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">Dari seluruh 3 cabang</div>
+                    <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">{isDemo ? 'Dari seluruh 3 cabang' : 'Belum ada transaksi'}</div>
                   </div>
                   <div className="h-8 w-full pt-1">
                     <svg className="w-full h-full text-emerald-500" viewBox="0 0 100 30" fill="none">
@@ -206,7 +251,7 @@ export function OwnerDashboard({
                     </div>
                     <span className="bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
                       <TrendingDown className="w-3 h-3" />
-                      29.3% OPEX Ratio
+                      {isDemo ? '29.3% OPEX Ratio' : '0% OPEX Ratio'}
                     </span>
                   </div>
                   <div>
@@ -215,9 +260,9 @@ export function OwnerDashboard({
                       {isDemo && <span className="text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.2 rounded font-bold">DEMO DATA</span>}
                     </div>
                     <div className="text-2xl font-black text-slate-900 dark:text-white mt-1">
-                      {isDemo ? 'Rp 142.200.000' : 'Rp 182.750.000'}
+                      {isDemo ? 'Rp 142.200.000' : 'Rp 0'}
                     </div>
-                    <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">Dari seluruh 3 cabang</div>
+                    <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">{isDemo ? 'Dari seluruh 3 cabang' : 'Belum ada pengeluaran'}</div>
                   </div>
                   <div className="h-8 w-full pt-1">
                     <svg className="w-full h-full text-rose-500" viewBox="0 0 100 30" fill="none">
@@ -234,7 +279,7 @@ export function OwnerDashboard({
                     </div>
                     <span className="bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
                       <CheckCircle2 className="w-3 h-3" />
-                      20.3% (Sehat &lt; 25%)
+                      {isDemo ? '20.3% (Sehat < 25%)' : '0% Labor Ratio'}
                     </span>
                   </div>
                   <div>
@@ -243,9 +288,9 @@ export function OwnerDashboard({
                       {isDemo && <span className="text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.2 rounded font-bold">DEMO DATA</span>}
                     </div>
                     <div className="text-2xl font-black text-slate-900 dark:text-white mt-1">
-                      {isDemo ? 'Rp 98.400.000' : 'Rp 75.000.000'}
+                      {isDemo ? 'Rp 98.400.000' : 'Rp 0'}
                     </div>
-                    <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">Dari seluruh 3 cabang</div>
+                    <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">{isDemo ? 'Dari seluruh 3 cabang' : 'Belum ada pegawai terdaftar'}</div>
                   </div>
                   <div className="h-8 w-full pt-1">
                     <svg className="w-full h-full text-blue-500" viewBox="0 0 100 30" fill="none">
@@ -262,7 +307,7 @@ export function OwnerDashboard({
                     </div>
                     <span className="bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
                       <TrendingUp className="w-3 h-3" />
-                      50.4% Net Margin
+                      {isDemo ? '50.4% Net Margin' : '0% Net Margin'}
                     </span>
                   </div>
                   <div>
@@ -271,10 +316,10 @@ export function OwnerDashboard({
                       {isDemo && <span className="text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.2 rounded font-bold">DEMO DATA</span>}
                     </div>
                     <div className="text-2xl font-black text-slate-900 dark:text-white mt-1">
-                      {isDemo ? 'Rp 244.900.000' : 'Rp 27.670.000'}
+                      {isDemo ? 'Rp 244.900.000' : 'Rp 0'}
                     </div>
                     <div className="text-[11px] text-slate-500 dark:text-slate-400 font-bold mt-1">
-                      Margin Laba Bersih: <span className="text-blue-600 dark:text-blue-400 font-bold">{isDemo ? '50.4%' : '9.7%'}</span>
+                      Margin Laba Bersih: <span className="text-blue-600 dark:text-blue-400 font-bold">{isDemo ? '50.4%' : '0.0%'}</span>
                     </div>
                   </div>
                   <div className="h-8 w-full pt-1">
@@ -373,128 +418,150 @@ export function OwnerDashboard({
                   </div>
                 </div>
 
-                {/* 3 Active Branches Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                  {/* Branch 1: Jakarta */}
-                  <div className="bg-slate-50/80 dark:bg-slate-800/60 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-4">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <span className="bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10px] font-mono font-bold px-2 py-0.5 rounded uppercase">
-                          SITE #01
+                {/* 3 Active Branches Grid or Clean Empty State */}
+                {!isDemo ? (
+                  <div className="bg-slate-50/80 dark:bg-slate-800/60 p-8 rounded-2xl border border-slate-200 dark:border-slate-700 text-center space-y-4">
+                    <div className="w-12 h-12 bg-slate-200 dark:bg-slate-700 rounded-2xl flex items-center justify-center mx-auto text-2xl">
+                      🏢
+                    </div>
+                    <div className="space-y-1">
+                      <h3 className="text-base font-black text-slate-900 dark:text-white">
+                        Belum Ada Data Cabang & Transaksi
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+                        Usaha Anda siap digunakan! Mulai masukkan data pegawai, layanan, dan cabang untuk mengaktifkan seluruh laporan operasional real-time.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setActiveSidebarMenu('MASTER_DATA')}
+                      className="px-5 py-2.5 bg-[#F26522] hover:bg-[#d95416] text-white font-bold rounded-xl text-xs transition-all shadow-md inline-flex items-center gap-2 cursor-pointer"
+                    >
+                      <span>Mulai Input Master Data →</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                    {/* Branch 1: Jakarta */}
+                    <div className="bg-slate-50/80 dark:bg-slate-800/60 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-4">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <span className="bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10px] font-mono font-bold px-2 py-0.5 rounded uppercase">
+                            SITE #01
+                          </span>
+                          <h3 className="font-bold text-slate-900 dark:text-white text-sm mt-1">Cabang Utama (Jakarta Pusat)</h3>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400">Jl. Samanhudi No. 12, Jakarta Pusat</div>
+                        </div>
+                        <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-400 text-[10px] font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                          Super Performer
                         </span>
-                        <h3 className="font-bold text-slate-900 dark:text-white text-sm mt-1">Cabang Utama (Jakarta Pusat)</h3>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400">Jl. Samanhudi No. 12, Jakarta Pusat</div>
                       </div>
-                      <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-400 text-[10px] font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                        Super Performer
-                      </span>
+
+                      <div className="space-y-2 text-xs border-t border-slate-200 dark:border-slate-700 pt-3">
+                        <div className="flex justify-between">
+                          <span className="text-slate-600 dark:text-slate-400">Pendapatan Omzet:</span>
+                          <span className="font-bold text-emerald-600 dark:text-emerald-400">Rp 215.000.000</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-600 dark:text-slate-400">Pengeluaran (OPEX):</span>
+                          <span className="font-bold text-rose-600 dark:text-rose-400">- Rp 60.500.000</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-600 dark:text-slate-400">Gaji Pegawai (Labor):</span>
+                          <span className="font-bold text-purple-600 dark:text-purple-400">- Rp 42.000.000 (19.5%)</span>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-slate-200 dark:border-slate-700 pt-3 flex justify-between items-baseline">
+                        <div>
+                          <div className="text-[11px] font-bold text-slate-900 dark:text-white">Laba Bersih Cabang:</div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400">Margin Laba: <span className="text-blue-600 dark:text-blue-400 font-bold">52.3%</span></div>
+                        </div>
+                        <div className="text-lg font-black text-slate-900 dark:text-white">Rp 112.500.000</div>
+                      </div>
                     </div>
 
-                    <div className="space-y-2 text-xs border-t border-slate-200 dark:border-slate-700 pt-3">
-                      <div className="flex justify-between">
-                        <span className="text-slate-600 dark:text-slate-400">Pendapatan Omzet:</span>
-                        <span className="font-bold text-emerald-600 dark:text-emerald-400">{isDemo ? 'Rp 215.000.000' : 'Rp 125.430.000'}</span>
+                    {/* Branch 2: Bandung */}
+                    <div className="bg-slate-50/80 dark:bg-slate-800/60 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-4">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <span className="bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10px] font-mono font-bold px-2 py-0.5 rounded uppercase">
+                            SITE #02
+                          </span>
+                          <h3 className="font-bold text-slate-900 dark:text-white text-sm mt-1">Cabang Bandung</h3>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400">Jl. Asia Afrika No. 88, Bandung</div>
+                        </div>
+                        <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-400 text-[10px] font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                          High Profit
+                        </span>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-600 dark:text-slate-400">Pengeluaran (OPEX):</span>
-                        <span className="font-bold text-rose-600 dark:text-rose-400">{isDemo ? '- Rp 60.500.000' : '- Rp 78.250.000'}</span>
+
+                      <div className="space-y-2 text-xs border-t border-slate-200 dark:border-slate-700 pt-3">
+                        <div className="flex justify-between">
+                          <span className="text-slate-600 dark:text-slate-400">Pendapatan Omzet:</span>
+                          <span className="font-bold text-emerald-600 dark:text-emerald-400">Rp 160.500.000</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-600 dark:text-slate-400">Pengeluaran (OPEX):</span>
+                          <span className="font-bold text-rose-600 dark:text-rose-400">- Rp 47.300.000</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-600 dark:text-slate-400">Gaji Pegawai (Labor):</span>
+                          <span className="font-bold text-purple-600 dark:text-purple-400">- Rp 33.400.000 (20.8%)</span>
+                        </div>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-600 dark:text-slate-400">Gaji Pegawai (Labor):</span>
-                        <span className="font-bold text-purple-600 dark:text-purple-400">{isDemo ? '- Rp 42.000.000 (19.5%)' : '- Rp 30.000.000'}</span>
+
+                      <div className="border-t border-slate-200 dark:border-slate-700 pt-3 flex justify-between items-baseline">
+                        <div>
+                          <div className="text-[11px] font-bold text-slate-900 dark:text-white">Laba Bersih Cabang:</div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400">Margin Laba: <span className="text-blue-600 dark:text-blue-400 font-bold">49.7%</span></div>
+                        </div>
+                        <div className="text-lg font-black text-slate-900 dark:text-white">Rp 79.800.000</div>
                       </div>
                     </div>
 
-                    <div className="border-t border-slate-200 dark:border-slate-700 pt-3 flex justify-between items-baseline">
-                      <div>
-                        <div className="text-[11px] font-bold text-slate-900 dark:text-white">Laba Bersih Cabang:</div>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400">Margin Laba: <span className="text-blue-600 dark:text-blue-400 font-bold">{isDemo ? '52.3%' : '13.7%'}</span></div>
+                    {/* Branch 3: Bogor */}
+                    <div className="bg-slate-50/80 dark:bg-slate-800/60 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-4">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <span className="bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10px] font-mono font-bold px-2 py-0.5 rounded uppercase">
+                            SITE #03
+                          </span>
+                          <h3 className="font-bold text-slate-900 dark:text-white text-sm mt-1">Cabang Bogor</h3>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400">Jl. Pajajaran No. 45, Bogor</div>
+                        </div>
+                        <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-400 text-[10px] font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                          Stable Growth
+                        </span>
                       </div>
-                      <div className="text-lg font-black text-slate-900 dark:text-white">{isDemo ? 'Rp 112.500.000' : 'Rp 17.180.000'}</div>
+
+                      <div className="space-y-2 text-xs border-t border-slate-200 dark:border-slate-700 pt-3">
+                        <div className="flex justify-between">
+                          <span className="text-slate-600 dark:text-slate-400">Pendapatan Omzet:</span>
+                          <span className="font-bold text-emerald-600 dark:text-emerald-400">Rp 110.000.000</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-600 dark:text-slate-400">Pengeluaran (OPEX):</span>
+                          <span className="font-bold text-rose-600 dark:text-rose-400">- Rp 34.400.000</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-600 dark:text-slate-400">Gaji Pegawai (Labor):</span>
+                          <span className="font-bold text-purple-600 dark:text-purple-400">- Rp 23.000.000 (20.9%)</span>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-slate-200 dark:border-slate-700 pt-3 flex justify-between items-baseline">
+                        <div>
+                          <div className="text-[11px] font-bold text-slate-900 dark:text-white">Laba Bersih Cabang:</div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400">Margin Laba: <span className="text-blue-600 dark:text-blue-400 font-bold">47.8%</span></div>
+                        </div>
+                        <div className="text-lg font-black text-slate-900 dark:text-white">Rp 52.600.000</div>
+                      </div>
                     </div>
                   </div>
-
-                  {/* Branch 2: Bandung */}
-                  <div className="bg-slate-50/80 dark:bg-slate-800/60 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-4">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <span className="bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10px] font-mono font-bold px-2 py-0.5 rounded uppercase">
-                          SITE #02
-                        </span>
-                        <h3 className="font-bold text-slate-900 dark:text-white text-sm mt-1">Cabang Bandung</h3>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400">Jl. Asia Afrika No. 88, Bandung</div>
-                      </div>
-                      <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-400 text-[10px] font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                        High Profit
-                      </span>
-                    </div>
-
-                    <div className="space-y-2 text-xs border-t border-slate-200 dark:border-slate-700 pt-3">
-                      <div className="flex justify-between">
-                        <span className="text-slate-600 dark:text-slate-400">Pendapatan Omzet:</span>
-                        <span className="font-bold text-emerald-600 dark:text-emerald-400">{isDemo ? 'Rp 160.500.000' : 'Rp 89.750.000'}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-600 dark:text-slate-400">Pengeluaran (OPEX):</span>
-                        <span className="font-bold text-rose-600 dark:text-rose-400">{isDemo ? '- Rp 47.300.000' : '- Rp 58.500.000'}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-600 dark:text-slate-400">Gaji Pegawai (Labor):</span>
-                        <span className="font-bold text-purple-600 dark:text-purple-400">{isDemo ? '- Rp 33.400.000 (20.8%)' : '- Rp 25.000.000'}</span>
-                      </div>
-                    </div>
-
-                    <div className="border-t border-slate-200 dark:border-slate-700 pt-3 flex justify-between items-baseline">
-                      <div>
-                        <div className="text-[11px] font-bold text-slate-900 dark:text-white">Laba Bersih Cabang:</div>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400">Margin Laba: <span className="text-blue-600 dark:text-blue-400 font-bold">{isDemo ? '49.7%' : '7.0%'}</span></div>
-                      </div>
-                      <div className="text-lg font-black text-slate-900 dark:text-white">{isDemo ? 'Rp 79.800.000' : 'Rp 6.250.000'}</div>
-                    </div>
-                  </div>
-
-                  {/* Branch 3: Bogor */}
-                  <div className="bg-slate-50/80 dark:bg-slate-800/60 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-4">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <span className="bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10px] font-mono font-bold px-2 py-0.5 rounded uppercase">
-                          SITE #03
-                        </span>
-                        <h3 className="font-bold text-slate-900 dark:text-white text-sm mt-1">Cabang Bogor</h3>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400">Jl. Pajajaran No. 45, Bogor</div>
-                      </div>
-                      <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-400 text-[10px] font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                        Stable Growth
-                      </span>
-                    </div>
-
-                    <div className="space-y-2 text-xs border-t border-slate-200 dark:border-slate-700 pt-3">
-                      <div className="flex justify-between">
-                        <span className="text-slate-600 dark:text-slate-400">Pendapatan Omzet:</span>
-                        <span className="font-bold text-emerald-600 dark:text-emerald-400">{isDemo ? 'Rp 110.000.000' : 'Rp 70.240.000'}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-600 dark:text-slate-400">Pengeluaran (OPEX):</span>
-                        <span className="font-bold text-rose-600 dark:text-rose-400">{isDemo ? '- Rp 34.400.000' : '- Rp 46.000.000'}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-600 dark:text-slate-400">Gaji Pegawai (Labor):</span>
-                        <span className="font-bold text-purple-600 dark:text-purple-400">{isDemo ? '- Rp 23.000.000 (20.9%)' : '- Rp 20.000.000'}</span>
-                      </div>
-                    </div>
-
-                    <div className="border-t border-slate-200 dark:border-slate-700 pt-3 flex justify-between items-baseline">
-                      <div>
-                        <div className="text-[11px] font-bold text-slate-900 dark:text-white">Laba Bersih Cabang:</div>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400">Margin Laba: <span className="text-blue-600 dark:text-blue-400 font-bold">{isDemo ? '47.8%' : '6.0%'}</span></div>
-                      </div>
-                      <div className="text-lg font-black text-slate-900 dark:text-white">{isDemo ? 'Rp 52.600.000' : 'Rp 4.240.000'}</div>
-                    </div>
-                  </div>
-                </div>
+                )}
               </div>
 
               {/* SECTION III & IV GRID: LAPORAN ARUS KAS & OTORISASI VERIFIKASI */}
