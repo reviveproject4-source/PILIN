@@ -60,7 +60,6 @@ export default function Footer() {
               <li><Link href="/free-feature" className="hover:text-white transition-colors">Free Feature POS</Link></li>
               <li><Link href="/pricing" className="hover:text-white transition-colors">Pricing Paket</Link></li>
               <li><a href="https://pilin-business-check.vercel.app/" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Business Check Portal</a></li>
-              <li><Link href="/contact" className="hover:text-white transition-colors">Contact / Konsultasi</Link></li>
             </ul>
           </div>
 

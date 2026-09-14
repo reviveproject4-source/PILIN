@@ -38,7 +38,6 @@ export default function Navbar() {
     { label: 'Free Feature', href: '/free-feature' },
     { label: 'Pricing', href: '/pricing' },
     { label: 'Business Check', href: '/business-check' },
-    { label: 'Contact', href: '/contact' },
   ];
 
   return (
