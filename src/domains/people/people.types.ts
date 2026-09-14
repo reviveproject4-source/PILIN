@@ -108,6 +108,7 @@ export interface CreateEmployeeDTO {
 
 export interface UpdateEmployeeDTO {
   full_name?: string;
+  auth_user_id?: string;
   nickname?: string;
   phone?: string;
   email?: string;

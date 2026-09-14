@@ -21,6 +21,7 @@ interface OwnerDashboardProps {
   businessId?: string;
   branchId?: string;
   actorUserId?: string;
+  isDemo?: boolean;
   onRoleChange?: (role: 'OWNER' | 'KEPALA_CABANG' | 'PEGAWAI') => void;
   onLogout?: () => void;
 }
@@ -29,12 +30,19 @@ export function OwnerDashboard({
   businessId = 'tenant-001',
   branchId = 'branch-001',
   actorUserId = 'user-owner-01',
+  isDemo = false,
   onRoleChange,
   onLogout,
 }: OwnerDashboardProps) {
   const [activeSidebarMenu, setActiveSidebarMenu] = useState<string>('EXECUTIVE_OVERVIEW');
   const [masterDataSubTab, setMasterDataSubTab] = useState<'PEGAWAI' | 'CATALOG'>('PEGAWAI');
   const [activeRole] = useState<'OWNER' | 'KEPALA_CABANG' | 'PEGAWAI'>('OWNER');
+
+  useEffect(() => {
+    if (isDemo && !['EXECUTIVE_OVERVIEW', 'ANALISIS_INTELIGENSI'].includes(activeSidebarMenu)) {
+      setActiveSidebarMenu('EXECUTIVE_OVERVIEW');
+    }
+  }, [isDemo, activeSidebarMenu]);
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans flex flex-col selection:bg-[#F26522] selection:text-white transition-colors duration-200">
@@ -65,13 +73,17 @@ export function OwnerDashboard({
 
             {/* Active Owner Badge */}
             <div className="bg-slate-950/80 border border-slate-800 p-2.5 rounded-xl flex items-center justify-between">
-              <span className="text-xs font-bold text-white tracking-wide">DASHBOARD OWNER</span>
-              <span className="bg-[#10B981]/20 text-[#10B981] border border-[#10B981]/40 text-[9px] font-extrabold px-2 py-0.5 rounded-md uppercase">
-                AKTIF
+              <span className="text-xs font-bold text-white tracking-wide">
+                {isDemo ? 'OWNER DEMO PREVIEW' : 'DASHBOARD OWNER'}
+              </span>
+              <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-md uppercase ${
+                isDemo ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' : 'bg-[#10B981]/20 text-[#10B981] border border-[#10B981]/40'
+              }`}>
+                {isDemo ? 'PREVIEW DEMO' : 'AKTIF'}
               </span>
             </div>
 
-            {/* Sidebar Menu Items (Exact 9 Items Matching Reference Image) */}
+            {/* Sidebar Menu Items */}
             <nav className="space-y-1">
               {[
                 { id: 'EXECUTIVE_OVERVIEW', label: 'Executive Overview', icon: LayoutDashboardIcon },
@@ -84,7 +96,9 @@ export function OwnerDashboard({
                 { id: 'ANALISIS_INTELIGENSI', label: 'Analisis Inteligensi', icon: BarChartIcon },
                 { id: 'IDENTITAS_USAHA', label: 'Identitas Usaha & Nota', icon: StoreIcon },
                 { id: 'SYSTEM_IMPORT', label: 'System & Import', icon: UploadIcon },
-              ].map((item) => {
+              ]
+                .filter((item) => !isDemo || ['EXECUTIVE_OVERVIEW', 'ANALISIS_INTELIGENSI'].includes(item.id))
+                .map((item) => {
                 const IconComponent = item.icon;
                 const isActive = activeSidebarMenu === item.id;
                 return (
@@ -112,9 +126,6 @@ export function OwnerDashboard({
                 <CrownIcon className="w-4 h-4 text-amber-400" />
                 <span>PILIN (Multi-Branch)</span>
               </div>
-              <p className="text-[11px] text-slate-400 mt-1 leading-normal">
-                Kelola semua cabang bisnis dalam satu dashboard.
-              </p>
             </div>
 
             <button className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl border border-slate-700 transition-colors flex items-center justify-center gap-2">
@@ -126,6 +137,13 @@ export function OwnerDashboard({
 
         {/* RIGHT DASHBOARD CONTENT AREA */}
         <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 space-y-6">
+          {isDemo && (
+            <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded-xl flex items-center justify-between text-amber-500 dark:text-amber-400 text-xs font-bold shadow-sm">
+              <span>👁️ DEMO PREVIEW OWNER ERP — Mode Simulasi Tampilan Website (Terbatas pada Executive Overview & Analisis Inteligensi)</span>
+              <span className="text-[10px] bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/40 uppercase tracking-wider font-extrabold">Demo Only</span>
+            </div>
+          )}
+
           {/* MENU 1: EXECUTIVE OVERVIEW */}
           {activeSidebarMenu === 'EXECUTIVE_OVERVIEW' && (
             <div className="space-y-6">

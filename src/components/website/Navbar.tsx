@@ -71,7 +71,7 @@ export default function Navbar() {
         {/* Desktop Actions */}
         <div className="hidden md:flex items-center space-x-3">
           <Link
-            href="/dashboard"
+            href="/dashboard?demo=true"
             className="text-xs font-bold text-[#0F2547] bg-slate-100 hover:bg-slate-200 px-3.5 py-2.5 rounded-lg transition-all flex items-center space-x-1.5"
           >
             <span>Portal ERP</span>
@@ -123,7 +123,7 @@ export default function Navbar() {
 
           <div className="pt-3 border-t border-slate-100 flex flex-col space-y-2">
             <Link
-              href="/dashboard"
+              href="/dashboard?demo=true"
               onClick={() => setMobileMenuOpen(false)}
               className="w-full text-center bg-slate-100 text-[#0F2547] text-xs font-bold py-2.5 rounded-lg"
             >

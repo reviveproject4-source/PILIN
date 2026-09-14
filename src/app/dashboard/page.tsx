@@ -17,6 +17,7 @@ import { ShoppingCart, Wrench, CheckCircle2, Clock, FileText, Send, AlertTriangl
 function DashboardContent() {
   const searchParams = useSearchParams();
   const roleParam = searchParams.get('role') as DashboardRole | null;
+  const isDemoMode = searchParams.get('demo') === 'true' || searchParams.get('mode') === 'demo';
   const [activeRole, setActiveRole] = useState<DashboardRole>('OWNER');
 
   useEffect(() => {
@@ -34,6 +35,7 @@ function DashboardContent() {
         businessId="tenant-001"
         branchId="branch-001"
         actorUserId="user-owner-01"
+        isDemo={isDemoMode}
         onRoleChange={(role) => setActiveRole(role as DashboardRole)}
       />
     );

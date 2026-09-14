@@ -55,6 +55,8 @@ function MainErpAppContent() {
     );
   }
 
+  const demoParam = searchParams.get('demo') === 'true' || searchParams.get('mode') === 'demo';
+
   // 2. OWNER ERP WORKSPACE
   if (activeRole === 'OWNER') {
     return (
@@ -62,6 +64,7 @@ function MainErpAppContent() {
         businessId="tenant-001"
         branchId="branch-001"
         actorUserId="user-owner-01"
+        isDemo={demoParam}
         onRoleChange={(role) => setActiveRole(role as DashboardRole)}
         onLogout={handleLogout}
       />
