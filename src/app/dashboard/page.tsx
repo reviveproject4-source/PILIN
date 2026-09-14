@@ -21,22 +21,30 @@ function DashboardContent() {
   const [activeRole, setActiveRole] = useState<DashboardRole>('OWNER');
 
   useEffect(() => {
+    if (isDemoMode) {
+      setActiveRole('OWNER');
+      return;
+    }
     if (roleParam === 'PEGAWAI') {
       setActiveRole('TEAM_PRODUKSI');
     } else if (roleParam && ['OWNER', 'KEPALA_CABANG', 'KASIR', 'TEAM_PRODUKSI'].includes(roleParam)) {
       setActiveRole(roleParam);
     }
-  }, [roleParam]);
+  }, [roleParam, isDemoMode]);
 
   // 1. OWNER ROLE DASHBOARD
-  if (activeRole === 'OWNER') {
+  if (activeRole === 'OWNER' || isDemoMode) {
     return (
       <OwnerDashboard
         businessId="tenant-001"
         branchId="branch-001"
         actorUserId="user-owner-01"
         isDemo={isDemoMode}
-        onRoleChange={(role) => setActiveRole(role as DashboardRole)}
+        onRoleChange={(role) => {
+          if (!isDemoMode) {
+            setActiveRole(role as DashboardRole);
+          }
+        }}
       />
     );
   }
