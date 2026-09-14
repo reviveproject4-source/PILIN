@@ -10,6 +10,16 @@ const nextConfig = {
 
     return [
       {
+        source: '/',
+        has: [
+          {
+            type: 'host',
+            value: 'www.pilin.id',
+          },
+        ],
+        destination: '/about',
+      },
+      {
         source: '/check',
         destination: `${businessCheckUrl}/check`,
       },
