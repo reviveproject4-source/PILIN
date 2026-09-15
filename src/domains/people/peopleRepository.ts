@@ -320,12 +320,16 @@ export class PeopleRepository {
     const stored = this.getStoredData<Employee[]>(`pilin_employees_${business_id}`, []);
     const rawList = stored.length > 0 ? stored : (this.mockEmployees.length > 0 ? this.mockEmployees : this.listEmployeesMock(business_id));
 
-    // DEDUPLICATION SAFEGUARD: Ensure unique records by ID and employee_code
+    // DEDUPLICATION & DUMMY CLEANUP SAFEGUARD: Ensure unique records by ID and employee_code, filter out legacy sample data
     const uniqueList: Employee[] = [];
     const seenIds = new Set<string>();
     const seenCodes = new Set<string>();
 
     for (const emp of rawList) {
+      // Exclude legacy mock test employees
+      if (emp.id === 'emp-001' || emp.id === 'emp-002' || emp.email === 'hendra.kc@pilin.co.id' || emp.email === 'siti.kasir@pilin.co.id') {
+        continue;
+      }
       const codeKey = emp.employee_code ? emp.employee_code.trim().toUpperCase() : '';
       if (!seenIds.has(emp.id) && (!codeKey || !seenCodes.has(codeKey))) {
         seenIds.add(emp.id);
@@ -343,70 +347,12 @@ export class PeopleRepository {
   }
 
   private static listEmployeesMock(business_id: string): Employee[] {
-    const stored = this.getStoredData<Employee[]>(`pilin_employees_${business_id}`, []);
-    if (stored.length > 0) {
-      return stored;
-    }
-    if (business_id === 'demo-tenant' || business_id === 'demo') {
-      const initial: Employee[] = [
-        {
-          id: 'emp-001',
-          business_id,
-          auth_user_id: 'user-kc-01',
-          employee_code: 'EMP-001',
-          full_name: 'Hendra Wijaya',
-          nickname: 'Hendra',
-          phone: '081234567890',
-          email: 'hendra.kc@pilin.co.id',
-          employment_status: 'ACTIVE',
-          branch_id: 'branch-001',
-          branch_name: 'Cabang Utama (Alpha)',
-          division_id: 'div-001',
-          division_name: 'Operasional & Servis',
-          position_id: 'pos-001',
-          position_name: 'Kepala Cabang',
-          supervisor_id: null,
-          supervisor_name: '-',
-          base_salary: 6500000,
-          incentive_rate: 15000,
-          is_active: true,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-        {
-          id: 'emp-002',
-          business_id,
-          auth_user_id: 'user-staff-01',
-          employee_code: 'EMP-002',
-          full_name: 'Siti Rahma',
-          nickname: 'Siti',
-          phone: '081987654321',
-          email: 'siti.kasir@pilin.co.id',
-          employment_status: 'ACTIVE',
-          branch_id: 'branch-001',
-          branch_name: 'Cabang Utama (Alpha)',
-          division_id: 'div-003',
-          division_name: 'Keuangan & Akuntansi',
-          position_id: 'pos-003',
-          position_name: 'Staf Kasir & Keuangan',
-          supervisor_id: 'emp-001',
-          supervisor_name: 'Hendra Wijaya',
-          base_salary: 4200000,
-          incentive_rate: 10000,
-          is_active: true,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-      ];
-      this.mockEmployees = initial;
-      this.setStoredData(`pilin_employees_${business_id}`, initial);
-      return initial;
-    }
+    // Zero mock employees - Wadah pegawai bersih tanpa dummy user / sample data
     return [];
   }
 
-  static async getEmployeeById(id: string): Promise<Employee | null> {
-    const list = await this.listEmployees('tenant-001');
+  static async getEmployeeById(id: string, business_id: string = 'tenant-001'): Promise<Employee | null> {
+    const list = await this.listEmployees(business_id);
     return list.find(e => e.id === id) || null;
   }
 
@@ -425,8 +371,15 @@ export class PeopleRepository {
 
     const current = await this.listEmployees(dto.business_id);
 
-    // DEDUPLICATION: Check if employee code or identical name+branch already exists
-    const existingIdx = current.findIndex(e => e.employee_code === formattedCode);
+    // DEDUPLICATION: Check if employee code or email already exists
+    const existingCodeIdx = current.findIndex(e => e.employee_code === formattedCode);
+
+    if (dto.email && dto.email.trim()) {
+      const existingEmail = current.find(e => e.email && e.email.trim().toLowerCase() === dto.email!.trim().toLowerCase() && e.employee_code !== formattedCode);
+      if (existingEmail) {
+        throw new Error(`Email '${dto.email}' telah digunakan oleh pegawai ${existingEmail.full_name} (${existingEmail.employee_code}).`);
+      }
+    }
 
     const branches = await this.listBranches(dto.business_id);
     const divisions = await this.listDivisions(dto.business_id);
@@ -438,9 +391,9 @@ export class PeopleRepository {
     const posObj = positions.find(p => p.id === dto.position_id);
     const superObj = employees.find(e => e.id === dto.supervisor_id);
 
-    if (existingIdx >= 0) {
+    if (existingCodeIdx >= 0) {
       // Update existing record instead of creating duplicate
-      const existing = current[existingIdx];
+      const existing = current[existingCodeIdx];
       const updatedEmp: Employee = {
         ...existing,
         full_name: dto.full_name.trim(),
@@ -460,7 +413,7 @@ export class PeopleRepository {
         incentive_rate: dto.incentive_rate !== undefined ? dto.incentive_rate : existing.incentive_rate,
         updated_at: new Date().toISOString(),
       };
-      current[existingIdx] = updatedEmp;
+      current[existingCodeIdx] = updatedEmp;
       this.mockEmployees = current;
       this.setStoredData(`pilin_employees_${dto.business_id}`, current);
       return updatedEmp;
@@ -502,7 +455,8 @@ export class PeopleRepository {
   }
 
   static async updateEmployee(id: string, dto: UpdateEmployeeDTO): Promise<Employee | null> {
-    const current = await this.listEmployees('tenant-001');
+    const targetBusinessId = dto.business_id || 'tenant-001';
+    const current = await this.listEmployees(targetBusinessId);
     const idx = current.findIndex(e => e.id === id);
     if (idx < 0) return null;
 
@@ -552,6 +506,19 @@ export class PeopleRepository {
     this.mockEmployees = current;
     this.setStoredData(`pilin_employees_${existing.business_id}`, current);
     return updated;
+  }
+
+  static async deleteEmployee(id: string, business_id: string): Promise<boolean> {
+    const current = await this.listEmployees(business_id);
+    const updated = current.filter(e => e.id !== id);
+    this.mockEmployees = updated;
+    this.setStoredData(`pilin_employees_${business_id}`, updated);
+    return true;
+  }
+
+  static async clearAllEmployees(business_id: string): Promise<void> {
+    this.mockEmployees = [];
+    this.setStoredData(`pilin_employees_${business_id}`, []);
   }
 
   // ==================== HELPER LOOKUPS ====================

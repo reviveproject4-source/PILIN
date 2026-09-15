@@ -344,6 +344,21 @@ export function PeopleManagementDashboard({
     }
   };
 
+  // Delete Employee Handler
+  const handleDeleteEmployee = async (emp: Employee) => {
+    if (typeof window !== 'undefined' && !window.confirm(`Apakah Anda yakin ingin menghapus data pegawai "${emp.full_name}" (${emp.employee_code})?`)) {
+      return;
+    }
+    setFeedback(null);
+    try {
+      await PeopleRepository.deleteEmployee(emp.id, businessId);
+      setFeedback({ type: 'success', text: `Data pegawai ${emp.full_name} berhasil dihapus.` });
+      await loadData();
+    } catch (err: any) {
+      setFeedback({ type: 'error', text: err.message || 'Gagal menghapus data pegawai.' });
+    }
+  };
+
   // Save Branch Handler
   const handleSaveBranch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -586,12 +601,20 @@ export function PeopleManagementDashboard({
                         </span>
                       </td>
                       <td className="p-3 text-right">
-                        <button
-                          onClick={() => handleOpenEditEmployee(emp)}
-                          className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-lg border border-slate-700 transition-all"
-                        >
-                          Edit
-                        </button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => handleOpenEditEmployee(emp)}
+                            className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-lg border border-slate-700 transition-all"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteEmployee(emp)}
+                            className="px-2.5 py-1 bg-rose-950/60 hover:bg-rose-900 text-rose-300 font-bold text-xs rounded-lg border border-rose-800/60 transition-all"
+                          >
+                            Hapus
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
