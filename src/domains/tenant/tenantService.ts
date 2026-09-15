@@ -1,5 +1,6 @@
 export interface TenantOnboardingData {
   businessId: string;
+  ownerName?: string;
   businessName: string;
   contactNumber: string;
   email: string;
@@ -28,6 +29,7 @@ export class TenantService {
   }
 
   static completeOnboarding(data: {
+    ownerName?: string;
     businessName: string;
     contactNumber: string;
     email: string;
@@ -39,6 +41,7 @@ export class TenantService {
     const businessId = `tenant-${Date.now()}`;
     const onboardingRecord: TenantOnboardingData = {
       businessId,
+      ownerName: data.ownerName ? data.ownerName.trim() : '',
       businessName: data.businessName.trim(),
       contactNumber: data.contactNumber.trim(),
       email: data.email.trim(),

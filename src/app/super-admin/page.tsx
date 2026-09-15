@@ -25,6 +25,7 @@ import {
   type AuditLogData,
   type PlatformProductData
 } from './actions';
+import { ProspectManagementView } from '@/components/admin/ProspectManagementView';
 
 
 
@@ -387,6 +388,7 @@ export default function SuperAdminPage() {
   // Define sidebar menu list
   const menuItems = [
     { name: 'Dashboard', icon: LayoutGrid },
+    { name: 'Prospek', icon: Users },
     { name: 'Tenants', icon: Building2 },
     { name: 'Users & Roles', icon: Users },
     { name: 'Subscriptions', icon: CreditCard },
@@ -451,7 +453,9 @@ export default function SuperAdminPage() {
         </header>
 
         <div className="p-6 flex-1 overflow-y-auto">
-          {activeMenu === 'Dashboard' ? (
+          {activeMenu === 'Prospek' ? (
+            <ProspectManagementView />
+          ) : activeMenu === 'Dashboard' ? (
             <div className="space-y-6">
               <h2 className="text-xl font-black text-white">Ikhtisar Platform</h2>
               

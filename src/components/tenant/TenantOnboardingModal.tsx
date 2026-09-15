@@ -1,15 +1,17 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Building2, Phone, Mail, Users, Rocket, ShieldCheck } from 'lucide-react';
+import { Building2, Phone, Mail, Users, Rocket, ShieldCheck, User } from 'lucide-react';
 import { TenantService } from '@/domains/tenant/tenantService';
 import { BusinessProfileService } from '@/domains/business/businessProfileService';
+import { submitOwnerOnboardingAction } from '@/app/actions/onboardingActions';
 
 interface TenantOnboardingModalProps {
   onSuccess: () => void;
 }
 
 export function TenantOnboardingModal({ onSuccess }: TenantOnboardingModalProps) {
+  const [ownerName, setOwnerName] = useState('');
   const [businessName, setBusinessName] = useState('');
   const [contactNumber, setContactNumber] = useState('');
   const [email, setEmail] = useState('');
@@ -17,8 +19,12 @@ export function TenantOnboardingModal({ onSuccess }: TenantOnboardingModalProps)
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!ownerName.trim()) {
+      setErrorMessage('Nama Owner / PIC wajib diisi.');
+      return;
+    }
     if (!businessName.trim()) {
       setErrorMessage('Nama Usaha wajib diisi.');
       return;
@@ -40,7 +46,24 @@ export function TenantOnboardingModal({ onSuccess }: TenantOnboardingModalProps)
     setErrorMessage(null);
 
     try {
+      // 1. Submit to Supabase database (pilin_prospects & platform_customers)
+      const res = await submitOwnerOnboardingAction({
+        ownerName: ownerName.trim(),
+        businessName: businessName.trim(),
+        contactNumber: contactNumber.trim(),
+        email: email.trim(),
+        employeeCount,
+      });
+
+      if (!res.success) {
+        setErrorMessage(res.message || 'Gagal menyimpan data prospek ke server.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      // 2. Cache local UI onboarding state
       const created = TenantService.completeOnboarding({
+        ownerName: ownerName.trim(),
         businessName: businessName.trim(),
         contactNumber: contactNumber.trim(),
         email: email.trim(),
@@ -82,6 +105,23 @@ export function TenantOnboardingModal({ onSuccess }: TenantOnboardingModalProps)
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="text-xs font-bold text-slate-300 block mb-1.5">
+              Nama Owner / Nama PIC
+            </label>
+            <div className="relative">
+              <User className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
+              <input
+                type="text"
+                required
+                value={ownerName}
+                onChange={(e) => setOwnerName(e.target.value)}
+                placeholder="Contoh: Budi Santoso"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#F26522]"
+              />
+            </div>
+          </div>
+
           <div>
             <label className="text-xs font-bold text-slate-300 block mb-1.5">
               Nama Usaha

@@ -710,6 +710,138 @@ export async function updateTenantProductStatusAction(
   }
 }
 
+export interface PilinProspectRecord {
+  id: string;
+  name: string;
+  owner_name?: string;
+  whatsapp: string;
+  email?: string;
+  employee_count?: string;
+  created_at: string;
+  status: string;
+  trial_start?: string;
+  trial_end?: string;
+  trial_status?: string;
+  last_followed_up_at?: string;
+  follow_up_notes?: string;
+  assigned_cs_name?: string;
+}
+
+export interface ProspectMetricsSummary {
+  totalProspects: number;
+  newProspects: number;
+  needsFollowUp: number;
+  activeTrials: number;
+  expiringTrials: number;
+  subscribed: number;
+}
+
+export async function getProspectsListAction(): Promise<{
+  success: boolean;
+  message: string;
+  prospects: PilinProspectRecord[];
+  metrics: ProspectMetricsSummary;
+}> {
+  try {
+    const supabaseAdmin = createAdminClient();
+
+    // Query pilin_prospects table
+    const { data, error } = await supabaseAdmin
+      .from('pilin_prospects')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Failed to query pilin_prospects:', error.message);
+      return {
+        success: false,
+        message: error.message,
+        prospects: [],
+        metrics: { totalProspects: 0, newProspects: 0, needsFollowUp: 0, activeTrials: 0, expiringTrials: 0, subscribed: 0 },
+      };
+    }
+
+    const prospects: PilinProspectRecord[] = data || [];
+    const now = new Date();
+
+    const totalProspects = prospects.length;
+    const newProspects = prospects.filter(p => p.status === 'NEW' || p.status === 'PROSPEK BARU').length;
+    
+    // Expiring trials: trial_end within next 3 days or already expired
+    const expiringTrials = prospects.filter(p => {
+      if (!p.trial_end) return false;
+      const endDate = new Date(p.trial_end);
+      const diffDays = (endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+      return diffDays <= 3 && diffDays >= 0;
+    }).length;
+
+    const activeTrials = prospects.filter(p => {
+      if (p.trial_status === 'ACTIVE') return true;
+      if (!p.trial_end) return true;
+      return new Date(p.trial_end).getTime() > now.getTime();
+    }).length;
+
+    const subscribed = prospects.filter(p => p.status === 'CLOSED_WON' || p.status === 'BERLANGGANAN').length;
+    const needsFollowUp = newProspects + expiringTrials;
+
+    return {
+      success: true,
+      message: 'Berhasil memuat data prospek aktual.',
+      prospects,
+      metrics: {
+        totalProspects,
+        newProspects,
+        needsFollowUp,
+        activeTrials,
+        expiringTrials,
+        subscribed,
+      },
+    };
+  } catch (err: any) {
+    console.error('getProspectsListAction error:', err);
+    return {
+      success: false,
+      message: err.message || 'Terjadi kesalahan sistem saat memuat prospek.',
+      prospects: [],
+      metrics: { totalProspects: 0, newProspects: 0, needsFollowUp: 0, activeTrials: 0, expiringTrials: 0, subscribed: 0 },
+    };
+  }
+}
+
+export async function updateProspectFollowUpAction(payload: {
+  prospectId: string;
+  status: string;
+  followUpNotes?: string;
+  assignedCsName?: string;
+}): Promise<{ success: boolean; message: string }> {
+  const { prospectId, status, followUpNotes, assignedCsName } = payload;
+
+  try {
+    const supabaseAdmin = createAdminClient();
+
+    const updateData: any = {
+      status,
+      last_followed_up_at: new Date().toISOString(),
+    };
+    if (followUpNotes !== undefined) updateData.follow_up_notes = followUpNotes.trim();
+    if (assignedCsName !== undefined) updateData.assigned_cs_name = assignedCsName.trim();
+
+    const { error } = await supabaseAdmin
+      .from('pilin_prospects')
+      .update(updateData)
+      .eq('id', prospectId);
+
+    if (error) {
+      return { success: false, message: error.message };
+    }
+
+    return { success: true, message: 'Status dan catatan follow-up prospek berhasil disimpan.' };
+  } catch (err: any) {
+    return { success: false, message: err.message || 'Gagal menyisipkan catatan follow-up.' };
+  }
+}
+
+
 
 
 
