@@ -21,9 +21,10 @@ export interface BranchPerformanceItem {
 
 interface LaporanPerformaCabangProps {
   businessId?: string;
+  isDemo?: boolean;
 }
 
-export function LaporanPerformaCabang({ businessId = 'tenant-001' }: LaporanPerformaCabangProps) {
+export function LaporanPerformaCabang({ businessId = 'tenant-001', isDemo = false }: LaporanPerformaCabangProps) {
   const [branches, setBranches] = useState<{ id: string; name: string; code?: string }[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string>('ALL');
   const [loading, setLoading] = useState<boolean>(true);
@@ -32,9 +33,8 @@ export function LaporanPerformaCabang({ businessId = 'tenant-001' }: LaporanPerf
     async function loadBranches() {
       try {
         setLoading(true);
-        const data = await PeopleRepository.listBranches(businessId);
-        // Ensure at least sample 3 branches if empty
-        if (data.length === 0) {
+        const data = await PeopleRepository.listBranches(businessId, isDemo);
+        if (data.length === 0 && isDemo) {
           setBranches([
             { id: 'branch-001', name: 'Cabang Utama (Jakarta)', code: 'BR-001' },
             { id: 'branch-002', name: 'Cabang Bandung', code: 'BR-002' },
@@ -50,10 +50,12 @@ export function LaporanPerformaCabang({ businessId = 'tenant-001' }: LaporanPerf
       }
     }
     loadBranches();
-  }, [businessId]);
+  }, [businessId, isDemo]);
 
   // Performance calculation data per branch
   const branchPerformanceList = useMemo<BranchPerformanceItem[]>(() => {
+    if (branches.length === 0) return [];
+
     const baseMetrics = [
       { rev: 112500000, hpp: 35000000, opex: 25000000, spkTot: 450, spkComp: 435, emp: 12, status: 'EXCELLENT' as const },
       { rev: 88400000, hpp: 28000000, opex: 21000000, spkTot: 320, spkComp: 304, emp: 9, status: 'GOOD' as const },
@@ -63,12 +65,12 @@ export function LaporanPerformaCabang({ businessId = 'tenant-001' }: LaporanPerf
     ];
 
     return branches.map((b, idx) => {
-      const metric = baseMetrics[idx % baseMetrics.length];
-      const rev = metric.rev + (idx * 5000000);
-      const hpp = metric.hpp + (idx * 1500000);
-      const opex = metric.opex + (idx * 1000000);
+      const metric = isDemo ? baseMetrics[idx % baseMetrics.length] : { rev: 0, hpp: 0, opex: 0, spkTot: 0, spkComp: 0, emp: 0, status: 'GOOD' as const };
+      const rev = metric.rev + (isDemo ? idx * 5000000 : 0);
+      const hpp = metric.hpp + (isDemo ? idx * 1500000 : 0);
+      const opex = metric.opex + (isDemo ? idx * 1000000 : 0);
       const netProfit = rev - (hpp + opex);
-      const spkCompRate = Math.round((metric.spkComp / metric.spkTot) * 100);
+      const spkCompRate = metric.spkTot > 0 ? Math.round((metric.spkComp / metric.spkTot) * 100) : 0;
 
       return {
         id: b.id,
@@ -78,14 +80,14 @@ export function LaporanPerformaCabang({ businessId = 'tenant-001' }: LaporanPerf
         total_hpp: hpp,
         total_opex: opex,
         net_profit: netProfit,
-        spk_total: metric.spkTot + (idx * 15),
-        spk_completed: metric.spkComp + (idx * 12),
+        spk_total: metric.spkTot + (isDemo ? idx * 15 : 0),
+        spk_completed: metric.spkComp + (isDemo ? idx * 12 : 0),
         spk_completion_rate: spkCompRate,
-        active_employees: metric.emp + (idx % 3),
+        active_employees: metric.emp + (isDemo ? idx % 3 : 0),
         status: metric.status,
       };
     });
-  }, [branches]);
+  }, [branches, isDemo]);
 
   // Aggregate totals
   const totalRevenueAll = branchPerformanceList.reduce((acc, curr) => acc + curr.total_revenue, 0);

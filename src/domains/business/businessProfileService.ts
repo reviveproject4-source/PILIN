@@ -11,10 +11,10 @@ export interface BusinessProfileConfig {
 export class BusinessProfileService {
   private static defaultProfile: BusinessProfileConfig = {
     business_id: 'tenant-001',
-    business_name: 'PILIN CLEANING & CARE',
-    business_address: 'Jl. Pemuda No. 123, Jakarta Pusat',
-    business_phone: '081234567890',
-    logo_url: 'https://images.unsplash.com/photo-1545235617-9465d2a55698?w=150&auto=format&fit=crop&q=80',
+    business_name: 'Usaha Anda',
+    business_address: '',
+    business_phone: '',
+    logo_url: null,
     terms_and_conditions: '1. Barang yang telah diserahkan wajib dicek kembali saat pengambilan.\n2. Garansi pengerjaan berlaku 3 hari setelah pengambilan barang.\n3. Pengambilan barang wajib membawa nota fisik atau nota WhatsApp resmi.',
     updated_at: new Date().toISOString(),
   };

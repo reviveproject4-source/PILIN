@@ -55,7 +55,7 @@ export class PeopleRepository {
 
   // ==================== BRANCHES ====================
 
-  static async listBranches(business_id: string): Promise<BranchItem[]> {
+  static async listBranches(business_id: string, isDemo: boolean = false): Promise<BranchItem[]> {
     const stored = this.getStoredData<BranchItem[]>(`pilin_branches_${business_id}`, []);
     if (stored.length > 0) return stored;
 
@@ -63,8 +63,8 @@ export class PeopleRepository {
       return this.mockBranches.filter(b => !b.business_id || b.business_id === business_id);
     }
 
-    if (this.isMockMode()) {
-      return this.listBranchesMock(business_id);
+    if (isDemo || this.isMockMode()) {
+      return this.listBranchesMock(isDemo ? 'demo' : business_id);
     }
 
     try {

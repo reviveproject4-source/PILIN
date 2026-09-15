@@ -39,29 +39,35 @@ export function KasirTransactionWorkspace({
   branchId = 'branch-001',
   actorUserId = 'user-kasir-01',
   actorName = 'Siti Rahma',
+  isDemo = false,
 }: KasirTransactionWorkspaceProps) {
   const [activeTab, setActiveTab] = useState<'POS' | 'SPK' | 'CUSTOMER' | 'WA_ENGINE' | 'BROADCAST' | 'OPERASIONAL' | 'PRESENSI'>('POS');
 
   // Modal State
   const [showBroadcastModal, setShowBroadcastModal] = useState<boolean>(false);
-  const [broadcastTargetPhone, setBroadcastTargetPhone] = useState<string>('08123456789');
-  const [broadcastTargetName, setBroadcastTargetName] = useState<string>('Budi Santoso');
+  const [broadcastTargetPhone, setBroadcastTargetPhone] = useState<string>(isDemo ? '08123456789' : '');
+  const [broadcastTargetName, setBroadcastTargetName] = useState<string>(isDemo ? 'Budi Santoso' : '');
 
   // Thermal Receipt Modal State
   const [activeReceiptTrx, setActiveReceiptTrx] = useState<TransactionRecord | null>(null);
 
   // Customer DB Local State
-  const [customerList, setCustomerList] = useState([
-    { id: 'cust-101', name: 'Budi Santoso', phone: '08123456789', status: 'REPEAT', totalTrx: 12, lastVisit: '2026-08-14' },
-    { id: 'cust-102', name: 'Siti Rahma', phone: '08198765432', status: 'LOYAL', totalTrx: 28, lastVisit: '2026-08-15' },
-    { id: 'cust-103', name: 'Ahmad Fauzi', phone: '08567890123', status: 'NEW', totalTrx: 1, lastVisit: '2026-08-15' },
-    { id: 'cust-104', name: 'Dewi Lestari', phone: '08212345678', status: 'AT_RISK', totalTrx: 5, lastVisit: '2026-06-10' },
-  ]);
+  const [customerList, setCustomerList] = useState(() => {
+    if (isDemo) {
+      return [
+        { id: 'cust-101', name: 'Budi Santoso', phone: '08123456789', status: 'REPEAT', totalTrx: 12, lastVisit: '2026-08-14' },
+        { id: 'cust-102', name: 'Siti Rahma', phone: '08198765432', status: 'LOYAL', totalTrx: 28, lastVisit: '2026-08-15' },
+        { id: 'cust-103', name: 'Ahmad Fauzi', phone: '08567890123', status: 'NEW', totalTrx: 1, lastVisit: '2026-08-15' },
+        { id: 'cust-104', name: 'Dewi Lestari', phone: '08212345678', status: 'AT_RISK', totalTrx: 5, lastVisit: '2026-06-10' },
+      ];
+    }
+    return [];
+  });
 
   // POS Form State
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('cust-101');
-  const [customerName, setCustomerName] = useState<string>('Budi Santoso');
-  const [customerPhone, setCustomerPhone] = useState<string>('08123456789');
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>(isDemo ? 'cust-101' : '');
+  const [customerName, setCustomerName] = useState<string>(isDemo ? 'Budi Santoso' : '');
+  const [customerPhone, setCustomerPhone] = useState<string>(isDemo ? '08123456789' : '');
   const [selectedService, setSelectedService] = useState<string>('Layanan Cuci Express');
   const [servicePrice, setServicePrice] = useState<number>(35000);
   const [qty, setQty] = useState<number>(1);
@@ -74,7 +80,7 @@ export function KasirTransactionWorkspace({
   // Approvals State
   const [discountPercent, setDiscountPercent] = useState<number>(10);
   const [discountReason, setDiscountReason] = useState<string>('Diskon Member Setia');
-  const [cancelNotaNumber, setCancelNotaNumber] = useState<string>('NOT-2026-0885');
+  const [cancelNotaNumber, setCancelNotaNumber] = useState<string>(isDemo ? 'NOT-2026-0885' : '');
   const [cancelReason, setCancelReason] = useState<string>('Pelanggan membatalkan pesanan');
 
   // Customer DB Form
@@ -82,25 +88,25 @@ export function KasirTransactionWorkspace({
   const [newCustPhone, setNewCustPhone] = useState<string>('');
 
   // WA Engine State
-  const [waSelectedCustomerId, setWaSelectedCustomerId] = useState<string>('cust-101');
-  const [waTargetName, setWaTargetName] = useState<string>('Budi Santoso');
-  const [waTargetPhone, setWaTargetPhone] = useState<string>('08123456789');
+  const [waSelectedCustomerId, setWaSelectedCustomerId] = useState<string>(isDemo ? 'cust-101' : '');
+  const [waTargetName, setWaTargetName] = useState<string>(isDemo ? 'Budi Santoso' : '');
+  const [waTargetPhone, setWaTargetPhone] = useState<string>(isDemo ? '08123456789' : '');
   const [waCategory, setWaCategory] = useState<'SAPAAN' | 'QUOTE' | 'HYPPOSELLING' | 'REMINDER' | 'MANUAL'>('SAPAAN');
   const [waTemplateText, setWaTemplateText] = useState<string>(
-    'Halo Budi Santoso, terima kasih telah menggunakan layanan PILIN ERP. Bagaimana hasil pengerjaan tim kami?'
+    isDemo ? 'Halo Budi Santoso, terima kasih telah menggunakan layanan PILIN ERP. Bagaimana hasil pengerjaan tim kami?' : ''
   );
 
   // WA Retention Logs & Mandate Execution State
-  const [waLogs, setWaLogs] = useState<SapaanLogRecord[]>(() => RetentionDomainService.getSapaanLogs());
+  const [waLogs, setWaLogs] = useState<SapaanLogRecord[]>(() => RetentionDomainService.getSapaanLogs(isDemo));
 
   // Reminder H+X Per Nota State
-  const [reminderNotaNumber, setReminderNotaNumber] = useState<string>('NOT-2026-0891');
-  const [reminderCustomerName, setReminderCustomerName] = useState<string>('Dewi Lestari');
-  const [reminderCustomerPhone, setReminderCustomerPhone] = useState<string>('08212345678');
+  const [reminderNotaNumber, setReminderNotaNumber] = useState<string>(isDemo ? 'NOT-2026-0891' : '');
+  const [reminderCustomerName, setReminderCustomerName] = useState<string>(isDemo ? 'Dewi Lestari' : '');
+  const [reminderCustomerPhone, setReminderCustomerPhone] = useState<string>(isDemo ? '08212345678' : '');
   const [reminderHPlusDays, setReminderHPlusDays] = useState<number>(30);
 
   const refreshWaLogs = () => {
-    setWaLogs(RetentionDomainService.getSapaanLogs());
+    setWaLogs(RetentionDomainService.getSapaanLogs(isDemo));
   };
 
   const handleExecuteMandateOrReminder = (logRecord: SapaanLogRecord) => {
@@ -125,18 +131,28 @@ export function KasirTransactionWorkspace({
   };
 
   // SPK Orders State
-  const [spkOrders] = useState<WorkOrderQueueItem[]>(() => WorkQueueService.getOrders(branchId));
+  const [spkOrders] = useState<WorkOrderQueueItem[]>(() => WorkQueueService.getOrders(branchId, isDemo));
 
   // Transactions State
-  const [recentTransactions, setRecentTransactions] = useState<TransactionRecord[]>([
-    { id: 'NOT-2026-0892', customer: 'Budi Santoso', phone: '08123456789', service: 'Layanan Cuci Express', qty: 2, price: 35000, total: 70000, method: 'CASH', status: 'COMPLETED', time: '11:05 WIB' },
-    { id: 'NOT-2026-0891', customer: 'Siti Rahma', phone: '08198765432', service: 'Layanan Premium Treatment', qty: 7, price: 50000, total: 350000, method: 'QRIS_TRANSFER', status: 'COMPLETED', time: '10:45 WIB' },
-    { id: 'NOT-2026-0890', customer: 'Ahmad Fauzi', phone: '08567890123', service: 'Layanan Cuci Regular', qty: 6, price: 20000, total: 120000, method: 'CASH', status: 'COMPLETED', time: '09:30 WIB' },
-  ]);
+  const [recentTransactions, setRecentTransactions] = useState<TransactionRecord[]>(() => {
+    if (isDemo) {
+      return [
+        { id: 'NOT-2026-0892', customer: 'Budi Santoso', phone: '08123456789', service: 'Layanan Cuci Express', qty: 2, price: 35000, total: 70000, method: 'CASH', status: 'COMPLETED', time: '11:05 WIB' },
+        { id: 'NOT-2026-0891', customer: 'Siti Rahma', phone: '08198765432', service: 'Layanan Premium Treatment', qty: 7, price: 50000, total: 350000, method: 'QRIS_TRANSFER', status: 'COMPLETED', time: '10:45 WIB' },
+        { id: 'NOT-2026-0890', customer: 'Ahmad Fauzi', phone: '08567890123', service: 'Layanan Cuci Regular', qty: 6, price: 20000, total: 120000, method: 'CASH', status: 'COMPLETED', time: '09:30 WIB' },
+      ];
+    }
+    return [];
+  });
 
-  const [requestedApprovals, setRequestedApprovals] = useState([
-    { id: 'req-01', type: 'DISCOUNT', title: 'Permintaan Diskon Khusus 15%', nota: 'NOT-2026-0891', status: 'MENUNGGU_SETUJU_KC', time: '10:15 WIB' },
-  ]);
+  const [requestedApprovals, setRequestedApprovals] = useState(() => {
+    if (isDemo) {
+      return [
+        { id: 'req-01', type: 'DISCOUNT', title: 'Permintaan Diskon Khusus 15%', nota: 'NOT-2026-0891', status: 'MENUNGGU_SETUJU_KC', time: '10:15 WIB' },
+      ];
+    }
+    return [];
+  });
 
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 

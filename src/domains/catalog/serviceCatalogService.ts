@@ -66,7 +66,7 @@ export class ServiceCatalogService {
   /**
    * Master Service Catalog matching PostgreSQL Migration 00007_services_and_branch_catalog.sql & 00049_add_hpp_mode_to_services.sql
    */
-  private static masterCatalog: ServiceCatalogItem[] = [...DEFAULT_CATALOG];
+  private static masterCatalog: ServiceCatalogItem[] = [];
 
   static resetDefaultCatalogForTest() {
     this.masterCatalog = [...DEFAULT_CATALOG];
@@ -78,7 +78,7 @@ export class ServiceCatalogService {
         const saved = localStorage.getItem('pilin_master_catalog');
         if (saved) {
           const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) {
+          if (Array.isArray(parsed)) {
             this.masterCatalog = parsed;
             return [...this.masterCatalog];
           }
@@ -105,7 +105,10 @@ export class ServiceCatalogService {
     this.saveToStorage();
   }
 
-  static getMasterCatalog(): ServiceCatalogItem[] {
+  static getMasterCatalog(isDemo: boolean = false): ServiceCatalogItem[] {
+    if (isDemo) {
+      return [...DEFAULT_CATALOG];
+    }
     if (typeof window !== 'undefined') {
       this.loadFromStorage();
     }

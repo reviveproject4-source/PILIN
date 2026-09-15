@@ -32,16 +32,16 @@ export function AnalisisInteligensiBisnis({ isDemo = false }: AnalisisInteligens
         try {
           trxList = await POSTransactionService.fetchTransactionsDb();
         } catch {
-          trxList = POSTransactionService.getTransactions();
+          trxList = POSTransactionService.getTransactions(isDemo);
         }
         if (!trxList || trxList.length === 0) {
-          trxList = POSTransactionService.getTransactions();
+          trxList = POSTransactionService.getTransactions(isDemo);
         }
         setTransactions(trxList);
         setExpenses(ExpenseDomainService.getExpenses());
-        setWorkOrders(WorkQueueService.getOrders());
-        setPromotions(PromotionDomainService.getPromotions());
-        setAttendanceLogs(PayrollDomainService.getAttendanceLogs());
+        setWorkOrders(WorkQueueService.getOrders('branch-001', isDemo));
+        setPromotions(PromotionDomainService.getPromotions(isDemo));
+        setAttendanceLogs(PayrollDomainService.getAttendanceLogs(isDemo));
       } catch (err) {
         console.error('Error loading intelligence engine data:', err);
       } finally {
@@ -50,7 +50,7 @@ export function AnalisisInteligensiBisnis({ isDemo = false }: AnalisisInteligens
     }
 
     loadEngineData();
-  }, []);
+  }, [isDemo]);
 
   // Compute metrics dynamically from actual domain data
   const filteredTransactions = transactions.filter(t => {

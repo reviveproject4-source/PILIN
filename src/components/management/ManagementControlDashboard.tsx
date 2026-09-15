@@ -29,6 +29,7 @@ interface ManagementControlDashboardProps {
   actorUserId: string;
   actorRole: ManagementRole;
   currentDate?: string;
+  isDemo?: boolean;
 }
 
 export function ManagementControlDashboard({
@@ -37,6 +38,7 @@ export function ManagementControlDashboard({
   actorUserId,
   actorRole,
   currentDate = new Date().toISOString().substring(0, 10),
+  isDemo = false,
 }: ManagementControlDashboardProps) {
   const [activeSection, setActiveSection] = useState<
     'PUSAT_KENDALI' | 'PERSETUJUAN_KASIR' | 'ANTRIAN_SPK' | 'PRESENSI_TIM' | 'RETENSI_PELANGGAN' | 'PENGELUARAN_CABANG'
@@ -45,7 +47,7 @@ export function ManagementControlDashboard({
     'SPK_QUEUE' | 'UNASSIGNED' | 'OVERDUE' | 'EVIDENCES' | 'RESULTS' | 'MISSED_TARGETS' | 'OUTBOX_FAILURES' | 'GAMIFIKASI'
   >('SPK_QUEUE');
   const [showBroadcastModal, setShowBroadcastModal] = useState<boolean>(false);
-  const [spkOrders, setSpkOrders] = useState<WorkOrderQueueItem[]>(() => WorkQueueService.getOrders(branchId));
+  const [spkOrders, setSpkOrders] = useState<WorkOrderQueueItem[]>(() => WorkQueueService.getOrders(branchId, isDemo));
 
   // Domain Queries
   const { summary, loading: summaryLoading, refresh: refreshSummary } = useManagementSummary(businessId, branchId, currentDate);
@@ -57,30 +59,41 @@ export function ManagementControlDashboard({
   const { items: outboxFailures } = useTechnicalOutboxFailures(businessId);
 
   // Cashier Approvals State (Diskon Khusus & Pembatalan Nota)
-  const [pendingDiscounts, setPendingDiscounts] = useState([
-    { id: 'disc-01', cashierName: 'Siti Rahma', notaNumber: 'NOT-2026-0891', originalTotal: 350000, requestedPercent: 15, requestedAmount: 52500, time: '10:15 WIB' },
-  ]);
-  const [pendingCancellations, setPendingCancellations] = useState([
-    { id: 'canc-01', cashierName: 'Budi Santoso', notaNumber: 'NOT-2026-0885', originalTotal: 120000, reason: 'Pelanggan membatalkan pesanan sebelum pengerjaan', time: '09:40 WIB' },
-  ]);
+  const [pendingDiscounts, setPendingDiscounts] = useState(() => {
+    if (isDemo) {
+      return [
+        { id: 'disc-01', cashierName: 'Siti Rahma', notaNumber: 'NOT-2026-0891', originalTotal: 350000, requestedPercent: 15, requestedAmount: 52500, time: '10:15 WIB' },
+      ];
+    }
+    return [];
+  });
+  const [pendingCancellations, setPendingCancellations] = useState(() => {
+    if (isDemo) {
+      return [
+        { id: 'canc-01', cashierName: 'Budi Santoso', notaNumber: 'NOT-2026-0885', originalTotal: 120000, reason: 'Pelanggan membatalkan pesanan sebelum pengerjaan', time: '09:40 WIB' },
+      ];
+    }
+    return [];
+  });
 
   // Gamification State
-  const [gamificationRecords] = useState<PerformanceRecord[]>(() => GamificationDomainService.getRecords());
+  const [gamificationRecords] = useState<PerformanceRecord[]>(() => isDemo ? GamificationDomainService.getRecords() : []);
   const [branchGamificationTier] = useState(() => {
-    const totalRev = (spkOrders.length + 15) * 50000;
-    return GamificationDomainService.calculateTier(spkOrders.length + 15, totalRev, 8);
+    const spkCount = spkOrders.length;
+    const totalRev = spkCount * 50000;
+    return GamificationDomainService.calculateTier(spkCount, totalRev, 8);
   });
 
   // Dormant Customers State (>60 Days)
   const [dormantCustomers, setDormantCustomers] = useState<{ id: string; nama: string; no_hp: string; recencyDays: number; status: string }[]>([]);
 
   // WA Engine Logs & Template State
-  const [waLogs, setWaLogs] = useState<SapaanLogRecord[]>(() => RetentionDomainService.getSapaanLogs());
-  const [selectedWaCustomerPhone, setSelectedWaCustomerPhone] = useState<string>('08212345678');
-  const [selectedWaCustomerName, setSelectedWaCustomerName] = useState<string>('Dewi Lestari');
+  const [waLogs, setWaLogs] = useState<SapaanLogRecord[]>(() => RetentionDomainService.getSapaanLogs(isDemo));
+  const [selectedWaCustomerPhone, setSelectedWaCustomerPhone] = useState<string>(isDemo ? '08212345678' : '');
+  const [selectedWaCustomerName, setSelectedWaCustomerName] = useState<string>(isDemo ? 'Dewi Lestari' : '');
   const [waCategoryKC, setWaCategoryKC] = useState<'SAPAAN' | 'REMINDER' | 'QUOTE' | 'HYPPOSELLING'>('HYPPOSELLING');
   const [customMessageKC, setCustomMessageKC] = useState<string>(
-    'Halo Kak Dewi Lestari! Khusus pelanggan setia cabang kami, nikmati promo spesial perawatan terbatas minggu ini. Balas pesan ini untuk info promo!'
+    isDemo ? 'Halo Kak Dewi Lestari! Khusus pelanggan setia cabang kami, nikmati promo spesial perawatan terbatas minggu ini. Balas pesan ini untuk info promo!' : ''
   );
 
   // Team Presensi State

@@ -98,8 +98,34 @@ export class POSTransactionService {
     this.forceMockMode = enabled;
   }
 
-  static getTransactions(): POSTransaction[] {
-    return [...this.mockTransactions];
+  private static getStoredTransactions(businessId: string = 'tenant-001'): POSTransaction[] {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = localStorage.getItem(`pilin_transactions_${businessId}`);
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch {}
+    return [];
+  }
+
+  static addLocalTransaction(trx: POSTransaction, businessId: string = 'tenant-001'): void {
+    if (typeof window === 'undefined') return;
+    try {
+      const current = this.getStoredTransactions(businessId);
+      const updated = [trx, ...current];
+      localStorage.setItem(`pilin_transactions_${businessId}`, JSON.stringify(updated));
+    } catch {}
+  }
+
+  static getTransactions(isDemo: boolean = false, businessId: string = 'tenant-001'): POSTransaction[] {
+    if (isDemo) {
+      if (this.mockTransactions.length === 0) {
+        this.seedTestFixtures();
+      }
+      return [...this.mockTransactions];
+    }
+    return this.getStoredTransactions(businessId);
   }
 
   static getTransactionById(id: string): POSTransaction | undefined {

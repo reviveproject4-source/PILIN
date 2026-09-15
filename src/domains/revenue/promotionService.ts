@@ -59,8 +59,22 @@ export class PromotionDomainService {
     }
   ];
 
-  static getPromotions(): PromotionRecord[] {
-    return [...this.mockPromotions];
+  private static getStoredPromotions(): PromotionRecord[] {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = localStorage.getItem('pilin_promotions');
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch {}
+    return [];
+  }
+
+  static getPromotions(isDemo: boolean = false): PromotionRecord[] {
+    if (isDemo) {
+      return [...this.mockPromotions];
+    }
+    return this.getStoredPromotions();
   }
 
   /**

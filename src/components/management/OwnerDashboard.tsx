@@ -921,24 +921,18 @@ function OwnerPerformaCabangView({
   useEffect(() => {
     async function loadBranches() {
       try {
-        const data = await PeopleRepository.listBranches(businessId);
+        const data = await PeopleRepository.listBranches(businessId, false);
         if (data && data.length > 0) {
           setBranches(data);
           setSelectedBranchId(data[0].id);
         } else {
-          setBranches([
-            { id: 'branch-001', name: 'Cabang Utama (Jakarta)', code: 'BR-001' },
-            { id: 'branch-002', name: 'Cabang Bandung', code: 'BR-002' },
-            { id: 'branch-003', name: 'Cabang Surabaya', code: 'BR-003' },
-          ]);
+          setBranches([]);
+          setSelectedBranchId('');
         }
       } catch (err) {
         console.error('Failed to load branches for selector', err);
-        setBranches([
-          { id: 'branch-001', name: 'Cabang Utama (Jakarta)', code: 'BR-001' },
-          { id: 'branch-002', name: 'Cabang Bandung', code: 'BR-002' },
-          { id: 'branch-003', name: 'Cabang Surabaya', code: 'BR-003' },
-        ]);
+        setBranches([]);
+        setSelectedBranchId('');
       }
     }
     loadBranches();

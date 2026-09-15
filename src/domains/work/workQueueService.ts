@@ -65,11 +65,37 @@ export class WorkQueueService {
     },
   ];
 
-  static getOrders(branchId?: string): WorkOrderQueueItem[] {
-    if (!branchId || branchId === 'ALL_BRANCHES') {
-      return [...this.mockOrders];
+  private static getStoredOrders(branchId?: string): WorkOrderQueueItem[] {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = localStorage.getItem('pilin_work_orders');
+      if (stored) {
+        const parsed: WorkOrderQueueItem[] = JSON.parse(stored);
+        if (branchId && branchId !== 'ALL_BRANCHES') {
+          return parsed.filter(o => !o.branch_id || o.branch_id === branchId);
+        }
+        return parsed;
+      }
+    } catch {}
+    return [];
+  }
+
+  private static setStoredOrders(orders: WorkOrderQueueItem[]): void {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem('pilin_work_orders', JSON.stringify(orders));
+    } catch {}
+  }
+
+  static getOrders(branchId?: string, isDemo: boolean = false): WorkOrderQueueItem[] {
+    if (isDemo || branchId === 'demo-branch') {
+      if (!branchId || branchId === 'ALL_BRANCHES') {
+        return [...this.mockOrders];
+      }
+      return this.mockOrders.filter(o => !o.branch_id || o.branch_id === branchId);
     }
-    return this.mockOrders.filter(o => !o.branch_id || o.branch_id === branchId);
+    const userOrders = this.getStoredOrders(branchId);
+    return userOrders;
   }
 
   static updateOrderStatus(
@@ -146,6 +172,8 @@ export class WorkQueueService {
     };
 
     this.mockOrders.unshift(newOrder);
+    const existingStored = this.getStoredOrders();
+    this.setStoredOrders([newOrder, ...existingStored]);
     return newOrder;
   }
 }

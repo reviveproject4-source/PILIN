@@ -20,13 +20,17 @@ export interface AuthorizationReportRecord {
   audit_notes?: string;
 }
 
-export function LaporanOtorisasiControl() {
+interface LaporanOtorisasiControlProps {
+  isDemo?: boolean;
+}
+
+export function LaporanOtorisasiControl({ isDemo = false }: LaporanOtorisasiControlProps) {
   const [selectedBranch, setSelectedBranch] = useState<string>('ALL');
   const [selectedType, setSelectedType] = useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
 
   // Official Factual Control & Audit Records (ZERO INSIGHTS / ZERO AI ANALYSIS)
-  const reportRecords: AuthorizationReportRecord[] = [
+  const reportRecords: AuthorizationReportRecord[] = isDemo ? [
     {
       id: 'aut-001',
       nota_number: 'NOT-2026-0891',
@@ -117,7 +121,7 @@ export function LaporanOtorisasiControl() {
       authorizer_name: 'Menunggu Penyetuju',
       authorizer_role: 'KEPALA_CABANG',
     },
-  ];
+  ] : [];
 
   // Filtering
   const filteredRecords = reportRecords.filter((rec) => {

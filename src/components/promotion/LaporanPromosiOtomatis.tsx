@@ -15,12 +15,16 @@ export interface PromotionReportItem extends PromotionRecord {
   status: 'AKTIF' | 'BERAKHIR' | 'DIJADWALKAN';
 }
 
-export function LaporanPromosiOtomatis() {
+interface LaporanPromosiOtomatisProps {
+  isDemo?: boolean;
+}
+
+export function LaporanPromosiOtomatis({ isDemo = false }: LaporanPromosiOtomatisProps) {
   const [selectedBranch, setSelectedBranch] = useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
 
   // Official transactional promotion report records (FACTUAL REPORT DATA, ZERO ANALYSIS)
-  const reportData: PromotionReportItem[] = [
+  const reportData: PromotionReportItem[] = isDemo ? [
     {
       id: 'prm-001',
       business_id: '00000000-0000-0000-0000-000000000001',
@@ -113,7 +117,7 @@ export function LaporanPromosiOtomatis() {
       period_end: '10 Ags 2026',
       status: 'BERAKHIR',
     },
-  ];
+  ] : [];
 
   // Filtering
   const filteredData = reportData.filter((item) => {

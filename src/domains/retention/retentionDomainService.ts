@@ -70,7 +70,7 @@ export class RetentionDomainService {
     },
   ];
 
-  static getSapaanLogs(): SapaanLogRecord[] {
+  static getSapaanLogs(isDemo: boolean = false): SapaanLogRecord[] {
     if (typeof window !== 'undefined') {
       try {
         const stored = localStorage.getItem(this.STORAGE_KEY);
@@ -81,7 +81,7 @@ export class RetentionDomainService {
         console.error('Failed to parse WA retention logs from localStorage', e);
       }
     }
-    return [...this.defaultLogs];
+    return isDemo ? [...this.defaultLogs] : [];
   }
 
   private static saveLogs(logs: SapaanLogRecord[]): void {

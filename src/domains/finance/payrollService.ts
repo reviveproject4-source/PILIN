@@ -74,8 +74,8 @@ export class PayrollDomainService {
 
   private static mockPayrollInputs: PayrollInputRecord[] = [];
 
-  static getAttendanceLogs(): AttendanceRecord[] {
-    return [...this.mockAttendanceLogs];
+  static getAttendanceLogs(isDemo: boolean = false): AttendanceRecord[] {
+    return isDemo ? [...this.mockAttendanceLogs] : [];
   }
 
   static getPayrollInputs(): PayrollInputRecord[] {

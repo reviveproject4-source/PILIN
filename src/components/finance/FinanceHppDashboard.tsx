@@ -5,10 +5,22 @@ import { FinancialReportService, ProfitAndLossReport, MultiPeriodSummary } from 
 import { POSTransactionService } from '@/domains/commerce/POSTransactionService';
 import { DollarSign, TrendingUp, ArrowDownRight, ArrowUpRight, BarChart2, PieChart, Scale, Wallet, AlertTriangle, CheckCircle2 } from 'lucide-react';
 
-export function FinanceHppDashboard() {
-  const [revenue, setRevenue] = useState(4500000);
-  const [hpp, setHpp] = useState(1800000);
-  const [expense, setExpense] = useState(650000);
+interface FinanceHppDashboardProps {
+  isDemo?: boolean;
+}
+
+export function FinanceHppDashboard({ isDemo = false }: FinanceHppDashboardProps) {
+  const [revenue, setRevenue] = useState(() => {
+    if (isDemo) return 4500000;
+    const trxs = POSTransactionService.getTransactions(false);
+    return trxs.reduce((sum, t) => sum + (t.status === 'COMPLETED' ? t.total_amount : 0), 0);
+  });
+  const [hpp, setHpp] = useState(() => {
+    if (isDemo) return 1800000;
+    const trxs = POSTransactionService.getTransactions(false);
+    return trxs.reduce((sum, t) => sum + (t.status === 'COMPLETED' ? (t.total_hpp || 0) : 0), 0);
+  });
+  const [expense, setExpense] = useState(isDemo ? 650000 : 0);
 
   const report: ProfitAndLossReport = FinancialReportService.calculateProfitAndLoss(
     revenue,
