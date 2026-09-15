@@ -208,12 +208,33 @@ export async function onboardTenantAction(payload: {
   }
 }
 
+export interface AttentionItem {
+  id: string;
+  type: 'PROSPECT_NEW' | 'TRIAL_EXPIRING' | 'MODULE_SUSPENDED';
+  title: string;
+  subtitle: string;
+  date?: string;
+  actionMenu: 'Prospek' | 'Subscriptions' | 'Tenants';
+}
+
+export interface ActivityItem {
+  id: string;
+  title: string;
+  detail: string;
+  timestamp: string;
+  type: 'AUDIT' | 'PROSPECT' | 'TENANT';
+}
+
 export interface DashboardMetrics {
   totalTenants: number;
   activeTenants: number;
+  totalProspects: number;
+  activeTrials: number;
   activeSubscriptions: number;
   monthlyRevenue: number;
   platformUsage: number | null;
+  attentionItems: AttentionItem[];
+  recentActivities: ActivityItem[];
 }
 
 export async function getDashboardMetricsAction(): Promise<{
@@ -231,6 +252,7 @@ export async function getDashboardMetricsAction(): Promise<{
     }
 
     const supabaseAdmin = createAdminClient();
+    const now = new Date();
 
     // 1. Total Tenants
     const { count: totalTenants } = await supabaseAdmin
@@ -247,13 +269,28 @@ export async function getDashboardMetricsAction(): Promise<{
       ? new Set(activeTenantsData.map((tp: any) => tp.tenant_id)).size
       : 0;
 
-    // 3. Active Subscriptions
+    // 3. Prospects & Active Trials
+    const { data: prospectsData } = await supabaseAdmin
+      .from('pilin_prospects')
+      .select('id, name, owner_name, status, trial_status, trial_end, created_at')
+      .order('created_at', { ascending: false });
+
+    const prospectsList = prospectsData || [];
+    const totalProspects = prospectsList.length;
+
+    const activeTrials = prospectsList.filter(p => {
+      if (p.trial_status === 'ACTIVE') return true;
+      if (!p.trial_end) return false;
+      return new Date(p.trial_end).getTime() > now.getTime();
+    }).length;
+
+    // 4. Active Subscriptions
     const { count: activeSubscriptions } = await supabaseAdmin
       .from('platform_subscriptions')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'ACTIVE');
 
-    // 4. Monthly Revenue (Sum of VERIFIED payments in the last 30 days)
+    // 5. Monthly Revenue (Sum of VERIFIED payments in the last 30 days)
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const { data: revenueData } = await supabaseAdmin
@@ -268,20 +305,110 @@ export async function getDashboardMetricsAction(): Promise<{
 
     const platformUsage = null;
 
+    // 6. Section II: MEMBUTUHKAN PERHATIAN (Attention Items)
+    const attentionItems: AttentionItem[] = [];
+
+    // New prospects needing follow-up
+    const newProspects = prospectsList.filter(p => p.status === 'NEW' || p.status === 'PROSPEK BARU');
+    newProspects.slice(0, 3).forEach(p => {
+      attentionItems.push({
+        id: `att-prospect-${p.id}`,
+        type: 'PROSPECT_NEW',
+        title: `Prospek Baru: ${p.name}`,
+        subtitle: `Owner/PIC: ${p.owner_name || 'Terdaftar'} belum difollow-up CS`,
+        date: p.created_at,
+        actionMenu: 'Prospek'
+      });
+    });
+
+    // Expiring trials (within next 3 days)
+    const expiringTrials = prospectsList.filter(p => {
+      if (!p.trial_end) return false;
+      const endDate = new Date(p.trial_end);
+      const diffDays = (endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+      return diffDays <= 3 && diffDays >= 0;
+    });
+    expiringTrials.slice(0, 3).forEach(p => {
+      attentionItems.push({
+        id: `att-trial-${p.id}`,
+        type: 'TRIAL_EXPIRING',
+        title: `Trial Akan Berakhir: ${p.name}`,
+        subtitle: `Berakhir pada ${new Date(p.trial_end!).toLocaleDateString('id-ID')}`,
+        date: p.trial_end,
+        actionMenu: 'Prospek'
+      });
+    });
+
+    // Suspended tenant modules
+    const { data: suspendedModules } = await supabaseAdmin
+      .from('tenant_products')
+      .select('id, status, tenants(name), platform_products(name)')
+      .eq('status', 'SUSPENDED')
+      .limit(3);
+
+    if (suspendedModules) {
+      suspendedModules.forEach((m: any) => {
+        attentionItems.push({
+          id: `att-suspended-${m.id}`,
+          type: 'MODULE_SUSPENDED',
+          title: `Modul Nonaktif: ${m.tenants?.name || 'Tenant'}`,
+          subtitle: `Modul ${m.platform_products?.name || 'Platform'} berstatus SUSPENDED`,
+          actionMenu: 'Subscriptions'
+        });
+      });
+    }
+
+    // 7. Section III: AKTIVITAS TERBARU (Recent Activities)
+    const recentActivities: ActivityItem[] = [];
+
+    const { data: logsData } = await supabaseAdmin
+      .from('audit_logs')
+      .select('id, operation, entity, created_at')
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    if (logsData && logsData.length > 0) {
+      logsData.forEach((log: any) => {
+        recentActivities.push({
+          id: log.id,
+          title: `${log.operation} - ${log.entity}`,
+          detail: `Operasi platform pada entitas ${log.entity}`,
+          timestamp: log.created_at,
+          type: 'AUDIT'
+        });
+      });
+    } else {
+      // Fallback: Recent registrations in database
+      prospectsList.slice(0, 5).forEach(p => {
+        recentActivities.push({
+          id: `act-prospect-${p.id}`,
+          title: `Pendaftaran Prospek: ${p.name}`,
+          detail: `Calon tenant terdaftar dari Form Onboarding Owner`,
+          timestamp: p.created_at,
+          type: 'PROSPECT'
+        });
+      });
+    }
+
     return {
       success: true,
       metrics: {
         totalTenants: totalTenants || 0,
         activeTenants: uniqueActiveTenants,
+        totalProspects,
+        activeTrials,
         activeSubscriptions: activeSubscriptions || 0,
         monthlyRevenue,
-        platformUsage
+        platformUsage,
+        attentionItems,
+        recentActivities
       }
     };
   } catch (err: any) {
+    console.error('getDashboardMetricsAction error:', err);
     return {
       success: false,
-      message: err.message || 'An unexpected error occurred while fetching metrics.'
+      message: 'Data belum dapat dimuat.'
     };
   }
 }
