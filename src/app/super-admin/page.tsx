@@ -11,6 +11,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { 
   onboardTenantAction, 
   getDashboardMetricsAction, 
+  getTenantsAction,
   getSubscriptionsDataAction, 
   getPlatformUsersAction,
   assignPlatformRoleAction,
@@ -19,6 +20,7 @@ import {
   getPlatformProductsAction,
   updateTenantProductStatusAction,
   type DashboardMetrics, 
+  type TenantRecord,
   type TenantProductData, 
   type SubscriptionData,
   type PlatformUserData,
@@ -200,16 +202,11 @@ export default function SuperAdminPage() {
     setTenantsLoading(true);
     setTenantsError(null);
     try {
-      const supabase = createClient();
-      const { data, error } = await supabase
-        .from('tenants')
-        .select('id, name, code, created_at, updated_at')
-        .order('name', { ascending: true });
-
-      if (error) {
-        setTenantsError(error.message);
+      const res = await getTenantsAction();
+      if (res.success && res.tenants) {
+        setTenants(res.tenants);
       } else {
-        setTenants(data || []);
+        setTenantsError(res.message || 'Gagal memuat data tenant.');
       }
     } catch (err: any) {
       setTenantsError(err.message || 'Gagal memuat data tenant.');
