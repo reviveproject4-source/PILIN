@@ -68,6 +68,7 @@ export async function submitOwnerOnboardingAction(payload: OnboardingPayload): P
           whatsapp: cleanContactNumber,
           email: cleanEmail,
           employee_count: cleanEmployeeCount,
+          source: 'FORM_TRIAL',
           trial_start: now.toISOString(),
           trial_end: trialEnd.toISOString(),
           trial_status: 'ACTIVE',
@@ -88,7 +89,8 @@ export async function submitOwnerOnboardingAction(payload: OnboardingPayload): P
           whatsapp: cleanContactNumber,
           email: cleanEmail,
           employee_count: cleanEmployeeCount,
-          status: 'NEW',
+          source: 'FORM_TRIAL',
+          status: 'PROSPEK BARU',
           trial_start: now.toISOString(),
           trial_end: trialEnd.toISOString(),
           trial_status: 'ACTIVE',
@@ -103,8 +105,11 @@ export async function submitOwnerOnboardingAction(payload: OnboardingPayload): P
           .from('pilin_prospects')
           .insert({
             name: cleanBusinessName,
+            owner_name: cleanOwnerName,
             whatsapp: cleanContactNumber,
-            status: 'NEW',
+            email: cleanEmail,
+            source: 'FORM_TRIAL',
+            status: 'PROSPEK BARU',
           })
           .select('id')
           .single();

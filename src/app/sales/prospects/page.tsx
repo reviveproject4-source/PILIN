@@ -32,7 +32,7 @@ export default async function ProspectsPage() {
         </h1>
       </div>
 
-      <ProspectsClient initialProspects={prospects || []} />
+      <ProspectsClient />
     </div>
   );
 }

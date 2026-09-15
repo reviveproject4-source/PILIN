@@ -919,6 +919,22 @@ export interface PilinProspectRecord {
   last_followed_up_at?: string;
   follow_up_notes?: string;
   assigned_cs_name?: string;
+  source?: string;
+  city_area?: string;
+  business_type?: string;
+  initial_notes?: string;
+  next_follow_up_at?: string;
+  next_follow_up_notes?: string;
+}
+
+export interface PilinProspectActivityRecord {
+  id: string;
+  prospect_id: string;
+  created_at: string;
+  pic_name: string;
+  activity_type: string;
+  notes: string;
+  result?: string;
 }
 
 export interface ProspectMetricsSummary {
@@ -1010,28 +1026,247 @@ export async function getProspectsListAction(): Promise<{
   }
 }
 
-export async function updateProspectFollowUpAction(payload: {
-  prospectId: string;
-  status: string;
-  followUpNotes?: string;
+export async function createSalesProspectAction(payload: {
+  businessName: string;
+  ownerName: string;
+  contactNumber: string;
+  email?: string;
+  employeeCount?: string;
+  cityArea?: string;
+  businessType?: string;
+  initialNotes?: string;
   assignedCsName?: string;
-}): Promise<{ success: boolean; message: string }> {
-  const { prospectId, status, followUpNotes, assignedCsName } = payload;
-
+}): Promise<{ success: boolean; message: string; prospectId?: string }> {
   try {
     const authCheck = await verifySuperAdminAccess();
     if (!authCheck.authorized) {
       return { success: false, message: authCheck.message || 'Unauthorized' };
     }
 
+    const {
+      businessName,
+      ownerName,
+      contactNumber,
+      email,
+      employeeCount,
+      cityArea,
+      businessType,
+      initialNotes,
+      assignedCsName,
+    } = payload;
+
+    const cleanBusinessName = businessName?.trim();
+    const cleanOwnerName = ownerName?.trim();
+    const cleanContactNumber = contactNumber?.trim();
+    const cleanEmail = email?.trim()?.toLowerCase() || null;
+
+    if (!cleanBusinessName) return { success: false, message: 'Nama Usaha wajib diisi.' };
+    if (!cleanOwnerName) return { success: false, message: 'Nama Owner / PIC wajib diisi.' };
+    if (!cleanContactNumber) return { success: false, message: 'Nomor WhatsApp wajib diisi.' };
+
     const supabaseAdmin = createAdminClient();
 
-    const updateData: any = {
-      status,
-      last_followed_up_at: new Date().toISOString(),
+    // Duplicate protection check
+    let query = supabaseAdmin.from('pilin_prospects').select('id');
+    if (cleanEmail) {
+      query = query.or(`email.eq.${cleanEmail},whatsapp.eq.${cleanContactNumber}`);
+    } else {
+      query = query.eq('whatsapp', cleanContactNumber);
+    }
+
+    const { data: existingProspect } = await query.maybeSingle();
+
+    let prospectId: string;
+
+    if (existingProspect) {
+      // Update existing record
+      const updatePayload: any = {
+        name: cleanBusinessName,
+        owner_name: cleanOwnerName,
+        whatsapp: cleanContactNumber,
+        source: 'SALES',
+      };
+      if (cleanEmail) updatePayload.email = cleanEmail;
+      if (employeeCount) updatePayload.employee_count = employeeCount;
+      if (cityArea) updatePayload.city_area = cityArea.trim();
+      if (businessType) updatePayload.business_type = businessType.trim();
+      if (initialNotes) updatePayload.initial_notes = initialNotes.trim();
+      if (assignedCsName) updatePayload.assigned_cs_name = assignedCsName.trim();
+
+      const { error: updateError } = await supabaseAdmin
+        .from('pilin_prospects')
+        .update(updatePayload)
+        .eq('id', existingProspect.id);
+
+      if (updateError) {
+        return { success: false, message: updateError.message };
+      }
+      prospectId = existingProspect.id;
+    } else {
+      // Insert new sales prospect
+      const insertPayload: any = {
+        name: cleanBusinessName,
+        owner_name: cleanOwnerName,
+        whatsapp: cleanContactNumber,
+        email: cleanEmail,
+        employee_count: employeeCount || '1-5',
+        source: 'SALES',
+        status: 'PROSPEK BARU',
+        city_area: cityArea?.trim() || null,
+        business_type: businessType?.trim() || null,
+        initial_notes: initialNotes?.trim() || null,
+        assigned_cs_name: assignedCsName?.trim() || null,
+      };
+
+      const { data: inserted, error: insertError } = await supabaseAdmin
+        .from('pilin_prospects')
+        .insert(insertPayload)
+        .select('id')
+        .single();
+
+      if (insertError) {
+        return { success: false, message: insertError.message };
+      }
+      prospectId = inserted.id;
+
+      // Add initial activity note if initialNotes provided
+      if (initialNotes?.trim()) {
+        await supabaseAdmin.from('pilin_prospect_activities').insert({
+          prospect_id: prospectId,
+          pic_name: assignedCsName?.trim() || 'Sales',
+          activity_type: 'Catatan Awal',
+          notes: initialNotes.trim(),
+        });
+      }
+    }
+
+    return {
+      success: true,
+      message: 'Prospek Sales berhasil disimpan ke Wadah Prospek.',
+      prospectId,
     };
-    if (followUpNotes !== undefined) updateData.follow_up_notes = followUpNotes.trim();
+  } catch (err: any) {
+    return { success: false, message: err.message || 'Terjadi kesalahan saat menambah prospek sales.' };
+  }
+}
+
+export async function getProspectActivitiesAction(prospectId: string): Promise<{
+  success: boolean;
+  message: string;
+  activities: PilinProspectActivityRecord[];
+}> {
+  try {
+    const authCheck = await verifySuperAdminAccess();
+    if (!authCheck.authorized) {
+      return { success: false, message: authCheck.message || 'Unauthorized', activities: [] };
+    }
+
+    const supabaseAdmin = createAdminClient();
+    const { data, error } = await supabaseAdmin
+      .from('pilin_prospect_activities')
+      .select('*')
+      .eq('prospect_id', prospectId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.warn('Failed to fetch prospect activities:', error.message);
+      return { success: true, message: 'Belum ada aktivitas.', activities: [] };
+    }
+
+    return { success: true, message: 'Berhasil memuat histori aktivitas.', activities: data || [] };
+  } catch (err: any) {
+    return { success: false, message: err.message || 'Gagal memuat aktivitas.', activities: [] };
+  }
+}
+
+export async function addProspectActivityAction(payload: {
+  prospectId: string;
+  picName: string;
+  activityType: string;
+  notes: string;
+  result?: string;
+  status?: string;
+  nextFollowUpAt?: string;
+  nextFollowUpNotes?: string;
+}): Promise<{ success: boolean; message: string }> {
+  try {
+    const authCheck = await verifySuperAdminAccess();
+    if (!authCheck.authorized) {
+      return { success: false, message: authCheck.message || 'Unauthorized' };
+    }
+
+    const { prospectId, picName, activityType, notes, result, status, nextFollowUpAt, nextFollowUpNotes } = payload;
+
+    if (!notes?.trim()) {
+      return { success: false, message: 'Catatan aktivitas tidak boleh kosong.' };
+    }
+
+    const supabaseAdmin = createAdminClient();
+
+    // 1. Insert into pilin_prospect_activities
+    const { error: activityError } = await supabaseAdmin
+      .from('pilin_prospect_activities')
+      .insert({
+        prospect_id: prospectId,
+        pic_name: picName.trim(),
+        activity_type: activityType,
+        notes: notes.trim(),
+        result: result?.trim() || null,
+      });
+
+    if (activityError) {
+      console.error('Failed to insert activity log:', activityError.message);
+    }
+
+    // 2. Update pilin_prospects timestamp & follow-up info
+    const updateData: any = {
+      last_followed_up_at: new Date().toISOString(),
+      assigned_cs_name: picName.trim(),
+    };
+
+    if (status) updateData.status = status;
+    if (nextFollowUpAt !== undefined) updateData.next_follow_up_at = nextFollowUpAt ? new Date(nextFollowUpAt).toISOString() : null;
+    if (nextFollowUpNotes !== undefined) updateData.next_follow_up_notes = nextFollowUpNotes.trim();
+
+    await supabaseAdmin
+      .from('pilin_prospects')
+      .update(updateData)
+      .eq('id', prospectId);
+
+    return { success: true, message: 'Aktivitas follow-up berhasil dicatat ke histori.' };
+  } catch (err: any) {
+    return { success: false, message: err.message || 'Gagal mencatat aktivitas.' };
+  }
+}
+
+export async function updateProspectDetailsAction(payload: {
+  prospectId: string;
+  status?: string;
+  assignedCsName?: string;
+  nextFollowUpAt?: string;
+  nextFollowUpNotes?: string;
+  ownerName?: string;
+  cityArea?: string;
+  businessType?: string;
+}): Promise<{ success: boolean; message: string }> {
+  try {
+    const authCheck = await verifySuperAdminAccess();
+    if (!authCheck.authorized) {
+      return { success: false, message: authCheck.message || 'Unauthorized' };
+    }
+
+    const { prospectId, status, assignedCsName, nextFollowUpAt, nextFollowUpNotes, ownerName, cityArea, businessType } = payload;
+
+    const supabaseAdmin = createAdminClient();
+
+    const updateData: any = {};
+    if (status !== undefined) updateData.status = status;
     if (assignedCsName !== undefined) updateData.assigned_cs_name = assignedCsName.trim();
+    if (nextFollowUpAt !== undefined) updateData.next_follow_up_at = nextFollowUpAt ? new Date(nextFollowUpAt).toISOString() : null;
+    if (nextFollowUpNotes !== undefined) updateData.next_follow_up_notes = nextFollowUpNotes.trim();
+    if (ownerName !== undefined) updateData.owner_name = ownerName.trim();
+    if (cityArea !== undefined) updateData.city_area = cityArea.trim();
+    if (businessType !== undefined) updateData.business_type = businessType.trim();
 
     const { error } = await supabaseAdmin
       .from('pilin_prospects')
@@ -1042,11 +1277,27 @@ export async function updateProspectFollowUpAction(payload: {
       return { success: false, message: error.message };
     }
 
-    return { success: true, message: 'Status dan catatan follow-up prospek berhasil disimpan.' };
+    return { success: true, message: 'Data prospek berhasil diperbarui.' };
   } catch (err: any) {
-    return { success: false, message: err.message || 'Gagal menyisipkan catatan follow-up.' };
+    return { success: false, message: err.message || 'Gagal memperbarui data prospek.' };
   }
 }
+
+export async function updateProspectFollowUpAction(payload: {
+  prospectId: string;
+  status: string;
+  followUpNotes?: string;
+  assignedCsName?: string;
+}): Promise<{ success: boolean; message: string }> {
+  return addProspectActivityAction({
+    prospectId: payload.prospectId,
+    picName: payload.assignedCsName || 'CS Minara',
+    activityType: 'Follow-up Catatan',
+    notes: payload.followUpNotes || 'Update status prospek',
+    status: payload.status,
+  });
+}
+
 
 
 
