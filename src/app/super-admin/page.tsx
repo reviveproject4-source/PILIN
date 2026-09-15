@@ -372,13 +372,18 @@ export default function SuperAdminPage() {
           </div>
 
           <div className="pt-4 space-y-3">
+            <button
+              onClick={handleSimulateLogin}
+              className="w-full block py-2.5 bg-[#F26522] hover:bg-[#d95416] text-white font-bold text-xs rounded-xl transition-all shadow-md cursor-pointer"
+            >
+              🔓 Masuk Dashboard Super Admin (Dev / Testing)
+            </button>
             <a 
               href="/"
               className="w-full block py-2.5 bg-[#0F2547] hover:bg-[#0B1A32] text-white font-semibold text-xs rounded-xl transition-all"
             >
               Kembali ke Beranda
             </a>
-            
           </div>
         </div>
       </div>
