@@ -18,6 +18,7 @@ interface KasirTransactionWorkspaceProps {
   branchId?: string;
   actorUserId: string;
   actorName?: string;
+  isDemo?: boolean;
 }
 
 interface TransactionRecord {
