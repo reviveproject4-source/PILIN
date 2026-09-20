@@ -366,6 +366,40 @@ export class PeopleRepository {
     return list.find(e => e.auth_user_id === auth_user_id) || null;
   }
 
+  static async hasAuthorizedEmployeeForRole(business_id: string = 'tenant-001', role: string): Promise<boolean> {
+    const targetRoleUpper = role.trim().toUpperCase();
+
+    // Owner is always authorized as creator
+    if (targetRoleUpper === 'OWNER') return true;
+
+    const list = await this.listEmployees(business_id);
+    const positions = await this.listPositions(business_id);
+
+    return list.some(emp => {
+      if (emp.employment_status === ('INACTIVE' as any) || emp.employment_status === ('RESIGNED' as any)) {
+        return false;
+      }
+
+      const posObj = positions.find(p => p.id === emp.position_id);
+      const posCode = (posObj?.code || emp.position_name || '').trim().toUpperCase();
+      const posName = (posObj?.name || emp.position_name || '').trim().toLowerCase();
+
+      if (targetRoleUpper === 'KEPALA_CABANG' || targetRoleUpper === 'KC') {
+        return posCode === 'KC' || posCode === 'KEPALA_CABANG' || posName.includes('kepala cabang') || posName.includes('manager');
+      }
+
+      if (targetRoleUpper === 'KASIR') {
+        return posCode === 'KASIR' || posName.includes('kasir');
+      }
+
+      if (targetRoleUpper === 'TEAM_PRODUKSI' || targetRoleUpper === 'PROD' || targetRoleUpper === 'PEGAWAI') {
+        return posCode === 'PROD' || posCode === 'TEAM_PRODUKSI' || posName.includes('produksi') || posName.includes('teknisi');
+      }
+
+      return false;
+    });
+  }
+
   static async createEmployee(dto: CreateEmployeeDTO): Promise<Employee> {
     const formattedCode = dto.employee_code.trim().toUpperCase();
 

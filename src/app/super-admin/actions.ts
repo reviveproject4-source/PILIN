@@ -1291,7 +1291,7 @@ export async function updateProspectFollowUpAction(payload: {
 }): Promise<{ success: boolean; message: string }> {
   return addProspectActivityAction({
     prospectId: payload.prospectId,
-    picName: payload.assignedCsName || 'CS Minara',
+    picName: payload.assignedCsName || 'CS PILIN',
     activityType: 'Follow-up Catatan',
     notes: payload.followUpNotes || 'Update status prospek',
     status: payload.status,

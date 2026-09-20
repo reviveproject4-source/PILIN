@@ -4,8 +4,12 @@ import React, { useState, useRef } from 'react';
 import { 
   ShoppingCart, DollarSign, CreditCard, Clock, CheckCircle2, 
   AlertCircle, Send, FileText, UserCheck, Users, MessageSquare, 
-  Sparkles, Camera, Image as ImageIcon, Search, Phone, Printer, X, Filter
+  Sparkles, Camera, Image as ImageIcon, Search, Phone, Printer, X, Filter,
+  Home, Settings, Edit3, Bookmark, LogOut, HelpCircle, Info, User, Save, PhoneCall, ChevronRight, Sun, Moon,
+  PlusCircle, Wrench, BarChart3, UserPlus, ArrowRight
 } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
+import { useTheme } from '@/components/ThemeProvider';
 import { PresensiModule } from '../people/PresensiModule';
 import { BroadcastCameraModal } from '../broadcast/BroadcastCameraModal';
 import { WorkQueueService, WorkOrderQueueItem } from '@/domains/work/workQueueService';
@@ -13,12 +17,15 @@ import { RetentionDomainService, SapaanLogRecord } from '@/domains/retention/ret
 import { BusinessProfileService } from '@/domains/business/businessProfileService';
 import { ServiceOrderStatus } from '@/lib/types';
 
+import { IndustryTemplateService, IndustryCategory, IndustryTemplate } from '@/domains/retention/industryTemplateService';
+
 interface KasirTransactionWorkspaceProps {
   businessId: string;
   branchId?: string;
   actorUserId: string;
   actorName?: string;
   isDemo?: boolean;
+  onLogout?: () => void;
 }
 
 interface TransactionRecord {
@@ -39,10 +46,53 @@ export function KasirTransactionWorkspace({
   businessId = 'tenant-001',
   branchId = 'branch-001',
   actorUserId = 'user-kasir-01',
-  actorName = 'Siti Rahma',
+  actorName = 'Kasir',
   isDemo = false,
+  onLogout,
 }: KasirTransactionWorkspaceProps) {
-  const [activeTab, setActiveTab] = useState<'POS' | 'SPK' | 'CUSTOMER' | 'WA_ENGINE' | 'BROADCAST' | 'OPERASIONAL' | 'PRESENSI'>('POS');
+  const { theme, setTheme } = useTheme();
+  
+  // Navigation State for Bottom Nav (BERANDA | Konsumen | CRM | Pengaturan)
+  const [activeBottomNav, setActiveBottomNav] = useState<'BERANDA' | 'KONSUMEN' | 'CRM' | 'PENGATURAN'>('BERANDA');
+
+  // Modal Views for Beranda Quick Actions & Menu Items
+  const [showPosModal, setShowPosModal] = useState<boolean>(false);
+  const [showSpkModal, setShowSpkModal] = useState<boolean>(false);
+  const [showPickupModal, setShowPickupModal] = useState<boolean>(false);
+  const [showHistoryModal, setShowHistoryModal] = useState<boolean>(false);
+  const [showStatsModal, setShowStatsModal] = useState<boolean>(false);
+  const [showMemberModal, setShowMemberModal] = useState<boolean>(false);
+
+  const [activeTab, setActiveTab] = useState<'POS' | 'SPK' | 'CUSTOMER' | 'WA_ENGINE' | 'BROADCAST' | 'OPERASIONAL' | 'PRESENSI' | 'PENGATURAN' | null>(null);
+
+  // Kasir Settings State (Edit Profil, Printer, Theme & About Modals)
+  const [profileName, setProfileName] = useState<string>(actorName || 'Kasir');
+  const [profilePhone, setProfilePhone] = useState<string>('08123456789');
+  const [autoPrintEnabled, setAutoPrintEnabled] = useState<boolean>(true);
+  const [showEditProfileModal, setShowEditProfileModal] = useState<boolean>(false);
+  const [showPrinterModal, setShowPrinterModal] = useState<boolean>(false);
+  const [showAboutModal, setShowAboutModal] = useState<boolean>(false);
+  const [showThemeModal, setShowThemeModal] = useState<boolean>(false);
+
+  const handleSaveKasirProfile = (e: React.FormEvent) => {
+    e.preventDefault();
+    setShowEditProfileModal(false);
+    setFeedback({ type: 'success', text: `Profil Kasir '${profileName}' (${profilePhone}) berhasil diperbarui.` });
+  };
+
+  const handleKasirLogout = async () => {
+    if (onLogout) {
+      onLogout();
+      return;
+    }
+    try {
+      const supabase = createClient();
+      await supabase.auth.signOut();
+    } catch (err) {
+      // Fallback
+    }
+    window.location.href = '/';
+  };
 
   // Modal State
   const [showBroadcastModal, setShowBroadcastModal] = useState<boolean>(false);
@@ -88,13 +138,13 @@ export function KasirTransactionWorkspace({
   const [newCustName, setNewCustName] = useState<string>('');
   const [newCustPhone, setNewCustPhone] = useState<string>('');
 
-  // WA Engine State
+  // WA Engine / CRM State
   const [waSelectedCustomerId, setWaSelectedCustomerId] = useState<string>(isDemo ? 'cust-101' : '');
   const [waTargetName, setWaTargetName] = useState<string>(isDemo ? 'Budi Santoso' : '');
   const [waTargetPhone, setWaTargetPhone] = useState<string>(isDemo ? '08123456789' : '');
-  const [waCategory, setWaCategory] = useState<'SAPAAN' | 'QUOTE' | 'HYPPOSELLING' | 'REMINDER' | 'MANUAL'>('SAPAAN');
+  const [waCategory, setWaCategory] = useState<'KABAR_BERKALA' | 'QUOTE' | 'REMINDER' | 'MANUAL'>('KABAR_BERKALA');
   const [waTemplateText, setWaTemplateText] = useState<string>(
-    isDemo ? 'Halo Budi Santoso, terima kasih telah menggunakan layanan PILIN ERP. Bagaimana hasil pengerjaan tim kami?' : ''
+    isDemo ? 'Halo Budi Santoso, ini kabar berkala dari PILIN ERP. Terima kasih telah setia menggunakan layanan kami! Salam hangat.' : ''
   );
 
   // WA Retention Logs & Mandate Execution State
@@ -239,26 +289,35 @@ export function KasirTransactionWorkspace({
   };
 
   // WA Engine Target Customer Change Handler
+  // Selected Industry Template state for template picker
+  const [selectedIndustry, setSelectedIndustry] = useState<IndustryCategory>('LAUNDRY_CLOTHES');
+
   const handleWaCustomerSelect = (customerId: string) => {
     setWaSelectedCustomerId(customerId);
     const found = customerList.find(c => c.id === customerId);
     if (found) {
       setWaTargetName(found.name);
       setWaTargetPhone(found.phone);
-      updateWaTemplateText(found.name, waCategory);
+      updateWaTemplateText(found.name, waCategory, selectedIndustry);
     }
   };
 
-  // Update WA Template Text based on Category & Customer
-  const updateWaTemplateText = (custName: string, category: typeof waCategory) => {
-    if (category === 'SAPAAN') {
-      setWaTemplateText(`Halo Kak ${custName}, terima kasih telah menggunakan layanan PILIN ERP. Bagaimana hasil pengerjaan tim kami hari ini? Salam hangat!`);
+  // Update WA Template Text based on Category, Customer & Industry
+  const updateWaTemplateText = (
+    custName: string, 
+    category: typeof waCategory, 
+    indCategory: IndustryCategory = selectedIndustry
+  ) => {
+    const tmpl = IndustryTemplateService.getTemplate(indCategory);
+    if (category === 'KABAR_BERKALA') {
+      const text = tmpl.template_sapaan || tmpl.template_hypnoselling;
+      setWaTemplateText(IndustryTemplateService.renderMessage(text, { nama: custName, item: 'Layanan Usaha' }));
     } else if (category === 'REMINDER') {
-      setWaTemplateText(`Halo Kak ${custName}, ini pengingat ramah dari PILIN ERP. Barang/layanan Anda sudah waktunya perawatan rutin. Dapatkan promo khusus minggu ini!`);
+      setWaTemplateText(IndustryTemplateService.renderMessage(tmpl.template_reminder, { nama: custName, item: 'Layanan Usaha' }));
     } else if (category === 'QUOTE') {
-      setWaTemplateText(`Halo Kak ${custName}, "Kebersihan dan kerapihan adalah cermin kenyamanan." Selamat beraktivitas kembali dari tim PILIN ERP!`);
-    } else if (category === 'HYPPOSELLING') {
-      setWaTemplateText(`Halo Kak ${custName}! Khusus hari ini kami ada penawaran perawatan premium terbatas untuk langganan setia. Balas pesan ini untuk klaim diskon 20%!`);
+      setWaTemplateText(IndustryTemplateService.renderMessage(tmpl.template_sapaan, { nama: custName, item: 'Layanan Usaha' }));
+    } else if (category === 'MANUAL') {
+      setWaTemplateText(`Halo Kak ${custName}, `);
     }
   };
 
@@ -269,7 +328,7 @@ export function KasirTransactionWorkspace({
     RetentionDomainService.scheduleSapaan({
       customer_name: waTargetName,
       customer_phone: waTargetPhone,
-      category: waCategory === 'MANUAL' || waCategory === 'REMINDER' ? 'SAPAAN' : waCategory,
+      category: waCategory === 'MANUAL' || waCategory === 'REMINDER' ? 'SAPAAN' : (waCategory === 'KABAR_BERKALA' ? 'SAPAAN' : waCategory),
       message_text: waTemplateText,
     });
     setFeedback({ type: 'success', text: `Pesan WA Engine telah disiapkan. Membuka WhatsApp...` });
@@ -326,78 +385,135 @@ ${profile.terms_and_conditions}`;
   };
 
   return (
-    <div className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-6 font-sans transition-colors">
-      {/* Top Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
-        <div>
-          <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <ShoppingCart className="w-5 h-5 text-emerald-500" />
-            <span>Workspace Operasional Kasir & Transaksi (POS)</span>
-          </h2>
-        </div>
-
-        {/* Sub-Navigation Tabs */}
-        <div className="flex flex-wrap bg-slate-100 dark:bg-slate-950 p-1 rounded-xl border border-slate-200 dark:border-slate-800 gap-1">
-          <button
-            onClick={() => setActiveTab('POS')}
-            className={`px-3 py-1.5 rounded-lg font-bold text-xs transition-all ${
-              activeTab === 'POS' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            🛒 POS & Transaksi
-          </button>
-          <button
-            onClick={() => setActiveTab('SPK')}
-            className={`px-3 py-1.5 rounded-lg font-bold text-xs transition-all ${
-              activeTab === 'SPK' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            📋 Layanan & SPK ({spkOrders.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('CUSTOMER')}
-            className={`px-3 py-1.5 rounded-lg font-bold text-xs transition-all ${
-              activeTab === 'CUSTOMER' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            👥 Database Pelanggan ({customerList.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('WA_ENGINE')}
-            className={`px-3 py-1.5 rounded-lg font-bold text-xs transition-all ${
-              activeTab === 'WA_ENGINE' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            💬 WA Engine (Reminder, Sapaan & Hypnoselling)
-          </button>
-          <button
-            onClick={() => setActiveTab('BROADCAST')}
-            className={`px-3 py-1.5 rounded-lg font-bold text-xs transition-all ${
-              activeTab === 'BROADCAST' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            📢 Broadcast Teks & Foto
-          </button>
-          <button
-            onClick={() => setActiveTab('OPERASIONAL')}
-            className={`px-3 py-1.5 rounded-lg font-bold text-xs transition-all ${
-              activeTab === 'OPERASIONAL' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            ⚙️ Rekap Kasir
-          </button>
-          <button
-            onClick={() => setActiveTab('PRESENSI')}
-            className={`px-3 py-1.5 rounded-lg font-bold text-xs transition-all ${
-              activeTab === 'PRESENSI' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            📸 Presensi Selfie & GPS
-          </button>
-        </div>
-      </div>
-
+    <div className="w-full space-y-6 font-sans text-slate-900 dark:text-slate-100 transition-colors pb-24">
       {/* Notification Banner */}
+      {feedback && (
+        <div className={`p-4 rounded-xl text-xs font-semibold flex items-center justify-between ${
+          feedback.type === 'success' ? 'bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300' : 'bg-rose-50 dark:bg-rose-950/80 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300'
+        }`}>
+          <span>{feedback.text}</span>
+          <button onClick={() => setFeedback(null)} className="font-bold hover:opacity-80 cursor-pointer">✕</button>
+        </div>
+      )}
+
+      {/* BERANDA MAIN VIEW */}
+      {activeBottomNav === 'BERANDA' && (
+        <div className="space-y-6">
+          {/* MAIN ACTION BUTTONS: [Buat Nota] [SPK] [Pelunasan/Pengambilan] */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <button
+              type="button"
+              onClick={() => setShowPosModal(true)}
+              className="p-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-bold text-sm shadow-sm flex items-center justify-center gap-2.5 transition-all cursor-pointer active:scale-95"
+            >
+              <PlusCircle className="w-5 h-5" />
+              <span>Buat Nota</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowSpkModal(true)}
+              className="p-4 bg-amber-600 hover:bg-amber-500 text-white rounded-2xl font-bold text-sm shadow-sm flex items-center justify-center gap-2.5 transition-all cursor-pointer active:scale-95"
+            >
+              <Wrench className="w-5 h-5" />
+              <span>SPK ({spkOrders.length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowPickupModal(true)}
+              className="p-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-bold text-sm shadow-sm flex items-center justify-center gap-2.5 transition-all cursor-pointer active:scale-95"
+            >
+              <CheckCircle2 className="w-5 h-5" />
+              <span>Pelunasan/Pengambilan</span>
+            </button>
+          </div>
+
+          {/* RINGKASAN TRANSAKSI HARI INI CARD */}
+          <div
+            onClick={() => setShowHistoryModal(true)}
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm hover:border-emerald-500 transition-all cursor-pointer group space-y-3"
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                <span className="font-extrabold text-base text-slate-900 dark:text-white">Transaksi Hari Ini</span>
+              </div>
+              <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                <span>Riwayat Nota</span>
+                <ArrowRight className="w-4 h-4" />
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-4 pt-1">
+              <div className="bg-slate-50 dark:bg-slate-950 p-3.5 rounded-xl border border-slate-100 dark:border-slate-800">
+                <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Transaksi Hari Ini</div>
+                <div className="text-2xl font-black text-slate-900 dark:text-white pt-1">{recentTransactions.length} <span className="text-xs font-normal text-slate-500">Transaksi</span></div>
+              </div>
+              <div className="bg-slate-50 dark:bg-slate-950 p-3.5 rounded-xl border border-slate-100 dark:border-slate-800">
+                <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Total Nota</div>
+                <div className="text-2xl font-black text-slate-900 dark:text-white pt-1">{recentTransactions.length} <span className="text-xs font-normal text-slate-500">Nota</span></div>
+              </div>
+            </div>
+            <div className="text-[11px] text-slate-400 text-center font-medium pt-1">
+              Klik untuk membuka Riwayat Nota Transaksi →
+            </div>
+          </div>
+
+          {/* MENU UTAMA KASIR */}
+          <div className="space-y-3">
+            <div className="text-xs font-extrabold text-slate-500 uppercase tracking-wider px-1">Menu Utama</div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <button
+                type="button"
+                onClick={() => setShowStatsModal(true)}
+                className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl hover:border-emerald-500 shadow-sm transition-all text-left flex items-center justify-between group cursor-pointer"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400">
+                    <BarChart3 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-sm text-slate-900 dark:text-white">Statistik</div>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-500 transition-colors" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowMemberModal(true)}
+                className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl hover:border-emerald-500 shadow-sm transition-all text-left flex items-center justify-between group cursor-pointer"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400">
+                    <UserPlus className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-sm text-slate-900 dark:text-white">Pendaftaran Member</div>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-blue-500 transition-colors" />
+              </button>
+
+              <a
+                href="https://wa.me/6281215566630?text=Halo%20CS%20PILIN%20ERP,%20saya%20butuh%20bantuan%20kasir"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl hover:border-emerald-500 shadow-sm transition-all text-left flex items-center justify-between group cursor-pointer"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400">
+                    <Phone className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-sm text-slate-900 dark:text-white">Bantuan</div>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-purple-500 transition-colors" />
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
+
       {feedback && (
         <div className={`p-4 rounded-xl text-xs font-semibold flex items-center justify-between ${
           feedback.type === 'success' ? 'bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300' : 'bg-rose-50 dark:bg-rose-950/80 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300'
@@ -593,7 +709,7 @@ ${profile.terms_and_conditions}`;
                         className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded text-[11px] flex items-center gap-1"
                       >
                         <Send className="w-3.5 h-3.5" />
-                        <span>WA</span>
+                        <span>[Kirim]</span>
                       </button>
                     </div>
                   </div>
@@ -698,7 +814,7 @@ ${profile.terms_and_conditions}`;
       )}
 
       {/* TAB 3: DATABASE PELANGGAN */}
-      {activeTab === 'CUSTOMER' && (
+      {activeBottomNav === 'KONSUMEN' && (
         <div className="space-y-6">
           <form onSubmit={handleAddCustomer} className="bg-slate-50 dark:bg-slate-950 p-5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-4">
             <h3 className="text-sm font-bold text-[#F26522] flex items-center gap-2">
@@ -714,7 +830,7 @@ ${profile.terms_and_conditions}`;
                   required
                   value={newCustName}
                   onChange={e => setNewCustName(e.target.value)}
-                  placeholder="Contoh: Andi Wijaya"
+                  placeholder="Nama lengkap pelanggan..."
                   className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white"
                 />
               </div>
@@ -726,7 +842,7 @@ ${profile.terms_and_conditions}`;
                   required
                   value={newCustPhone}
                   onChange={e => setNewCustPhone(e.target.value)}
-                  placeholder="Contoh: 081234567890"
+                  placeholder="Nomor WhatsApp HP..."
                   className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white"
                 />
               </div>
@@ -766,12 +882,12 @@ ${profile.terms_and_conditions}`;
                             setWaTargetName(c.name);
                             setWaTargetPhone(c.phone);
                             updateWaTemplateText(c.name, waCategory);
-                            setActiveTab('WA_ENGINE');
+                            setActiveBottomNav('CRM');
                           }}
                           className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded text-[11px] flex items-center gap-1"
                         >
                           <MessageSquare className="w-3 h-3" />
-                          <span>Kirim WA</span>
+                          <span>[Kirim]</span>
                         </button>
                       </td>
                     </tr>
@@ -783,15 +899,172 @@ ${profile.terms_and_conditions}`;
         </div>
       )}
 
-      {/* TAB 4: WA ENGINE (REMINDER, MANDAT KC, SAPAAN, HYPNOSELLING, TEMPLATE) */}
-      {activeTab === 'WA_ENGINE' && (
+      {/* TAB 4: WA ENGINE / CRM (REMINDER, OVERDUE NOTA, MANDAT KC, KABAR BERKALA, TEMPLATE INDUSTRI) */}
+      {activeBottomNav === 'CRM' && (
         <div className="space-y-6">
-          {/* SECTION 1: MANDAT PENGIRIMAN DARI KEPALA CABANG */}
+          {/* SECTION 1: OVERDUE NOTA REMINDERS (DUE FOR RETENTION) — NO FINANCIAL/MONEY FIGURES */}
+          <div className="bg-slate-50 dark:bg-slate-950 p-5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-rose-600 dark:text-rose-400 flex items-center gap-2">
+                <Clock className="w-4 h-4" />
+                <span>⏰ Pengingat Nota Jatuh Tempo (Overdue Nota Reminders)</span>
+              </h3>
+              <span className="text-xs font-bold px-2.5 py-0.5 rounded bg-rose-500/20 text-rose-600 border border-rose-500/40">
+                Perlu Follow Up
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-900 font-bold">
+                    <th className="p-3">Nama Pelanggan</th>
+                    <th className="p-3">No. WhatsApp</th>
+                    <th className="p-3">No. Nota</th>
+                    <th className="p-3 text-right">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-slate-800 dark:text-slate-200">
+                  {(recentTransactions.length > 0 ? recentTransactions : [
+                    { id: 'NOT-2026-0891', customer: 'Budi Santoso', phone: '08123456789' },
+                    { id: 'NOT-2026-0885', customer: 'Dewi Lestari', phone: '08212345678' },
+                    { id: 'NOT-2026-0870', customer: 'Siti Rahma', phone: '08198765432' },
+                  ]).map(item => (
+                    <tr key={item.id} className="hover:bg-slate-100 dark:hover:bg-slate-900/60">
+                      <td className="p-3 font-bold text-slate-900 dark:text-white">{item.customer}</td>
+                      <td className="p-3 font-mono text-emerald-600 dark:text-emerald-400">{item.phone}</td>
+                      <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400">Nota #{item.id}</td>
+                      <td className="p-3 text-right">
+                        <button
+                          onClick={() => {
+                            setWaTargetName(item.customer);
+                            setWaTargetPhone(item.phone);
+                            updateWaTemplateText(item.customer, 'REMINDER', selectedIndustry);
+                            setFeedback({ type: 'success', text: `Pengingat nota #${item.id} disiapkan untuk ${item.customer}.` });
+                          }}
+                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs inline-flex items-center gap-1 shadow cursor-pointer"
+                        >
+                          <Send className="w-3 h-3" />
+                          <span>[Kirim]</span>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* SECTION 2: TEMPLATE CRM INDUSTRI (INDUSTRY TEMPLATE SERVICE) */}
+          <div className="bg-slate-50 dark:bg-slate-950 p-5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Bookmark className="w-4 h-4 text-emerald-500" />
+                <span>📋 Template CRM Industri &amp; Pesan Terstruktur</span>
+              </h3>
+              <select
+                value={selectedIndustry}
+                onChange={e => {
+                  const ind = e.target.value as IndustryCategory;
+                  setSelectedIndustry(ind);
+                  updateWaTemplateText(waTargetName, waCategory, ind);
+                }}
+                className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-900 dark:text-white font-bold cursor-pointer"
+              >
+                {IndustryTemplateService.getCategories().map(cat => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.icon} {cat.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {(() => {
+              const currentTmpl = IndustryTemplateService.getTemplate(selectedIndustry);
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Kabar Berkala Template */}
+                  <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2 flex flex-col justify-between">
+                    <div>
+                      <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center justify-between">
+                        <span>📢 Kabar Berkala</span>
+                        <span className="text-[10px] text-slate-400">Sapaan</span>
+                      </div>
+                      <p className="text-xs text-slate-600 dark:text-slate-300 mt-2 line-clamp-3 italic">
+                        &quot;{IndustryTemplateService.renderMessage(currentTmpl.template_sapaan, { nama: '[Nama]', item: '[Layanan]' })}&quot;
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setWaCategory('KABAR_BERKALA');
+                        updateWaTemplateText(waTargetName, 'KABAR_BERKALA', selectedIndustry);
+                        setFeedback({ type: 'success', text: `Template Kabar Berkala (${currentTmpl.name}) dipilih.` });
+                      }}
+                      className="w-full py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs mt-3 flex items-center justify-center gap-1"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>Gunakan Template</span>
+                    </button>
+                  </div>
+
+                  {/* Reminder Service Template */}
+                  <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2 flex flex-col justify-between">
+                    <div>
+                      <div className="text-xs font-bold text-blue-600 dark:text-blue-400 flex items-center justify-between">
+                        <span>⏰ Reminder Servis</span>
+                        <span className="text-[10px] text-slate-400">H+{currentTmpl.default_grooming_days} Hari</span>
+                      </div>
+                      <p className="text-xs text-slate-600 dark:text-slate-300 mt-2 line-clamp-3 italic">
+                        &quot;{IndustryTemplateService.renderMessage(currentTmpl.template_reminder, { nama: '[Nama]', item: '[Layanan]' })}&quot;
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setWaCategory('REMINDER');
+                        updateWaTemplateText(waTargetName, 'REMINDER', selectedIndustry);
+                        setFeedback({ type: 'success', text: `Template Reminder (${currentTmpl.name}) dipilih.` });
+                      }}
+                      className="w-full py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg text-xs mt-3 flex items-center justify-center gap-1"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>Gunakan Template</span>
+                    </button>
+                  </div>
+
+                  {/* Quote Kebersihan Template */}
+                  <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2 flex flex-col justify-between">
+                    <div>
+                      <div className="text-xs font-bold text-purple-600 dark:text-purple-400 flex items-center justify-between">
+                        <span>💬 Quote Kebersihan</span>
+                        <span className="text-[10px] text-slate-400">Motivasi</span>
+                      </div>
+                      <p className="text-xs text-slate-600 dark:text-slate-300 mt-2 line-clamp-3 italic">
+                        &quot;{IndustryTemplateService.renderMessage(currentTmpl.template_hypnoselling, { nama: '[Nama]', item: '[Layanan]' })}&quot;
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setWaCategory('QUOTE');
+                        updateWaTemplateText(waTargetName, 'QUOTE', selectedIndustry);
+                        setFeedback({ type: 'success', text: `Template Quote (${currentTmpl.name}) dipilih.` });
+                      }}
+                      className="w-full py-1.5 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-lg text-xs mt-3 flex items-center justify-center gap-1"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>Gunakan Template</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* SECTION 3: MANDAT PENGIRIMAN DARI KEPALA CABANG */}
           <div className="bg-slate-50 dark:bg-slate-950 p-5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-amber-600 dark:text-amber-400 flex items-center gap-2">
                 <MessageSquare className="w-4 h-4" />
-                <span>📋 Mandat Pengiriman WA dari Kepala Cabang (Membutuhkan Eksekusi Kasir)</span>
+                <span>📋 Mandat Pengiriman WA dari Kepala Cabang</span>
               </h3>
               <span className="text-xs font-bold px-2.5 py-0.5 rounded bg-amber-500/20 text-amber-600 border border-amber-500/40">
                 {waLogs.filter(l => l.status === 'MANDATED').length} Mandat Pending
@@ -832,8 +1105,8 @@ ${profile.terms_and_conditions}`;
                             onClick={() => handleExecuteMandateOrReminder(log)}
                             className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs flex items-center gap-1 shadow cursor-pointer"
                           >
-                            <Send className="w-3.5 h-3.5" />
-                            <span>📲 Eksekusi Kirim WA</span>
+                            <Send className="w-3 h-3" />
+                            <span>[Kirim]</span>
                           </button>
                         </td>
                       </tr>
@@ -844,149 +1117,11 @@ ${profile.terms_and_conditions}`;
             )}
           </div>
 
-          {/* SECTION 2: SETUP REMINDER H+X PER NOTA TRANSAKSI */}
-          <form onSubmit={handleCreateNotaReminder} className="bg-slate-50 dark:bg-slate-950 p-5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-4">
-            <h3 className="text-sm font-bold text-blue-600 dark:text-blue-400 flex items-center gap-2">
-              <Clock className="w-4 h-4" />
-              <span>⏰ Buat Pengingat Perawatan (Reminder H+X) Per Nota Transaksi</span>
-            </h3>
-
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div>
-                <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">Pilih Nota Transaksi:</label>
-                <select
-                  value={reminderNotaNumber}
-                  onChange={e => {
-                    setReminderNotaNumber(e.target.value);
-                    const trx = recentTransactions.find(t => t.id === e.target.value);
-                    if (trx) {
-                      setReminderCustomerName(trx.customer);
-                      setReminderCustomerPhone(trx.phone);
-                    }
-                  }}
-                  className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white font-bold cursor-pointer"
-                >
-                  {recentTransactions.map(t => (
-                    <option key={t.id} value={t.id}>
-                      🧾 {t.id} — {t.customer} ({t.service})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">Nama Pelanggan:</label>
-                <input
-                  type="text"
-                  required
-                  value={reminderCustomerName}
-                  onChange={e => setReminderCustomerName(e.target.value)}
-                  className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">No. WhatsApp Target:</label>
-                <input
-                  type="text"
-                  required
-                  value={reminderCustomerPhone}
-                  onChange={e => setReminderCustomerPhone(e.target.value)}
-                  className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">Interval Hari (H+X):</label>
-                <select
-                  value={reminderHPlusDays}
-                  onChange={e => setReminderHPlusDays(parseInt(e.target.value, 10))}
-                  className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white font-bold cursor-pointer"
-                >
-                  <option value={14}>H+14 Hari (Perawatan Ringan)</option>
-                  <option value={30}>H+30 Hari (Perawatan Rutin Bulanan)</option>
-                  <option value={60}>H+60 Hari (Perawatan 2 Bulan)</option>
-                  <option value={90}>H+90 Hari (Perawatan Triwulan)</option>
-                </select>
-              </div>
-            </div>
-
-            <button type="submit" className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-lg shadow-md flex items-center gap-2">
-              <Clock className="w-4 h-4" />
-              <span>📅 Simpan Reminder H+{reminderHPlusDays} Per Nota</span>
-            </button>
-          </form>
-
-          {/* SECTION 3: DAFTAR PENGINGAT & LOG EKSEKUSI WA ENGINE */}
-          <div className="bg-slate-50 dark:bg-slate-950 p-5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <MessageSquare className="w-4 h-4 text-emerald-500" />
-                <span>Daftar Pengingat &amp; Log Eksekusi WA Engine (Mandat, Reminder &amp; Sapaan)</span>
-              </h3>
-              <button
-                onClick={refreshWaLogs}
-                className="px-2.5 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded text-[11px]"
-              >
-                🔄 Refresh
-              </button>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-900 font-bold">
-                    <th className="p-3">No. Nota / ID</th>
-                    <th className="p-3">Pelanggan</th>
-                    <th className="p-3">No. WhatsApp</th>
-                    <th className="p-3">Kategori</th>
-                    <th className="p-3">Interval H+X</th>
-                    <th className="p-3">Status</th>
-                    <th className="p-3">Eksekusi Kasir</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-slate-800 dark:text-slate-200">
-                  {waLogs.map(log => (
-                    <tr key={log.id} className="hover:bg-slate-100 dark:hover:bg-slate-900/60">
-                      <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400">{log.nota_number || log.id}</td>
-                      <td className="p-3 font-bold text-slate-900 dark:text-white">{log.customer_name}</td>
-                      <td className="p-3 font-mono text-emerald-600 dark:text-emerald-400">{log.customer_phone}</td>
-                      <td className="p-3">
-                        <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-blue-500/20 text-blue-600 border border-blue-500/30">
-                          {log.category}
-                        </span>
-                      </td>
-                      <td className="p-3 font-bold text-purple-600 dark:text-purple-400">
-                        {log.scheduled_h_plus_days ? `H+${log.scheduled_h_plus_days} Hari` : `${log.due_days || 30} Hari`}
-                      </td>
-                      <td className="p-3">
-                        <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
-                          log.status === 'MANDATED' ? 'bg-amber-500/20 text-amber-600 border border-amber-500/30' : 'bg-emerald-500/20 text-emerald-600 border border-emerald-500/30'
-                        }`}>
-                          {log.status === 'MANDATED' ? '📋 MANDAT KC' : '✓ SENT'}
-                        </span>
-                      </td>
-                      <td className="p-3">
-                        <button
-                          onClick={() => handleExecuteMandateOrReminder(log)}
-                          className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded text-[11px] flex items-center gap-1 shadow cursor-pointer"
-                        >
-                          <Send className="w-3 h-3" />
-                          <span>Kirim WA</span>
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
           {/* SECTION 4: WA DIRECT ENGINE GENERATOR */}
           <div className="bg-slate-50 dark:bg-slate-950 p-5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-4">
             <h3 className="text-sm font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
               <MessageSquare className="w-4 h-4" />
-              <span>Kirim Pesan WA Direct Generator (Sapaan, Quote, Hypnoselling &amp; Manual)</span>
+              <span>Pesan WhatsApp (Kabar Berkala, Quote, Reminder &amp; Custom)</span>
             </h3>
 
             <form onSubmit={handleSendWaMessage} className="space-y-4">
@@ -1018,28 +1153,27 @@ ${profile.terms_and_conditions}`;
                 </div>
 
                 <div>
-                  <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">Pilih Template / Kategori Engine:</label>
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">Pilih Kategori Pesan:</label>
                   <select
                     value={waCategory}
                     onChange={e => {
                       const cat = e.target.value as any;
                       setWaCategory(cat);
-                      updateWaTemplateText(waTargetName, cat);
+                      updateWaTemplateText(waTargetName, cat, selectedIndustry);
                     }}
                     className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white font-bold cursor-pointer"
                   >
-                    <option value="SAPAAN">👋 Sapaan Ramah Pelanggan</option>
-                    <option value="REMINDER">⏰ Reminder Service &amp; Perawatan Routine</option>
-                    <option value="QUOTE">💬 Kutipan (Quote) Kebersihan</option>
-                    <option value="HYPPOSELLING">✨ Hypnoselling Promosi Terpersonalisasi</option>
-                    <option value="MANUAL">✏️ Input Manual (Tulis Pesan Sendiri)</option>
+                    <option value="KABAR_BERKALA">📢 Kabar Berkala</option>
+                    <option value="QUOTE">💬 Quote</option>
+                    <option value="REMINDER">⏰ Reminder</option>
+                    <option value="MANUAL">✏️ Custom</option>
                   </select>
                 </div>
               </div>
 
               <div>
                 <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">
-                  Teks Pesan WhatsApp (Engine Auto-Generated / Custom Manual):
+                  Teks Pesan WhatsApp:
                 </label>
                 <textarea
                   rows={3}
@@ -1054,7 +1188,7 @@ ${profile.terms_and_conditions}`;
                 className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-md cursor-pointer"
               >
                 <Send className="w-4 h-4" />
-                <span>Kirim Pesan WhatsApp Via Engine (wa.me)</span>
+                <span>[Kirim]</span>
               </button>
             </form>
           </div>
@@ -1081,24 +1215,180 @@ ${profile.terms_and_conditions}`;
         </div>
       )}
 
-      {/* TAB 6: REKAP OPERASIONAL KASIR */}
-      {activeTab === 'OPERASIONAL' && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-slate-50 dark:bg-slate-950 p-5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2">
-              <div className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Total Omzet Kasir Hari Ini</div>
-              <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400">Rp 4.850.000</div>
-              <div className="text-[11px] text-slate-500 dark:text-slate-400">18 Transaksi Lunas</div>
+      {/* TAB 6: PENGATURAN KASIR (MODEL LIST SEDERHANA LIGHT UI) */}
+      {activeBottomNav === 'PENGATURAN' && (
+        <div className="space-y-4 max-w-2xl mx-auto">
+          <div className="border-b border-slate-200 dark:border-slate-800 pb-3">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Settings className="w-5 h-5 text-emerald-600" />
+              <span>Pengaturan Kasir</span>
+            </h3>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl divide-y divide-slate-100 dark:divide-slate-800 shadow-sm overflow-hidden">
+            {/* 1. EDIT PROFIL */}
+            <button
+              type="button"
+              onClick={() => setShowEditProfileModal(true)}
+              className="w-full p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors text-left group cursor-pointer"
+            >
+              <div className="flex items-center space-x-3.5">
+                <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 shrink-0">
+                  <User className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="font-bold text-sm text-slate-900 dark:text-white">Edit Profil</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">Ubah nama dan nomor WhatsApp kasir</div>
+                </div>
+              </div>
+              <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600 transition-colors" />
+            </button>
+
+            {/* 2. PRINTER */}
+            <button
+              type="button"
+              onClick={() => setShowPrinterModal(true)}
+              className="w-full p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors text-left group cursor-pointer"
+            >
+              <div className="flex items-center space-x-3.5">
+                <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 shrink-0">
+                  <Printer className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="font-bold text-sm text-slate-900 dark:text-white">Printer</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">Pengaturan cetak nota thermal 58mm</div>
+                </div>
+              </div>
+              <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600 transition-colors" />
+            </button>
+
+            {/* 3. TEMA / TAMPILAN */}
+            <button
+              type="button"
+              onClick={() => setShowThemeModal(true)}
+              className="w-full p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors text-left group cursor-pointer"
+            >
+              <div className="flex items-center space-x-3.5">
+                <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 shrink-0">
+                  <Sun className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="font-bold text-sm text-slate-900 dark:text-white">Tema / Tampilan</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">Pilih mode tampilan Terang (Light) atau Gelap (Dark)</div>
+                </div>
+              </div>
+              <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600 transition-colors" />
+            </button>
+
+            {/* 4. BANTUAN & CS PILIN */}
+            <a
+              href="https://wa.me/6281215566630?text=Halo%20CS%20PILIN%20ERP,%20saya%20butuh%20bantuan%20kasir"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors text-left group cursor-pointer"
+            >
+              <div className="flex items-center space-x-3.5">
+                <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 shrink-0">
+                  <Phone className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="font-bold text-sm text-slate-900 dark:text-white">Hubungi CS via WhatsApp</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">CS PILIN 0812 15566630</div>
+                </div>
+              </div>
+              <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600 transition-colors" />
+            </a>
+
+            {/* 5. TENTANG PILIN */}
+            <button
+              type="button"
+              onClick={() => setShowAboutModal(true)}
+              className="w-full p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors text-left group cursor-pointer"
+            >
+              <div className="flex items-center space-x-3.5">
+                <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 shrink-0">
+                  <Info className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="font-bold text-sm text-slate-900 dark:text-white">Tentang PILIN</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">Informasi aplikasi PILIN ERP v0.1.0</div>
+                </div>
+              </div>
+              <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600 transition-colors" />
+            </button>
+
+            {/* 6. LOGOUT */}
+            <button
+              type="button"
+              onClick={handleKasirLogout}
+              className="w-full p-4 flex items-center justify-between hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors text-left group cursor-pointer"
+            >
+              <div className="flex items-center space-x-3.5">
+                <div className="p-2 rounded-lg bg-rose-100 dark:bg-rose-950/80 text-rose-600 dark:text-rose-400 shrink-0">
+                  <LogOut className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="font-bold text-sm text-rose-600 dark:text-rose-400">Logout</div>
+                  <div className="text-xs text-rose-500/80">Keluar dari akun Kasir</div>
+                </div>
+              </div>
+              <ChevronRight className="w-5 h-5 text-rose-400 group-hover:text-rose-600 transition-colors" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: TEMA / TAMPILAN */}
+      {showThemeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Sun className="w-5 h-5 text-amber-500" />
+                <span>Pengaturan Tema &amp; Tampilan</span>
+              </h3>
+              <button onClick={() => setShowThemeModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
             </div>
-            <div className="bg-slate-50 dark:bg-slate-950 p-5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2">
-              <div className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Kas Laci Tunai</div>
-              <div className="text-2xl font-black text-blue-600 dark:text-blue-400">Rp 1.450.000</div>
-              <div className="text-[11px] text-slate-500 dark:text-slate-400">Terverifikasi Laci Kasir</div>
-            </div>
-            <div className="bg-slate-50 dark:bg-slate-950 p-5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2">
-              <div className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Status Permintaan ke KC</div>
-              <div className="text-2xl font-black text-amber-600 dark:text-amber-400">{requestedApprovals.length} Item</div>
-              <div className="text-[11px] text-slate-500 dark:text-slate-400">Diskon / Pembatalan</div>
+            <div className="space-y-3 text-xs">
+              <button
+                type="button"
+                onClick={() => { setTheme('light'); setShowThemeModal(false); }}
+                className={`w-full p-4 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                  theme === 'light'
+                    ? 'bg-amber-500/10 border-amber-500 text-amber-700 dark:text-amber-400 font-bold'
+                    : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Sun className="w-5 h-5 text-amber-500" />
+                  <div className="text-left">
+                    <div className="font-bold">Terang (Light UI Default)</div>
+                    <div className="text-[11px] text-slate-500">Tampilan bersih dengan latar belakang terang</div>
+                  </div>
+                </div>
+                {theme === 'light' && <CheckCircle2 className="w-5 h-5 text-amber-500" />}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setTheme('dark'); setShowThemeModal(false); }}
+                className={`w-full p-4 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                  theme === 'dark'
+                    ? 'bg-slate-800 border-slate-700 text-white font-bold'
+                    : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Moon className="w-5 h-5 text-blue-400" />
+                  <div className="text-left">
+                    <div className="font-bold">Gelap (Dark Mode)</div>
+                    <div className="text-[11px] text-slate-500">Tampilan gelap kontras tinggi</div>
+                  </div>
+                </div>
+                {theme === 'dark' && <CheckCircle2 className="w-5 h-5 text-blue-400" />}
+              </button>
             </div>
           </div>
         </div>
@@ -1122,6 +1412,147 @@ ${profile.terms_and_conditions}`;
         defaultCustomerPhone={broadcastTargetPhone}
         defaultCustomerName={broadcastTargetName}
       />
+
+      {/* MODAL: EDIT PROFIL KASIR */}
+      {showEditProfileModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <User className="w-5 h-5 text-blue-500" />
+                <span>Edit Profil Kasir</span>
+              </h3>
+              <button onClick={() => setShowEditProfileModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveKasirProfile} className="space-y-4">
+              <div>
+                <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">Nama Petugas Kasir:</label>
+                <input
+                  type="text"
+                  value={profileName}
+                  onChange={e => setProfileName(e.target.value)}
+                  required
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white font-bold"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">No. WhatsApp / HP Petugas:</label>
+                <input
+                  type="text"
+                  value={profilePhone}
+                  onChange={e => setProfilePhone(e.target.value)}
+                  required
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white font-mono"
+                />
+              </div>
+              <div className="flex justify-end space-x-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowEditProfileModal(false)}
+                  className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-lg cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-lg shadow flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>Simpan Profil</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: PRINTER THERMAL 58MM */}
+      {showPrinterModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Printer className="w-5 h-5 text-emerald-500" />
+                <span>Pengaturan Printer</span>
+              </h3>
+              <button onClick={() => setShowPrinterModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-4 text-xs">
+              <div className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800">
+                <div>
+                  <div className="font-bold text-slate-900 dark:text-white">Cetak Nota Otomatis</div>
+                  <div className="text-[11px] text-slate-500">Cetak nota thermal setelah transaksi lunas</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAutoPrintEnabled(!autoPrintEnabled)}
+                  className={`px-3 py-1.5 rounded-lg font-bold text-xs transition-all cursor-pointer ${
+                    autoPrintEnabled ? 'bg-emerald-600 text-white' : 'bg-slate-300 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                  }`}
+                >
+                  {autoPrintEnabled ? 'AKTIF' : 'NONAKTIF'}
+                </button>
+              </div>
+
+              <div className="p-3.5 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 space-y-1">
+                <div className="font-bold text-slate-900 dark:text-white">Ukuran Kertas Thermal</div>
+                <div className="text-[11px] text-slate-500 font-mono">Standard Thermal Receipt 58mm (POS Bluetooth/USB)</div>
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPrinterModal(false);
+                    if (recentTransactions.length > 0) {
+                      setActiveReceiptTrx(recentTransactions[0]);
+                    } else {
+                      window.print();
+                    }
+                  }}
+                  className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow cursor-pointer"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Tes Cetak Nota Thermal 58mm</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: TENTANG PILIN */}
+      {showAboutModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Info className="w-5 h-5 text-purple-500" />
+                <span>Tentang PILIN</span>
+              </h3>
+              <button onClick={() => setShowAboutModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-3 text-xs">
+              <div className="p-4 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 space-y-1 text-center">
+                <div className="font-black text-lg text-slate-900 dark:text-white uppercase tracking-wider">PILIN ERP</div>
+                <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 font-mono">Version v0.1.0</div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 pt-2">
+                  Sistem Manajemen Operasional &amp; Transaksi POS Multi-Outlet Terintegrasi.
+                </div>
+              </div>
+              <div className="text-[11px] text-slate-400 text-center">
+                &copy; 2026 PILIN ERP. All Rights Reserved.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* THERMAL 58 MM RECEIPT & WA MODAL */}
       {activeReceiptTrx && (
@@ -1215,12 +1646,377 @@ ${profile.terms_and_conditions}`;
                 className="py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow"
               >
                 <Send className="w-4 h-4" />
-                <span>Kirim WA (wa.me)</span>
+                <span>[Kirim]</span>
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* MODAL: POS / BUAT NOTA */}
+      {showPosModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-xl w-full p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <PlusCircle className="w-5 h-5 text-emerald-500" />
+                <span>Input Transaksi (Buat Nota POS Kasir)</span>
+              </h3>
+              <button onClick={() => setShowPosModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={(e) => { handleCreateTransaction(e); setShowPosModal(false); }} className="space-y-4">
+              <div>
+                <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">Pilih Pelanggan dari Database:</label>
+                <select
+                  value={selectedCustomerId}
+                  onChange={e => handlePOSCustomerSelect(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white font-bold"
+                >
+                  {customerList.map(c => (
+                    <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>
+                  ))}
+                  <option value="NEW_CUSTOMER">+ Input Pelanggan Baru / Unregistered</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">Nama Pelanggan:</label>
+                  <input
+                    type="text"
+                    required
+                    value={customerName}
+                    onChange={e => setCustomerName(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">No. WhatsApp:</label>
+                  <input
+                    type="text"
+                    required
+                    value={customerPhone}
+                    onChange={e => setCustomerPhone(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">Layanan Jasa:</label>
+                  <select
+                    value={selectedService}
+                    onChange={e => {
+                      setSelectedService(e.target.value);
+                      if (e.target.value.includes('Express')) setServicePrice(35000);
+                      else if (e.target.value.includes('Regular')) setServicePrice(20000);
+                      else setServicePrice(50000);
+                    }}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white"
+                  >
+                    <option value="Layanan Cuci Express">Cuci Express (Rp 35.000)</option>
+                    <option value="Layanan Cuci Regular">Cuci Regular (Rp 20.000)</option>
+                    <option value="Layanan Premium Treatment">Premium Treatment (Rp 50.000)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">Jumlah (Qty):</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={qty}
+                    onChange={e => setQty(parseInt(e.target.value, 10) || 1)}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">Metode Pembayaran:</label>
+                <select
+                  value={paymentMethod}
+                  onChange={e => setPaymentMethod(e.target.value as any)}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white"
+                >
+                  <option value="CASH">Tunai (Cash / Laci Kasir)</option>
+                  <option value="QRIS_TRANSFER">Nontunai (QRIS / Bank Transfer)</option>
+                </select>
+              </div>
+
+              <div className="p-4 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 flex justify-between items-center">
+                <span className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase">Total Pembayaran:</span>
+                <span className="text-xl font-black text-emerald-600 dark:text-emerald-400">Rp {(servicePrice * qty).toLocaleString('id-ID')}</span>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Simpan Transaksi &amp; Cetak Nota</span>
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: DAFTAR SPK */}
+      {showSpkModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-2xl w-full p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Wrench className="w-5 h-5 text-amber-500" />
+                <span>Daftar SPK &amp; Antrian Pengerjaan ({spkOrders.length})</span>
+              </h3>
+              <button onClick={() => setShowSpkModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="overflow-x-auto max-h-96">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-950 font-bold">
+                    <th className="p-3">No. SPK</th>
+                    <th className="p-3">Nama Pelanggan</th>
+                    <th className="p-3">Layanan</th>
+                    <th className="p-3">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-slate-800 dark:text-slate-200">
+                  {spkOrders.map(o => (
+                    <tr key={o.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                      <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400">{o.order_number || o.id}</td>
+                      <td className="p-3 font-bold text-slate-900 dark:text-white">{o.customer_name || 'Pelanggan Umum'}</td>
+                      <td className="p-3">{o.service_name || 'Cuci Express'}</td>
+                      <td className="p-3">
+                        <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-400 border border-amber-300 dark:border-amber-800 rounded font-bold text-[10px] uppercase">
+                          {o.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: PELUNASAN / PENGAMBILAN */}
+      {showPickupModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-2xl w-full p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-blue-500" />
+                <span>Pelunasan &amp; Pengambilan Barang Selesai</span>
+              </h3>
+              <button onClick={() => setShowPickupModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-3 text-xs">
+              <div className="p-3.5 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                <div>
+                  <div className="font-bold text-slate-900 dark:text-white">NOT-2026-0891 — Siti Rahma</div>
+                  <div className="text-slate-500 font-mono">Layanan Premium Treatment (7x) • Status: Siap Diambil</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPickupModal(false);
+                    setFeedback({ type: 'success', text: 'Nota NOT-2026-0891 (Siti Rahma) telah dilunasi dan barang telah diserahkan.' });
+                  }}
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg text-xs cursor-pointer"
+                >
+                  Serahkan Barang
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: RIWAYAT NOTA TRANSAKSI */}
+      {showHistoryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-3xl w-full p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <FileText className="w-5 h-5 text-emerald-500" />
+                <span>Daftar Riwayat Nota Transaksi Hari Ini</span>
+              </h3>
+              <button onClick={() => setShowHistoryModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {recentTransactions.map(t => (
+                <div key={t.id} className="p-3.5 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
+                  <div>
+                    <div className="font-bold text-slate-900 dark:text-white">{t.id} — {t.customer} ({t.phone})</div>
+                    <div className="text-[11px] text-slate-500 font-mono">{t.service} ({t.qty}x) • {t.method} • {t.time}</div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => { setShowHistoryModal(false); setActiveReceiptTrx(t); }}
+                      className="px-2.5 py-1 bg-white dark:bg-slate-800 hover:bg-slate-100 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 font-bold rounded text-[11px] flex items-center gap-1 cursor-pointer"
+                    >
+                      <Printer className="w-3.5 h-3.5 text-blue-500" />
+                      <span>Cetak Nota</span>
+                    </button>
+                    <button
+                      onClick={() => window.open(generateWaReceiptLink(t), '_blank')}
+                      className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded text-[11px] flex items-center gap-1 cursor-pointer"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      <span>[Kirim WA]</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: STATISTIK OPERASIONAL & FINANCIAL OMZET */}
+      {showStatsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <BarChart3 className="w-5 h-5 text-emerald-500" />
+                <span>Statistik Operasional &amp; Keuangan Kasir</span>
+              </h3>
+              <button onClick={() => setShowStatsModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-3 text-xs">
+              <div className="p-4 bg-emerald-50 dark:bg-emerald-950/60 rounded-xl border border-emerald-200 dark:border-emerald-800 text-center">
+                <div className="text-[11px] font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider">Total Omzet Hari Ini</div>
+                <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 pt-1">
+                  Rp {recentTransactions.reduce((acc, t) => acc + t.total, 0).toLocaleString('id-ID')}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800">
+                  <div className="text-[10px] font-bold text-slate-500 uppercase">Tunai (Cash)</div>
+                  <div className="font-extrabold text-sm text-slate-900 dark:text-white pt-1">
+                    Rp {recentTransactions.filter(t => t.method === 'CASH').reduce((acc, t) => acc + t.total, 0).toLocaleString('id-ID')}
+                  </div>
+                </div>
+                <div className="p-3 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800">
+                  <div className="text-[10px] font-bold text-slate-500 uppercase">Nontunai (QRIS)</div>
+                  <div className="font-extrabold text-sm text-slate-900 dark:text-white pt-1">
+                    Rp {recentTransactions.filter(t => t.method === 'QRIS_TRANSFER').reduce((acc, t) => acc + t.total, 0).toLocaleString('id-ID')}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: PENDAFTARAN MEMBER */}
+      {showMemberModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <UserPlus className="w-5 h-5 text-blue-500" />
+                <span>Pendaftaran Member Pelanggan Baru</span>
+              </h3>
+              <button onClick={() => setShowMemberModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={(e) => { handleAddCustomer(e); setShowMemberModal(false); }} className="space-y-4">
+              <div>
+                <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">Nama Lengkap Pelanggan:</label>
+                <input
+                  type="text"
+                  required
+                  value={newCustName}
+                  onChange={e => setNewCustName(e.target.value)}
+                  placeholder="Nama lengkap..."
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white font-bold"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">Nomor WhatsApp HP:</label>
+                <input
+                  type="text"
+                  required
+                  value={newCustPhone}
+                  onChange={e => setNewCustPhone(e.target.value)}
+                  placeholder="08xxxxxxxxxx"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white font-mono"
+                />
+              </div>
+              <button
+                type="submit"
+                className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs cursor-pointer shadow-md"
+              >
+                Simpan Pelanggan Member Baru
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* FIXED BOTTOM NAVIGATION BAR */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 py-2.5 px-4 z-40 flex justify-around items-center shadow-lg font-sans transition-colors">
+        <button
+          type="button"
+          onClick={() => setActiveBottomNav('BERANDA')}
+          className={`flex flex-col items-center gap-1 py-1 px-4 rounded-xl transition-all cursor-pointer ${
+            activeBottomNav === 'BERANDA' ? 'text-emerald-600 dark:text-emerald-400 font-extrabold' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium'
+          }`}
+        >
+          <Home className="w-5 h-5" />
+          <span className="text-[11px]">BERANDA</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveBottomNav('KONSUMEN')}
+          className={`flex flex-col items-center gap-1 py-1 px-4 rounded-xl transition-all cursor-pointer ${
+            activeBottomNav === 'KONSUMEN' ? 'text-emerald-600 dark:text-emerald-400 font-extrabold' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium'
+          }`}
+        >
+          <Users className="w-5 h-5" />
+          <span className="text-[11px]">Konsumen</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveBottomNav('CRM')}
+          className={`flex flex-col items-center gap-1 py-1 px-4 rounded-xl transition-all cursor-pointer ${
+            activeBottomNav === 'CRM' ? 'text-emerald-600 dark:text-emerald-400 font-extrabold' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium'
+          }`}
+        >
+          <MessageSquare className="w-5 h-5" />
+          <span className="text-[11px]">CRM</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveBottomNav('PENGATURAN')}
+          className={`flex flex-col items-center gap-1 py-1 px-4 rounded-xl transition-all cursor-pointer ${
+            activeBottomNav === 'PENGATURAN' ? 'text-emerald-600 dark:text-emerald-400 font-extrabold' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium'
+          }`}
+        >
+          <Settings className="w-5 h-5" />
+          <span className="text-[11px]">Pengaturan</span>
+        </button>
+      </nav>
     </div>
   );
 }

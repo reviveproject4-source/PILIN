@@ -224,7 +224,7 @@ export function LaporanOtorisasiControl({ isDemo = false }: LaporanOtorisasiCont
 
         {filteredRecords.length === 0 ? (
           <div className="p-6 bg-slate-50 border border-slate-200 text-slate-500 rounded-xl text-xs font-bold text-center">
-            Tidak ada data persetujuan otorisasi yang sesuai dengan filter.
+            Belum ada data persetujuan otorisasi.
           </div>
         ) : (
           <div className="overflow-x-auto border border-slate-200 rounded-xl">

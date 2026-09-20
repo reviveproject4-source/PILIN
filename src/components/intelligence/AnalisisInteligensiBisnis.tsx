@@ -117,9 +117,9 @@ export function AnalisisInteligensiBisnis({ isDemo = false }: AnalisisInteligens
               onChange={(e) => setSelectedPeriod(e.target.value)}
               className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5 font-bold text-slate-800 dark:text-white text-xs focus:outline-none focus:border-[#F26522]"
             >
-              <option value="MONTHLY">Bulan Ini (Jun 2026)</option>
-              <option value="QUARTERLY">Kuartal Ini (Q2 2026)</option>
-              <option value="YEARLY">Tahun Ini (2026)</option>
+              <option value="MONTHLY">Bulan Ini</option>
+              <option value="QUARTERLY">Kuartal Ini</option>
+              <option value="YEARLY">Tahun Ini</option>
             </select>
           </div>
 

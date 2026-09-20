@@ -54,7 +54,7 @@ export default function SalesLoginPage() {
       <div className="w-full max-w-md space-y-8 bg-slate-800 p-8 rounded-xl shadow-2xl border border-slate-700">
         <div>
           <h1 className="text-center text-3xl font-extrabold tracking-tight text-white">
-            MINARA Sales Portal
+            PILIN Sales Portal
           </h1>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleLogin}>
@@ -74,7 +74,7 @@ export default function SalesLoginPage() {
                 type="email"
                 required
                 className="relative block w-full rounded-md border-0 bg-slate-700 py-2 px-3 text-white placeholder-slate-400 ring-1 ring-inset ring-slate-600 focus:ring-2 focus:ring-inset focus:ring-indigo-500 sm:text-sm"
-                placeholder="sales@minara.id"
+                placeholder="sales@pilin.id"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />

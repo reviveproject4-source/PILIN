@@ -52,12 +52,12 @@ function DashboardContent() {
   // 2. PEGAWAI ROLE -> REDIRECT TO TEAM_PRODUKSI
   if (activeRole === 'PEGAWAI') {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
         <DashboardTopBar role="TEAM_PRODUKSI" />
-        <main className="flex-1 p-6 max-w-7xl w-full mx-auto space-y-6">
+        <main className="flex-1 p-4 sm:p-6 w-full space-y-6">
           <TeamProduksiWorkspace
             actorUserId="user-prod-01"
-            actorName="Tim Produksi Staf"
+            actorName="Tim Produksi"
             businessId="tenant-001"
             branchId="branch-001"
           />
@@ -69,12 +69,12 @@ function DashboardContent() {
   // 3. KASIR DEDICATED TRANSACTION DASHBOARD
   if (activeRole === 'KASIR') {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
         <DashboardTopBar role="KASIR" />
-        <main className="flex-1 p-6 max-w-7xl w-full mx-auto space-y-6">
+        <main className="flex-1 p-4 sm:p-6 w-full space-y-6">
           <KasirTransactionWorkspace
             actorUserId="user-kasir-01"
-            actorName="Siti Rahma"
+            actorName="Kasir"
             businessId="tenant-001"
             branchId="branch-001"
           />
@@ -86,9 +86,9 @@ function DashboardContent() {
   // 4. TEAM PRODUKSI DEDICATED WORKSPACE
   if (activeRole === 'TEAM_PRODUKSI') {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
         <DashboardTopBar role="TEAM_PRODUKSI" />
-        <main className="flex-1 p-6 max-w-7xl w-full mx-auto space-y-6">
+        <main className="flex-1 p-4 sm:p-6 w-full space-y-6">
           <TeamProduksiWorkspace
             actorUserId="user-prod-01"
             actorName="Tim Produksi Staf"
@@ -102,16 +102,16 @@ function DashboardContent() {
 
   // 5. KEPALA CABANG ROLE DASHBOARD (DEFAULT FALLBACK FOR KC)
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
       <DashboardTopBar role="KEPALA_CABANG" />
-      <main className="flex-1 p-6 max-w-7xl w-full mx-auto">
+      <div className="flex-1 w-full flex">
         <ManagementControlDashboard
           actorUserId="user-kc-01"
           actorRole="KEPALA_CABANG"
           businessId="tenant-001"
           branchId="branch-001"
         />
-      </main>
+      </div>
     </div>
   );
 }

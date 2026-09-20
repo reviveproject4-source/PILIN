@@ -1,14 +1,16 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Building2, Save, Upload, CheckCircle2, Image as ImageIcon } from 'lucide-react';
+import { Building2, Save, Upload, CheckCircle2, Image as ImageIcon, Sun, Moon } from 'lucide-react';
 import { BusinessProfileService, BusinessProfileConfig } from '@/domains/business/businessProfileService';
+import { useTheme } from '@/components/ThemeProvider';
 
 interface IdentitasUsahaDashboardProps {
   businessId?: string;
 }
 
 export function IdentitasUsahaDashboard({ businessId = 'tenant-001' }: IdentitasUsahaDashboardProps) {
+  const { theme, setTheme } = useTheme();
   const [profile, setProfile] = useState<BusinessProfileConfig>(() =>
     BusinessProfileService.getProfile(businessId)
   );
@@ -99,7 +101,7 @@ export function IdentitasUsahaDashboard({ businessId = 'tenant-001' }: Identitas
                 required
                 value={businessName}
                 onChange={(e) => setBusinessName(e.target.value)}
-                placeholder="Contoh: PILIN CLEANING & CARE"
+                placeholder="Nama usaha..."
                 className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-white font-bold focus:outline-none focus:border-emerald-500"
               />
             </div>
@@ -113,7 +115,7 @@ export function IdentitasUsahaDashboard({ businessId = 'tenant-001' }: Identitas
                 required
                 value={businessAddress}
                 onChange={(e) => setBusinessAddress(e.target.value)}
-                placeholder="Contoh: Jl. Pemuda No. 123, Jakarta Pusat"
+                placeholder="Alamat lengkap..."
                 className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-white font-semibold focus:outline-none focus:border-emerald-500"
               />
             </div>
@@ -127,7 +129,7 @@ export function IdentitasUsahaDashboard({ businessId = 'tenant-001' }: Identitas
                 required
                 value={businessPhone}
                 onChange={(e) => setBusinessPhone(e.target.value)}
-                placeholder="Contoh: 081234567890"
+                placeholder="Nomor kontak/WA..."
                 className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-white font-mono focus:outline-none focus:border-emerald-500"
               />
             </div>
@@ -192,9 +194,43 @@ export function IdentitasUsahaDashboard({ businessId = 'tenant-001' }: Identitas
               required
               value={terms}
               onChange={(e) => setTerms(e.target.value)}
-              placeholder="Contoh: 1. Barang yang telah diserahkan wajib dicek kembali saat pengambilan."
+              placeholder="Syarat dan ketentuan nota..."
               className="w-full p-3 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-white font-mono focus:outline-none focus:border-emerald-500 resize-y"
             />
+          </div>
+        </div>
+
+        {/* Section 4: Pengaturan Tema / Tampilan */}
+        <div className="space-y-4 bg-slate-50 dark:bg-slate-950 p-5 rounded-xl border border-slate-200 dark:border-slate-800">
+          <h2 className="text-sm font-extrabold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+            <Sun className="w-4 h-4 text-amber-500" />
+            <span>4. Pengaturan Tema / Tampilan System</span>
+          </h2>
+          <div className="flex items-center space-x-3">
+            <button
+              type="button"
+              onClick={() => setTheme('light')}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border cursor-pointer ${
+                theme === 'light'
+                  ? 'bg-amber-500 text-white border-amber-600 shadow-md'
+                  : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700'
+              }`}
+            >
+              <Sun className="w-4 h-4" />
+              <span>Terang (Light UI Default)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setTheme('dark')}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border cursor-pointer ${
+                theme === 'dark'
+                  ? 'bg-slate-800 text-white border-slate-700 shadow-md'
+                  : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700'
+              }`}
+            >
+              <Moon className="w-4 h-4" />
+              <span>Gelap (Dark Mode)</span>
+            </button>
           </div>
         </div>
 

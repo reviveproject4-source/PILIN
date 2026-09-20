@@ -185,7 +185,7 @@ export function ProductMasterDashboard() {
                 required
                 value={nama}
                 onChange={(e) => setNama(e.target.value)}
-                placeholder={itemType === 'PRODUCT' ? 'Contoh: Oli Mesin Synthetic 1L' : 'Contoh: Grooming Premium'}
+                placeholder={itemType === 'PRODUCT' ? 'Nama produk...' : 'Nama layanan...'}
                 className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#F26522]"
               />
             </div>
@@ -200,7 +200,7 @@ export function ProductMasterDashboard() {
                 min="1"
                 value={baseHarga}
                 onChange={(e) => setBaseHarga(e.target.value === '' ? '' : Number(e.target.value))}
-                placeholder="Contoh: 100000"
+                placeholder="Harga jual..."
                 className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#F26522]"
               />
             </div>
@@ -274,7 +274,7 @@ export function ProductMasterDashboard() {
                     min="0"
                     value={hppActual}
                     onChange={(e) => setHppActual(e.target.value === '' ? '' : Number(e.target.value))}
-                    placeholder="Contoh: 35000"
+                    placeholder="Nominal HPP..."
                     className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#F26522]"
                   />
                 </div>
@@ -304,7 +304,7 @@ export function ProductMasterDashboard() {
               type="text"
               value={bahanBaku}
               onChange={(e) => setBahanBaku(e.target.value)}
-              placeholder={itemType === 'PRODUCT' ? 'Contoh: Kemasan Botol 1L' : 'Contoh: Sabun 50ml, Microfiber 1 pcs'}
+              placeholder="Rincian bahan baku / material..."
               className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#F26522]"
             />
           </div>

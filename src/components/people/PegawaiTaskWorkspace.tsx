@@ -361,7 +361,7 @@ export function PegawaiTaskWorkspace({
                       type="text"
                       value={evidenceSpkId}
                       onChange={(e) => setEvidenceSpkId(e.target.value)}
-                      placeholder="Contoh: SO-2026-001"
+                      placeholder="Nomor SPK..."
                       style={{ width: '100%', padding: '8px', background: '#1e293b', border: '1px solid #475569', color: '#ffffff', borderRadius: '6px', fontSize: '13px' }}
                     />
                   </div>

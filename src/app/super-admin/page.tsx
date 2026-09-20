@@ -1207,7 +1207,7 @@ export default function SuperAdminPage() {
                   disabled={formLoading}
                   value={formData.code}
                   onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                  placeholder="e.g. minara-salon"
+                  placeholder="e.g. pilin-salon"
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-orange-500 disabled:opacity-50 font-mono"
                 />
               </div>

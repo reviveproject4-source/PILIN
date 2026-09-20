@@ -1012,7 +1012,7 @@ export function PeopleManagementDashboard({
                   <label className="text-slate-400 font-bold block mb-1">Gaji Pokok (Rp)</label>
                   <input
                     type="number"
-                    placeholder="Contoh: 4500000"
+                    placeholder="Nominal gaji pokok..."
                     value={empForm.base_salary}
                     onChange={e => setEmpForm({ ...empForm, base_salary: e.target.value === '' ? '' : Number(e.target.value) })}
                     className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-xl font-mono font-bold"
@@ -1022,7 +1022,7 @@ export function PeopleManagementDashboard({
                   <label className="text-slate-400 font-bold block mb-1">Incentive Rate (Rp per SPK)</label>
                   <input
                     type="number"
-                    placeholder="Contoh: 15000"
+                    placeholder="Nominal insentif..."
                     value={empForm.incentive_rate}
                     onChange={e => setEmpForm({ ...empForm, incentive_rate: e.target.value === '' ? '' : Number(e.target.value) })}
                     className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-xl font-mono font-bold"
@@ -1078,7 +1078,7 @@ export function PeopleManagementDashboard({
                 <input
                   type="text"
                   required
-                  placeholder="Contoh: Cabang Bogor Central"
+                  placeholder="Nama cabang baru..."
                   value={branchForm.name}
                   onChange={e => setBranchForm({ ...branchForm, name: e.target.value })}
                   className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-xl font-bold"

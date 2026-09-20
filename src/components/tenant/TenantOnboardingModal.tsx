@@ -116,7 +116,7 @@ export function TenantOnboardingModal({ onSuccess }: TenantOnboardingModalProps)
                 required
                 value={ownerName}
                 onChange={(e) => setOwnerName(e.target.value)}
-                placeholder="Contoh: Budi Santoso"
+                placeholder="Masukkan nama lengkap owner / PIC..."
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#F26522]"
               />
             </div>
@@ -133,7 +133,7 @@ export function TenantOnboardingModal({ onSuccess }: TenantOnboardingModalProps)
                 required
                 value={businessName}
                 onChange={(e) => setBusinessName(e.target.value)}
-                placeholder="Contoh: CleanCare Laundry, AutoDetailing Pro, dll."
+                placeholder="Masukkan nama usaha..."
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#F26522]"
               />
             </div>

@@ -40,7 +40,10 @@ export function OwnerDashboard({
   const [masterDataSubTab, setMasterDataSubTab] = useState<'PEGAWAI' | 'CATALOG'>('PEGAWAI');
   const [activeRole] = useState<'OWNER' | 'KEPALA_CABANG' | 'PEGAWAI'>('OWNER');
 
-  const [isOnboarded, setIsOnboarded] = useState<boolean>(true);
+  const [isOnboarded, setIsOnboarded] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    return isDemo ? true : TenantService.isOnboarded();
+  });
   const [trialInfo, setTrialInfo] = useState<{ isActive: boolean; daysRemaining: number; endDateFormatted: string; businessName: string } | null>(null);
 
   useEffect(() => {
@@ -56,6 +59,22 @@ export function OwnerDashboard({
       setActiveSidebarMenu('EXECUTIVE_OVERVIEW');
     }
   }, [isDemo, activeSidebarMenu]);
+
+  if (!isDemo && !isOnboarded) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans flex flex-col selection:bg-[#F26522] selection:text-white transition-colors duration-200">
+        <DashboardTopBar role="OWNER" onLogout={onLogout} />
+        <div className="flex-1 flex items-center justify-center p-4">
+          <TenantOnboardingModal
+            onSuccess={() => {
+              setIsOnboarded(true);
+              setTrialInfo(TenantService.getTrialInfo());
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans flex flex-col selection:bg-[#F26522] selection:text-white transition-colors duration-200">
@@ -79,8 +98,7 @@ export function OwnerDashboard({
                 P
               </div>
               <div>
-                <div className="font-black text-white text-base tracking-wider leading-none">PILIN</div>
-                <div className="text-[10px] text-slate-400 font-medium tracking-tight mt-0.5">Business Operating System</div>
+                <div className="font-black text-white text-base tracking-wider leading-none">PILIN ERP</div>
               </div>
             </div>
 
@@ -899,7 +917,7 @@ export function OwnerDashboard({
           )}
 
           {!isDemo && (activeSidebarMenu === 'PERFORMA_CABANG' || activeSidebarMenu === 'DATABASE_PELANGGAN') && (
-            <OwnerPerformaCabangView businessId={businessId} actorUserId={actorUserId} />
+            <OwnerPerformaCabangView businessId={businessId} actorUserId={actorUserId} isDemo={isDemo} />
           )}
         </main>
       </div>
@@ -911,9 +929,11 @@ export function OwnerDashboard({
 function OwnerPerformaCabangView({
   businessId,
   actorUserId,
+  isDemo = false,
 }: {
   businessId: string;
   actorUserId: string;
+  isDemo?: boolean;
 }) {
   const [branches, setBranches] = useState<{ id: string; name: string; code?: string }[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string>('branch-001');
@@ -977,6 +997,7 @@ function OwnerPerformaCabangView({
         branchId={selectedBranchId}
         actorUserId={actorUserId}
         actorRole="OWNER"
+        isDemo={isDemo}
       />
     </div>
   );

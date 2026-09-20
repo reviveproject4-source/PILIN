@@ -76,7 +76,7 @@ export function TeamProduksiWorkspace({
   const pendingQcCount = spkOrders.filter(o => o.status === 'QC').length;
 
   return (
-    <div className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-6 font-sans transition-colors">
+    <div className="w-full space-y-6 font-sans text-slate-900 dark:text-slate-100 transition-colors">
       {/* Top Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
         <div>
@@ -234,7 +234,7 @@ export function TeamProduksiWorkspace({
                   type="text"
                   value={evidenceSpkId}
                   onChange={e => setEvidenceSpkId(e.target.value)}
-                  placeholder="Contoh: SO-2026-001"
+                  placeholder="Nomor SPK..."
                   className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white"
                 />
               </div>

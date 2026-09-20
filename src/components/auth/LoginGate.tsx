@@ -25,10 +25,10 @@ export function LoginGate({ onLoginSuccess, defaultRole }: LoginGateProps) {
 
     setErrorMessage(null);
     const finalUserName = username.trim() || (
-      selectedRole === 'OWNER' ? 'Bapak Owner' :
-      selectedRole === 'KEPALA_CABANG' ? 'Ahmad Fauzi (KC)' :
-      selectedRole === 'KASIR' ? 'Siti Rahma (Kasir)' :
-      'Tim Produksi Staf'
+      selectedRole === 'OWNER' ? 'Owner' :
+      selectedRole === 'KEPALA_CABANG' ? 'Kepala Cabang' :
+      selectedRole === 'KASIR' ? 'Kasir' :
+      'Tim Produksi'
     );
 
     onLoginSuccess(selectedRole, finalUserName);
@@ -73,10 +73,10 @@ export function LoginGate({ onLoginSuccess, defaultRole }: LoginGateProps) {
             </label>
             <div className="grid grid-cols-2 gap-2">
               {[
-                { role: 'OWNER', label: '👑 OWNER', color: 'border-purple-500/50 bg-purple-950/30 text-purple-300' },
-                { role: 'KEPALA_CABANG', label: '🏢 KEPALA CABANG', color: 'border-orange-500/50 bg-orange-950/30 text-orange-300' },
-                { role: 'KASIR', label: '💳 KASIR', color: 'border-emerald-500/50 bg-emerald-950/30 text-emerald-300' },
-                { role: 'TEAM_PRODUKSI', label: '⚙️ TEAM PRODUKSI', color: 'border-amber-500/50 bg-amber-950/30 text-amber-300' },
+                { role: 'OWNER', label: 'OWNER', color: 'border-purple-500/50 bg-purple-950/30 text-purple-300' },
+                { role: 'KEPALA_CABANG', label: 'KEPALA CABANG', color: 'border-orange-500/50 bg-orange-950/30 text-orange-300' },
+                { role: 'KASIR', label: 'KASIR', color: 'border-emerald-500/50 bg-emerald-950/30 text-emerald-300' },
+                { role: 'TEAM_PRODUKSI', label: 'TEAM PRODUKSI', color: 'border-amber-500/50 bg-amber-950/30 text-amber-300' },
               ].map(item => (
                 <button
                   type="button"

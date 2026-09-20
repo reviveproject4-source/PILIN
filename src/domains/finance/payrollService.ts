@@ -43,7 +43,7 @@ export class PayrollDomainService {
     {
       id: 'att-00000000-0000-0000-0000-000000000001',
       employee_id: 'emp-001',
-      employee_name: 'Dewi Lestari',
+      employee_name: 'Staf 01',
       date: '2026-08-14',
       status: 'PRESENT',
       check_in_time: '08:00:00',
@@ -53,7 +53,7 @@ export class PayrollDomainService {
     {
       id: 'att-00000000-0000-0000-0000-000000000002',
       employee_id: 'emp-002',
-      employee_name: 'Budi Santoso',
+      employee_name: 'Staf 02',
       date: '2026-08-14',
       status: 'PRESENT',
       check_in_time: '08:15:00',
@@ -63,7 +63,7 @@ export class PayrollDomainService {
     {
       id: 'att-00000000-0000-0000-0000-000000000003',
       employee_id: 'emp-002',
-      employee_name: 'Budi Santoso',
+      employee_name: 'Staf 02',
       date: '2026-08-13',
       status: 'LATE',
       check_in_time: '08:35:00',

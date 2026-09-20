@@ -22,6 +22,7 @@ import { CustomerDomainService } from '@/domains/customer/customerService';
 import { GamificationDomainService, PerformanceRecord } from '@/domains/intelligence/gamificationDomainService';
 import { PeopleRepository } from '@/domains/people/peopleRepository';
 import { Employee } from '@/domains/people/people.types';
+import { POSTransactionService } from '@/domains/commerce/POSTransactionService';
 
 interface ManagementControlDashboardProps {
   businessId: string;
@@ -62,7 +63,7 @@ export function ManagementControlDashboard({
   const [pendingDiscounts, setPendingDiscounts] = useState(() => {
     if (isDemo) {
       return [
-        { id: 'disc-01', cashierName: 'Siti Rahma', notaNumber: 'NOT-2026-0891', originalTotal: 350000, requestedPercent: 15, requestedAmount: 52500, time: '10:15 WIB' },
+        { id: 'disc-01', cashierName: 'Staf Kasir 01', notaNumber: 'NOT-2026-0891', originalTotal: 350000, requestedPercent: 15, requestedAmount: 52500, time: '10:15 WIB' },
       ];
     }
     return [];
@@ -70,17 +71,34 @@ export function ManagementControlDashboard({
   const [pendingCancellations, setPendingCancellations] = useState(() => {
     if (isDemo) {
       return [
-        { id: 'canc-01', cashierName: 'Budi Santoso', notaNumber: 'NOT-2026-0885', originalTotal: 120000, reason: 'Pelanggan membatalkan pesanan sebelum pengerjaan', time: '09:40 WIB' },
+        { id: 'canc-01', cashierName: 'Staf Kasir 02', notaNumber: 'NOT-2026-0885', originalTotal: 120000, reason: 'Pelanggan membatalkan pesanan sebelum pengerjaan', time: '09:40 WIB' },
       ];
     }
     return [];
   });
 
+  // Omzet Hari Ini Calculation
+  const { todayOmzet, hasTransactionsToday } = React.useMemo(() => {
+    const transactions = POSTransactionService.getTransactions(isDemo, businessId);
+    const todayStr = currentDate || new Date().toISOString().substring(0, 10);
+    const completedToday = transactions.filter((t) => {
+      const isCompleted = t.status === 'COMPLETED';
+      const isToday = t.created_at && t.created_at.substring(0, 10) === todayStr;
+      const isThisBranch = !branchId || t.branch_id === branchId || t.branch_id === 'branch-001';
+      return isCompleted && isToday && isThisBranch;
+    });
+    const total = completedToday.reduce((sum, t) => sum + (t.total_amount || 0), 0);
+    return {
+      todayOmzet: total,
+      hasTransactionsToday: completedToday.length > 0 && total > 0,
+    };
+  }, [isDemo, businessId, branchId, currentDate]);
+
   // Gamification State
   const [gamificationRecords] = useState<PerformanceRecord[]>(() => isDemo ? GamificationDomainService.getRecords() : []);
   const [branchGamificationTier] = useState(() => {
     const spkCount = spkOrders.length;
-    const totalRev = spkCount * 50000;
+    const totalRev = isDemo ? spkCount * 50000 : todayOmzet;
     return GamificationDomainService.calculateTier(spkCount, totalRev, 8);
   });
 
@@ -90,10 +108,10 @@ export function ManagementControlDashboard({
   // WA Engine Logs & Template State
   const [waLogs, setWaLogs] = useState<SapaanLogRecord[]>(() => RetentionDomainService.getSapaanLogs(isDemo));
   const [selectedWaCustomerPhone, setSelectedWaCustomerPhone] = useState<string>(isDemo ? '08212345678' : '');
-  const [selectedWaCustomerName, setSelectedWaCustomerName] = useState<string>(isDemo ? 'Dewi Lestari' : '');
+  const [selectedWaCustomerName, setSelectedWaCustomerName] = useState<string>(isDemo ? 'Pelanggan 01' : '');
   const [waCategoryKC, setWaCategoryKC] = useState<'SAPAAN' | 'REMINDER' | 'QUOTE' | 'HYPPOSELLING'>('HYPPOSELLING');
   const [customMessageKC, setCustomMessageKC] = useState<string>(
-    isDemo ? 'Halo Kak Dewi Lestari! Khusus pelanggan setia cabang kami, nikmati promo spesial perawatan terbatas minggu ini. Balas pesan ini untuk info promo!' : ''
+    isDemo ? 'Halo Kak! Khusus pelanggan setia cabang kami, nikmati promo spesial perawatan terbatas minggu ini. Balas pesan ini untuk info promo!' : ''
   );
 
   // Team Presensi State
@@ -417,7 +435,7 @@ export function ManagementControlDashboard({
   };
 
   return (
-    <div className="w-full min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex font-sans transition-colors duration-200">
+    <div className="w-full flex-1 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex font-sans transition-colors duration-200">
       {/* SIDEBAR NAVIGATION — OFFICIAL IA FOR KEPALA CABANG */}
       <aside className="w-64 bg-white dark:bg-[#0b172a] text-slate-800 dark:text-slate-200 border-r border-slate-200 dark:border-slate-800 p-5 flex flex-col gap-6 shrink-0 hidden lg:flex transition-colors">
         <div>
@@ -568,38 +586,21 @@ export function ManagementControlDashboard({
       </aside>
 
       {/* MAIN CONTENT WORKSPACE */}
-      <main style={{ flex: 1, padding: '24px', overflowY: 'auto' }}>
+      <main className="flex-1 p-6 overflow-y-auto space-y-6">
         {/* Header Bar */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', borderBottom: '1px solid #334155', paddingBottom: '16px' }}>
+        <div className="flex flex-wrap gap-3 justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-4">
           <div>
-            <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 800, color: '#f8fafc' }}>
-              Pusat Pengawasan & Kendali Operasional Cabang
+            <h1 className="text-xl font-bold text-slate-900 dark:text-white">
+              Pusat Pengawasan &amp; Kendali Operasional Cabang
             </h1>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div className="flex items-center gap-3">
             <button
               onClick={() => setShowBroadcastModal(true)}
-              style={{
-                padding: '6px 14px',
-                backgroundColor: '#F26522',
-                border: 'none',
-                borderRadius: '8px',
-                color: '#ffffff',
-                fontSize: '12px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-              }}
+              className="px-3.5 py-1.5 bg-[#F26522] hover:bg-orange-600 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
             >
-              📸 Broadcast Camera
+              <span>Broadcast Camera</span>
             </button>
-            <div style={{ textAlign: 'right' }}>
-              <span style={{ fontSize: '11px', color: '#fbbf24', fontWeight: 'bold', padding: '3px 10px', borderRadius: '6px', backgroundColor: '#1e293b', border: '1px solid #475569' }}>
-                KEPALA CABANG
-              </span>
-            </div>
           </div>
         </div>
 
@@ -631,7 +632,20 @@ export function ManagementControlDashboard({
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '28px' }}>
           <div style={{ padding: '16px', borderRadius: '12px', background: '#1e293b', border: '1px solid #334155' }}>
             <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600 }}>Omzet Hari Ini</div>
-            <div style={{ fontSize: '28px', fontWeight: 800, color: '#10b981', margin: '8px 0 0 0' }}>Rp 4.250.000</div>
+            {hasTransactionsToday ? (
+              <div style={{ fontSize: '28px', fontWeight: 800, color: '#10b981', margin: '8px 0 0 0' }}>
+                Rp {todayOmzet.toLocaleString('id-ID')}
+              </div>
+            ) : (
+              <div style={{ margin: '8px 0 0 0' }}>
+                <div style={{ fontSize: '16px', fontWeight: 800, color: '#94a3b8' }}>
+                  Belum ada transaksi
+                </div>
+                <div style={{ fontSize: '11px', color: '#64748b', marginTop: '3px', fontWeight: 500 }}>
+                  Data akan muncul setelah transaksi tercatat.
+                </div>
+              </div>
+            )}
           </div>
 
           <div onClick={() => setActiveSection('ANTRIAN_SPK')} style={{ padding: '16px', borderRadius: '12px', background: '#1e293b', border: '1px solid #334155', cursor: 'pointer' }}>
@@ -1499,7 +1513,7 @@ export function ManagementControlDashboard({
                     type="text"
                     value={selectedWaCustomerPhone}
                     onChange={(e) => setSelectedWaCustomerPhone(e.target.value)}
-                    placeholder="Contoh: 08212345678"
+                    placeholder="Nomor WhatsApp target..."
                     style={{ width: '100%', padding: '8px 12px', background: '#1e293b', border: '1px solid #475569', color: '#ffffff', borderRadius: '6px', fontSize: '13px' }}
                   />
                 </div>
@@ -1639,7 +1653,7 @@ export function ManagementControlDashboard({
                     type="number"
                     value={expenseAmount}
                     onChange={(e) => setExpenseAmount(e.target.value)}
-                    placeholder="Contoh: 150000"
+                    placeholder="Nominal pengeluaran..."
                     style={{ width: '100%', padding: '8px 12px', background: '#1e293b', border: '1px solid #475569', color: '#ffffff', borderRadius: '6px', fontSize: '13px' }}
                   />
                 </div>

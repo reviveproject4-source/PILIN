@@ -14,11 +14,13 @@ interface BroadcastCameraModalProps {
 export function BroadcastCameraModal({
   isOpen,
   onClose,
-  defaultCustomerPhone = '08123456789',
-  defaultCustomerName = 'Pelanggan Setia',
+  defaultCustomerPhone = '',
+  defaultCustomerName = '',
 }: BroadcastCameraModalProps) {
   const [messageText, setMessageText] = useState<string>(
-    `Halo Kak ${defaultCustomerName}, berikut update foto hasil pengerjaan/layanan dari tim kami. Terima kasih!`
+    defaultCustomerName
+      ? `Halo Kak ${defaultCustomerName}, berikut update foto hasil pengerjaan/layanan dari tim kami. Terima kasih!`
+      : `Halo, berikut update foto hasil pengerjaan/layanan dari tim kami. Terima kasih!`
   );
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [broadcastStatus, setBroadcastStatus] = useState<string | null>(null);
@@ -47,7 +49,7 @@ export function BroadcastCameraModal({
 
     const waLink = RetentionDomainService.generateWaMeLink(defaultCustomerPhone, messageText);
     RetentionDomainService.scheduleSapaan({
-      customer_name: defaultCustomerName,
+      customer_name: defaultCustomerName || 'Pelanggan',
       customer_phone: defaultCustomerPhone,
       category: 'SAPAAN',
       message_text: messageText,
@@ -67,11 +69,8 @@ export function BroadcastCameraModal({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
           <div>
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#F26522] bg-[#F26522]/10 px-2.5 py-1 rounded-full">
-              Phase 4 — Broadcast Camera
-            </span>
-            <h3 className="text-lg font-bold mt-1 text-slate-900 dark:text-white">
-              Broadcast Text & Image
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+              Broadcast Text & Image (WhatsApp)
             </h3>
           </div>
           <button

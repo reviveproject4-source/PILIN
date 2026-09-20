@@ -8,6 +8,8 @@ import { KasirTransactionWorkspace } from '@/components/commerce/KasirTransactio
 import { TeamProduksiWorkspace } from '@/components/production/TeamProduksiWorkspace';
 import { DashboardTopBar, DashboardRole } from '@/components/layout/DashboardTopBar';
 import { LoginGate } from '@/components/auth/LoginGate';
+import { AccessBlockedScreen } from '@/components/auth/AccessBlockedScreen';
+import { PeopleRepository } from '@/domains/people/peopleRepository';
 
 function MainErpAppContent() {
   const searchParams = useSearchParams();
@@ -17,6 +19,7 @@ function MainErpAppContent() {
   const [activeRole, setActiveRole] = useState<DashboardRole | null>(null);
   const [activeUserName, setActiveUserName] = useState<string>('');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (roleParam) {
@@ -30,6 +33,22 @@ function MainErpAppContent() {
     }
   }, [roleParam, directParam]);
 
+  useEffect(() => {
+    let isMounted = true;
+    if (isAuthenticated && activeRole) {
+      if (activeRole === 'OWNER') {
+        setIsAuthorized(true);
+      } else {
+        PeopleRepository.hasAuthorizedEmployeeForRole('tenant-001', activeRole).then((authorized) => {
+          if (isMounted) setIsAuthorized(authorized);
+        });
+      }
+    } else {
+      setIsAuthorized(null);
+    }
+    return () => { isMounted = false; };
+  }, [isAuthenticated, activeRole]);
+
   const handleLoginSuccess = (role: DashboardRole, name: string) => {
     setActiveRole(role);
     setActiveUserName(name);
@@ -40,6 +59,7 @@ function MainErpAppContent() {
     setIsAuthenticated(false);
     setActiveRole(null);
     setActiveUserName('');
+    setIsAuthorized(null);
     if (typeof window !== 'undefined') {
       window.history.replaceState({}, '', window.location.pathname);
     }
@@ -55,9 +75,31 @@ function MainErpAppContent() {
     );
   }
 
+  // 2. CHECK AUTHORIZATION STATE FOR NON-OWNER ROLES
+  if (isAuthorized === false) {
+    const displayRoleName =
+      activeRole === 'KEPALA_CABANG' ? 'Kepala Cabang' :
+      activeRole === 'KASIR' ? 'Kasir' :
+      'Team Produksi';
+
+    return <AccessBlockedScreen roleName={displayRoleName} onBackToLogin={handleLogout} />;
+  }
+
+  // Loading state during authorization verification
+  if (isAuthorized === null && activeRole !== 'OWNER') {
+    return (
+      <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center p-8">
+        <div className="text-center space-y-3">
+          <div className="w-10 h-10 border-4 border-[#F26522] border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <div className="text-xs font-bold tracking-wider uppercase text-slate-400">Memeriksa Otorisasi Pegawai...</div>
+        </div>
+      </div>
+    );
+  }
+
   const demoParam = searchParams.get('demo') === 'true' || searchParams.get('mode') === 'demo';
 
-  // 2. OWNER ERP WORKSPACE
+  // 3. OWNER ERP WORKSPACE
   if (activeRole === 'OWNER') {
     return (
       <OwnerDashboard
@@ -71,15 +113,15 @@ function MainErpAppContent() {
     );
   }
 
-  // 3. KASIR DEDICATED ERP WORKSPACE
+  // 4. KASIR DEDICATED ERP WORKSPACE
   if (activeRole === 'KASIR') {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
         <DashboardTopBar role="KASIR" userName={activeUserName} onLogout={handleLogout} />
-        <main className="flex-1 p-6 max-w-7xl w-full mx-auto space-y-6">
+        <main className="flex-1 w-full p-4 sm:p-6 space-y-6">
           <KasirTransactionWorkspace
             actorUserId="user-kasir-01"
-            actorName={activeUserName || 'Siti Rahma'}
+            actorName={activeUserName || 'Kasir'}
             businessId="tenant-001"
             branchId="branch-001"
           />
@@ -88,15 +130,15 @@ function MainErpAppContent() {
     );
   }
 
-  // 4. TEAM PRODUKSI DEDICATED ERP WORKSPACE
+  // 5. TEAM PRODUKSI DEDICATED ERP WORKSPACE
   if (activeRole === 'TEAM_PRODUKSI') {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
         <DashboardTopBar role="TEAM_PRODUKSI" userName={activeUserName} onLogout={handleLogout} />
-        <main className="flex-1 p-6 max-w-7xl w-full mx-auto space-y-6">
+        <main className="flex-1 w-full p-4 sm:p-6 space-y-6">
           <TeamProduksiWorkspace
             actorUserId="user-prod-01"
-            actorName={activeUserName || 'Tim Produksi Staf'}
+            actorName={activeUserName || 'Tim Produksi'}
             businessId="tenant-001"
             branchId="branch-001"
           />
@@ -105,18 +147,18 @@ function MainErpAppContent() {
     );
   }
 
-  // 5. KEPALA CABANG ERP WORKSPACE
+  // 6. KEPALA CABANG ERP WORKSPACE
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
       <DashboardTopBar role="KEPALA_CABANG" userName={activeUserName} onLogout={handleLogout} />
-      <main className="flex-1 p-6 max-w-7xl w-full mx-auto">
+      <div className="flex-1 w-full flex">
         <ManagementControlDashboard
           actorUserId="user-kc-01"
           actorRole="KEPALA_CABANG"
           businessId="tenant-001"
           branchId="branch-001"
         />
-      </main>
+      </div>
     </div>
   );
 }

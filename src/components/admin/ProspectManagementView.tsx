@@ -36,7 +36,7 @@ export function ProspectManagementView() {
   const [addCityArea, setAddCityArea] = useState('');
   const [addBusinessType, setAddBusinessType] = useState('');
   const [addInitialNotes, setAddInitialNotes] = useState('');
-  const [addAssignedCsName, setAddAssignedCsName] = useState('Sales Minara');
+  const [addAssignedCsName, setAddAssignedCsName] = useState('Sales PILIN');
   const [isAdding, setIsAdding] = useState(false);
   const [addFeedback, setAddFeedback] = useState<string | null>(null);
 
@@ -47,13 +47,13 @@ export function ProspectManagementView() {
 
   // Detail Edit State
   const [editStatus, setEditStatus] = useState<string>('PROSPEK BARU');
-  const [editCsName, setEditCsName] = useState<string>('CS Minara');
+  const [editCsName, setEditCsName] = useState<string>('CS PILIN');
   const [editNextFollowUpAt, setEditNextFollowUpAt] = useState<string>('');
   const [editNextFollowUpNotes, setEditNextFollowUpNotes] = useState<string>('');
 
   // New Activity Form State
   const [actType, setActType] = useState<string>('WhatsApp');
-  const [actPicName, setActPicName] = useState<string>('CS Minara');
+  const [actPicName, setActPicName] = useState<string>('CS PILIN');
   const [actNotes, setActNotes] = useState<string>('');
   const [actResult, setActResult] = useState<string>('');
   const [actStatusUpdate, setActStatusUpdate] = useState<string>('');
@@ -101,11 +101,11 @@ export function ProspectManagementView() {
   const handleOpenDetailModal = (item: PilinProspectRecord) => {
     setSelectedProspect(item);
     setEditStatus(item.status || 'PROSPEK BARU');
-    setEditCsName(item.assigned_cs_name || 'CS Minara');
+    setEditCsName(item.assigned_cs_name || 'CS PILIN');
     setEditNextFollowUpAt(item.next_follow_up_at ? new Date(item.next_follow_up_at).toISOString().slice(0, 16) : '');
     setEditNextFollowUpNotes(item.next_follow_up_notes || '');
 
-    setActPicName(item.assigned_cs_name || 'CS Minara');
+    setActPicName(item.assigned_cs_name || 'CS PILIN');
     setActNotes('');
     setActResult('');
     setActStatusUpdate(item.status || 'PROSPEK BARU');
@@ -215,7 +215,7 @@ export function ProspectManagementView() {
     try {
       const res = await addProspectActivityAction({
         prospectId: selectedProspect.id,
-        picName: actPicName || 'CS Minara',
+        picName: actPicName || 'CS PILIN',
         activityType: actType,
         notes: actNotes,
         result: actResult || undefined,
@@ -244,7 +244,7 @@ export function ProspectManagementView() {
   const formatWaUrl = (phone: string, name: string) => {
     const cleanPhone = phone.replace(/[^0-9]/g, '');
     const targetPhone = cleanPhone.startsWith('0') ? `62${cleanPhone.slice(1)}` : cleanPhone;
-    const text = encodeURIComponent(`Halo Kak ${name}, salam dari CS PILIN/Minara ERP. Kami mengonfirmasi pendaftaran usaha Anda. Ada yang bisa kami bantu?`);
+    const text = encodeURIComponent(`Halo Kak ${name}, salam dari CS PILIN ERP. Kami mengonfirmasi pendaftaran usaha Anda. Ada yang bisa kami bantu?`);
     return `https://wa.me/${targetPhone}?text=${text}`;
   };
 
@@ -302,7 +302,7 @@ export function ProspectManagementView() {
           </div>
           <div>
             <h1 className="text-xl font-black tracking-tight text-white">
-              Wadah Prospek MINARA BOS
+              Wadah Prospek PILIN ERP
             </h1>
           </div>
         </div>
@@ -422,14 +422,14 @@ export function ProspectManagementView() {
                 <tr>
                   <td colSpan={10} className="p-8 text-center text-slate-400">
                     <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-[#F26522]" />
-                    <span>Memuat Wadah Prospek MINARA BOS...</span>
+                    <span>Memuat Wadah Prospek PILIN ERP...</span>
                   </td>
                 </tr>
               ) : filteredProspects.length === 0 ? (
                 <tr>
                   <td colSpan={10} className="p-12 text-center text-slate-400 space-y-2">
                     <Users className="w-10 h-10 mx-auto text-slate-600 mb-2" />
-                    <div className="font-bold text-white text-sm">Tidak ada prospek dalam wadah data.</div>
+                    <div className="font-bold text-white text-sm">Belum ada data prospek sales.</div>
                   </td>
                 </tr>
               ) : (
@@ -499,7 +499,7 @@ export function ProspectManagementView() {
                         </span>
                       </td>
                       <td className="p-4 whitespace-nowrap text-slate-300">
-                        {p.assigned_cs_name || 'CS Minara'}
+                        {p.assigned_cs_name || 'CS PILIN'}
                       </td>
                       <td className="p-4 whitespace-nowrap text-slate-400 text-[11px]">
                         {p.next_follow_up_at ? (
@@ -568,7 +568,7 @@ export function ProspectManagementView() {
                     required
                     value={addBusinessName}
                     onChange={(e) => setAddBusinessName(e.target.value)}
-                    placeholder="Contoh: Toko Berkah Mandiri"
+                    placeholder="Nama usaha prospek..."
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#F26522]"
                   />
                 </div>
@@ -585,7 +585,7 @@ export function ProspectManagementView() {
                     required
                     value={addOwnerName}
                     onChange={(e) => setAddOwnerName(e.target.value)}
-                    placeholder="Contoh: Pak Herman"
+                    placeholder="Nama owner / PIC..."
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#F26522]"
                   />
                 </div>
@@ -843,7 +843,7 @@ export function ProspectManagementView() {
                     type="text"
                     value={editCsName}
                     onChange={(e) => setEditCsName(e.target.value)}
-                    placeholder="Contoh: CS Minara - Ani"
+                    placeholder="Nama staf CS..."
                     className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#F26522]"
                   />
                 </div>
