@@ -63,8 +63,14 @@ export class PeopleRepository {
       return this.mockBranches.filter(b => !b.business_id || b.business_id === business_id);
     }
 
-    if (isDemo || this.isMockMode()) {
-      return this.listBranchesMock(isDemo ? 'demo' : business_id);
+    // JALUR 1: DEMO / SANDBOX (Menyediakan cabang simulasi)
+    if (isDemo || business_id === 'demo' || business_id === 'demo-tenant') {
+      return this.listBranchesMock('demo');
+    }
+
+    // JALUR 2: TENANT LIVE (Murni bersih dari data dummy - Nol cabang sebelum diinput)
+    if (this.isMockMode()) {
+      return [];
     }
 
     try {
@@ -76,11 +82,11 @@ export class PeopleRepository {
         .order('name', { ascending: true });
 
       if (error || !data || data.length === 0) {
-        return this.listBranchesMock(business_id);
+        return [];
       }
       return data as BranchItem[];
     } catch {
-      return this.listBranchesMock(business_id);
+      return [];
     }
   }
 
@@ -90,17 +96,14 @@ export class PeopleRepository {
       this.mockBranches = stored;
       return stored;
     }
-    if (business_id === 'demo-tenant' || business_id === 'demo') {
-      const initial: BranchItem[] = [
-        { id: 'branch-001', business_id, name: 'Cabang Utama (Alpha)', code: 'BR-001', address: 'Jl. Sudirman No. 12' },
-        { id: 'branch-002', business_id, name: 'Cabang Sub-Urban (Beta)', code: 'BR-002', address: 'Jl. Ahmad Yani No. 45' },
-        { id: 'branch-003', business_id, name: 'Cabang Ritel (Gamma)', code: 'BR-003', address: 'Jl. Gatot Subroto No. 88' },
-      ];
-      this.mockBranches = initial;
-      this.setStoredData(`pilin_branches_${business_id}`, initial);
-      return initial;
-    }
-    return [];
+    const initial: BranchItem[] = [
+      { id: 'branch-001', business_id, name: 'Cabang Utama (Alpha)', code: 'BR-001', address: 'Jl. Sudirman No. 12' },
+      { id: 'branch-002', business_id, name: 'Cabang Sub-Urban (Beta)', code: 'BR-002', address: 'Jl. Ahmad Yani No. 45' },
+      { id: 'branch-003', business_id, name: 'Cabang Ritel (Gamma)', code: 'BR-003', address: 'Jl. Gatot Subroto No. 88' },
+    ];
+    this.mockBranches = initial;
+    this.setStoredData(`pilin_branches_${business_id}`, initial);
+    return initial;
   }
 
   static async createBranch(business_id: string, dto: { name: string; code?: string; address?: string }): Promise<BranchItem> {

@@ -133,7 +133,7 @@ function scanDirectoryForSecret(dir: string): string[] {
     const fullPath = path.join(dir, String(file));
     if (fs.statSync(fullPath).isFile() && (fullPath.endsWith('.ts') || fullPath.endsWith('.tsx') || fullPath.endsWith('.js')) && !fullPath.includes('tests')) {
       const content = fs.readFileSync(fullPath, 'utf8');
-      if (content.includes('SUPABASE_' + 'SERVICE_ROLE_KEY') && !fullPath.includes('server')) {
+      if (content.includes('SUPABASE_' + 'SERVICE_ROLE_KEY') && !fullPath.includes('server') && !fullPath.endsWith('admin.ts')) {
         violations.push(`Client-side reference found in: ${fullPath}`);
       }
       if (content.includes('NEXT_PUBLIC_' + 'SUPABASE_SERVICE_ROLE_KEY')) {

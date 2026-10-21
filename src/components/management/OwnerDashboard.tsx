@@ -14,7 +14,7 @@ import { LaporanPromosiOtomatis } from '../promotion/LaporanPromosiOtomatis';
 import { LaporanOtorisasiControl } from '../control/LaporanOtorisasiControl';
 import { AnalisisInteligensiBisnis } from '../intelligence/AnalisisInteligensiBisnis';
 import { IdentitasUsahaDashboard } from './IdentitasUsahaDashboard';
-import { DashboardTopBar } from '../layout/DashboardTopBar';
+import { DashboardTopBar, DashboardRole } from '../layout/DashboardTopBar';
 import { PeopleRepository } from '@/domains/people/peopleRepository';
 import { TenantService } from '@/domains/tenant/tenantService';
 import { TenantOnboardingModal } from '../tenant/TenantOnboardingModal';
@@ -24,7 +24,7 @@ interface OwnerDashboardProps {
   branchId?: string;
   actorUserId?: string;
   isDemo?: boolean;
-  onRoleChange?: (role: 'OWNER' | 'KEPALA_CABANG' | 'PEGAWAI') => void;
+  onRoleChange?: (role: DashboardRole) => void;
   onLogout?: () => void;
 }
 
@@ -63,7 +63,7 @@ export function OwnerDashboard({
   if (!isDemo && !isOnboarded) {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans flex flex-col selection:bg-[#F26522] selection:text-white transition-colors duration-200">
-        <DashboardTopBar role="OWNER" onLogout={onLogout} />
+        <DashboardTopBar role="OWNER" onLogout={onLogout} onRoleChange={onRoleChange} isDemo={isDemo} businessId={businessId} />
         <div className="flex-1 flex items-center justify-center p-4">
           <TenantOnboardingModal
             onSuccess={() => {
@@ -79,7 +79,7 @@ export function OwnerDashboard({
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans flex flex-col selection:bg-[#F26522] selection:text-white transition-colors duration-200">
       {/* Clean Top Bar Header (Locked Target Final) */}
-      <DashboardTopBar role="OWNER" onLogout={onLogout} />
+      <DashboardTopBar role="OWNER" onLogout={onLogout} onRoleChange={onRoleChange} isDemo={isDemo} businessId={businessId} />
 
       {/* Main Body Grid Layout: Left Sidebar + Right Dashboard */}
       <div className="flex-1 flex overflow-hidden">
@@ -442,13 +442,10 @@ export function OwnerDashboard({
                     <div className="w-12 h-12 bg-slate-200 dark:bg-slate-700 rounded-2xl flex items-center justify-center mx-auto text-2xl">
                       🏢
                     </div>
-                    <div className="space-y-1">
+                    <div>
                       <h3 className="text-base font-black text-slate-900 dark:text-white">
                         Belum Ada Data Cabang & Transaksi
                       </h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-                        Usaha Anda siap digunakan! Mulai masukkan data pegawai, layanan, dan cabang untuk mengaktifkan seluruh laporan operasional real-time.
-                      </p>
                     </div>
                     <button
                       onClick={() => setActiveSidebarMenu('MASTER_DATA')}

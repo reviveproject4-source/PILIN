@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   Employee, Division, Position, EmploymentStatus,
   CreateDivisionDTO, CreatePositionDTO, CreateEmployeeDTO, UpdateEmployeeDTO 
@@ -142,7 +142,7 @@ export function PeopleManagementDashboard({
   const canUpdate = true;
 
   // Load All Master Data
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -165,11 +165,11 @@ export function PeopleManagementDashboard({
     } finally {
       setLoading(false);
     }
-  };
+  }, [businessId]);
 
   useEffect(() => {
     loadData();
-  }, [businessId]);
+  }, [loadData]);
 
   // Derived filtered employee list
   const filteredEmployees = useMemo(() => {
@@ -573,7 +573,7 @@ export function PeopleManagementDashboard({
                   </tr>
                 ) : filteredEmployees.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="p-6 text-center text-slate-400 font-semibold">Belum ada data pegawai. Klik "+ Input Master Pegawai" untuk menambahkan pegawai secara manual.</td>
+                    <td colSpan={8} className="p-6 text-center text-slate-400 font-semibold">Belum ada data pegawai. Klik &quot;+ Input Master Pegawai&quot; untuk menambahkan pegawai secara manual.</td>
                   </tr>
                 ) : (
                   filteredEmployees.map(emp => (

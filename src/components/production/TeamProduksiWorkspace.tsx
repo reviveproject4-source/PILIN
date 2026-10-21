@@ -12,6 +12,7 @@ interface TeamProduksiWorkspaceProps {
   branchId?: string;
   actorUserId: string;
   actorName?: string;
+  isDemo?: boolean;
 }
 
 export function TeamProduksiWorkspace({
@@ -19,9 +20,10 @@ export function TeamProduksiWorkspace({
   branchId = 'branch-001',
   actorUserId = 'user-prod-01',
   actorName = 'Tim Produksi Staf',
+  isDemo = false,
 }: TeamProduksiWorkspaceProps) {
   const [activeTab, setActiveTab] = useState<'ANTRIAN_SPK' | 'BUKTI_QC' | 'PRESENSI'>('ANTRIAN_SPK');
-  const [spkOrders, setSpkOrders] = useState<WorkOrderQueueItem[]>(() => WorkQueueService.getOrders(branchId));
+  const [spkOrders, setSpkOrders] = useState<WorkOrderQueueItem[]>(() => WorkQueueService.getOrders(branchId, isDemo));
 
   // Evidence submission state - Connected directly to EvidenceService domain persistence
   const [evidenceList, setEvidenceList] = useState<EvidenceRecord[]>(() => EvidenceService.getEvidences(businessId, branchId));
@@ -31,7 +33,7 @@ export function TeamProduksiWorkspace({
   const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const refreshSpkOrders = () => {
-    setSpkOrders(WorkQueueService.getOrders(branchId));
+    setSpkOrders(WorkQueueService.getOrders(branchId, isDemo));
   };
 
   const refreshEvidenceList = () => {

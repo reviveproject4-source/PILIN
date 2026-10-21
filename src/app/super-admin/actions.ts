@@ -419,7 +419,46 @@ export interface TenantRecord {
   code: string;
   created_at: string;
   updated_at?: string;
+  status?: 'ACTIVE' | 'TRIAL' | 'SUSPENDED' | 'INACTIVE';
+  subscription_tier?: 'Starter' | 'Pro' | 'Enterprise' | 'Free Trial';
+  subscription_status?: 'ACTIVE' | 'PENDING' | 'SUSPENDED' | 'CANCELLED';
+  active_features_count?: number;
+  total_features_count?: number;
+  branches_count?: number;
 }
+
+export interface TenantFeatureFlagItem {
+  feature_code: string;
+  name: string;
+  category: 'Operasional' | 'CRM WhatsApp' | 'Keuangan' | 'HR & SDM' | 'Alat & AI';
+  description: string;
+  enabled: boolean;
+}
+
+export const PILIN_STANDARD_FEATURES: Omit<TenantFeatureFlagItem, 'enabled'>[] = [
+  // 1. Operasional & POS
+  { feature_code: 'nota_transaksi', name: 'Kasir & Cetak Nota POS', category: 'Operasional', description: 'Transaksi kasir cepat, barcode scan, diskon, dan cetak struk nota.' },
+  { feature_code: 'spk', name: 'SPK & Tracking Pekerjaan', category: 'Operasional', description: 'Surat Perintah Kerja pencucian, antrean proses, dan serah terima.' },
+  { feature_code: 'service_catalog', name: 'Katalog Layanan & Harga Cabang', category: 'Operasional', description: 'Katalog jasa, varian layanan, dan penyesuaian tarif per cabang.' },
+  
+  // 2. CRM WhatsApp
+  { feature_code: 'sapaan', name: 'WhatsApp Sapaan Otomatis', category: 'CRM WhatsApp', description: 'Kirim sapaan selamat datang dan ucapan otomatis ke nomor pelanggan.' },
+  { feature_code: 'reminder', name: 'Pengingat Retensi & Cucian Jadi', category: 'CRM WhatsApp', description: 'Notifikasi otomatis cucian selesai diambil dan ajakan cuci kembali.' },
+  { feature_code: 'broadcast', name: 'Broadcast Promo WhatsApp Massal', category: 'CRM WhatsApp', description: 'Kirim penawaran promo dan diskon massal ke segmen pelanggan.' },
+  
+  // 3. Keuangan
+  { feature_code: 'finance', name: 'Pencatatan Kas & Beban Operasional', category: 'Keuangan', description: 'Catat pengeluaran harian cabang, operasional toko, dan arus kas.' },
+  { feature_code: 'revenue', name: 'Laporan Omzet, HPP & Laba Kotor', category: 'Keuangan', description: 'Analitik pendapatan harian/bulanan, perhitungan HPP, dan margin laba.' },
+  { feature_code: 'sales_commission', name: 'Komisi Penjualan Kasir & Sales', category: 'Keuangan', description: 'Perhitungan otomatis bagi hasil dan bonus komisi staf kasir.' },
+  
+  // 4. HR & SDM
+  { feature_code: 'attendance', name: 'Presensi GPS & Foto Selfie Pegawai', category: 'HR & SDM', description: 'Check-in/out staf dengan validasi geofencing lokasi dan bukti foto.' },
+  { feature_code: 'gamification', name: 'Poin Kinerja & Peringkat Pegawai', category: 'HR & SDM', description: 'Reward poin produktivitas, pencapaian target, dan leaderboard staf.' },
+  
+  // 5. Alat & AI
+  { feature_code: 'intelligence', name: 'AI Insights & Analitik Prediktif', category: 'Alat & AI', description: 'Rekomendasi pertumbuhan bisnis otomatis berbasis data transaksi.' },
+  { feature_code: 'importer', name: 'Import & Migrasi Data Excel/CSV', category: 'Alat & AI', description: 'Upload data master pelanggan dan layanan lama secara instan.' }
+];
 
 export async function getTenantsAction(): Promise<{
   success: boolean;
@@ -436,28 +475,288 @@ export async function getTenantsAction(): Promise<{
     }
 
     const supabaseAdmin = createAdminClient();
-    const { data, error } = await supabaseAdmin
+    
+    // 1. Fetch tenants
+    const { data: tenantsData, error: tenantsError } = await supabaseAdmin
       .from('tenants')
       .select('id, name, code, created_at, updated_at')
       .order('name', { ascending: true });
 
-    if (error) {
-      console.error('Super Admin tenants fetch error:', error);
+    if (tenantsError) {
+      console.error('Super Admin tenants fetch error:', tenantsError);
       return {
         success: false,
-        message: error.message || 'Gagal memuat data tenant.'
+        message: tenantsError.message || 'Gagal memuat data tenant.'
       };
     }
 
+    // 2. Fetch feature flags for all tenants
+    const { data: featureFlagsData } = await supabaseAdmin
+      .from('tenant_feature_flags')
+      .select('tenant_id, feature_code, enabled');
+
+    // 3. Fetch branches count
+    const { data: branchesData } = await supabaseAdmin
+      .from('branches')
+      .select('id, business_id');
+
+    // 4. Fetch platform customers for commercial status
+    const { data: customersData } = await supabaseAdmin
+      .from('platform_customers')
+      .select('id, tenant_id, status');
+
+    // 5. Fetch tenant products for subscription details
+    const { data: productsData } = await supabaseAdmin
+      .from('tenant_products')
+      .select('id, tenant_id, status, platform_products(name, code)');
+
+    // 6. Enrich tenants with status, subscription tier & active feature count
+    const enriched: TenantRecord[] = (tenantsData || []).map((t) => {
+      const cust = customersData?.find((c) => c.tenant_id === t.id);
+      const tenantFlags = featureFlagsData?.filter((f) => f.tenant_id === t.id) || [];
+      const activeFlagsCount = tenantFlags.length > 0
+        ? tenantFlags.filter((f) => f.enabled).length
+        : 13; // default all enabled if not restricted
+      const branches = branchesData?.filter((b) => b.business_id === t.id) || [];
+      const activeProducts = productsData?.filter((p) => p.tenant_id === t.id) || [];
+
+      const mainProduct = activeProducts[0];
+      const rawProd: any = mainProduct?.platform_products;
+      const prodName = (Array.isArray(rawProd) ? rawProd[0]?.name : rawProd?.name)?.toLowerCase() || '';
+      
+      let subTier: 'Starter' | 'Pro' | 'Enterprise' | 'Free Trial' = 'Pro';
+      if (prodName.includes('starter')) subTier = 'Starter';
+      else if (prodName.includes('enterprise')) subTier = 'Enterprise';
+      else if (activeFlagsCount === 13) subTier = 'Enterprise';
+      else if (activeFlagsCount <= 4) subTier = 'Starter';
+      else subTier = 'Pro';
+
+      const subStatus: 'ACTIVE' | 'PENDING' | 'SUSPENDED' | 'CANCELLED' = 
+        (mainProduct?.status as any) || 'ACTIVE';
+
+      let tenantStatus: 'ACTIVE' | 'TRIAL' | 'SUSPENDED' | 'INACTIVE' = 'ACTIVE';
+      if (cust?.status === 'INACTIVE' || subStatus === 'SUSPENDED') {
+        tenantStatus = 'SUSPENDED';
+      } else if (subStatus === 'PENDING') {
+        tenantStatus = 'TRIAL';
+      }
+
+      return {
+        ...t,
+        status: tenantStatus,
+        subscription_tier: subTier,
+        subscription_status: subStatus,
+        active_features_count: activeFlagsCount,
+        total_features_count: 13,
+        branches_count: branches.length
+      };
+    });
+
     return {
       success: true,
-      tenants: data || []
+      tenants: enriched
     };
   } catch (err: any) {
     return {
       success: false,
       message: err.message || 'An unexpected error occurred while fetching tenants.'
     };
+  }
+}
+
+export async function getTenantFeatureFlagsAction(tenantId: string): Promise<{
+  success: boolean;
+  features?: TenantFeatureFlagItem[];
+  tenantName?: string;
+  tenantCode?: string;
+  message?: string;
+}> {
+  try {
+    const authCheck = await verifySuperAdminAccess();
+    if (!authCheck.authorized) {
+      return { success: false, message: 'Unauthorized' };
+    }
+
+    const supabaseAdmin = createAdminClient();
+    const { data: tenant } = await supabaseAdmin
+      .from('tenants')
+      .select('id, name, code')
+      .eq('id', tenantId)
+      .single();
+
+    const { data: flags, error } = await supabaseAdmin
+      .from('tenant_feature_flags')
+      .select('feature_code, enabled')
+      .eq('tenant_id', tenantId);
+
+    if (error) throw error;
+
+    const flagMap = new Map<string, boolean>();
+    flags?.forEach((f) => flagMap.set(f.feature_code, f.enabled));
+
+    // Default to true for features not explicitly saved yet
+    const result: TenantFeatureFlagItem[] = PILIN_STANDARD_FEATURES.map((feat) => ({
+      ...feat,
+      enabled: flagMap.has(feat.feature_code) ? !!flagMap.get(feat.feature_code) : true
+    }));
+
+    return {
+      success: true,
+      features: result,
+      tenantName: tenant?.name || 'Tenant',
+      tenantCode: tenant?.code || ''
+    };
+  } catch (err: any) {
+    return { success: false, message: err.message || 'Gagal memuat konfigurasi fitur tenant.' };
+  }
+}
+
+export async function updateTenantFeatureFlagsAction(
+  tenantId: string,
+  features: { feature_code: string; enabled: boolean }[]
+): Promise<{
+  success: boolean;
+  message: string;
+}> {
+  try {
+    const authCheck = await verifySuperAdminAccess();
+    if (!authCheck.authorized) {
+      return { success: false, message: 'Unauthorized' };
+    }
+
+    const supabaseAdmin = createAdminClient();
+    const payload = features.map((f) => ({
+      tenant_id: tenantId,
+      feature_code: f.feature_code,
+      enabled: f.enabled
+    }));
+
+    const { error } = await supabaseAdmin
+      .from('tenant_feature_flags')
+      .upsert(payload, { onConflict: 'tenant_id,feature_code' });
+
+    if (error) throw error;
+
+    // Log to audit log
+    await supabaseAdmin.from('audit_logs').insert({
+      business_id: tenantId,
+      operation: 'UPDATE_TENANT_FEATURE_FLAGS',
+      entity: 'tenant_feature_flags',
+      entity_id: tenantId,
+      payload_sanitized: { enabledCount: features.filter(f => f.enabled).length, total: features.length }
+    }).select().maybeSingle();
+
+    return {
+      success: true,
+      message: 'Konfigurasi fitur tenant berhasil disimpan ke database.'
+    };
+  } catch (err: any) {
+    return { success: false, message: err.message || 'Gagal menyimpan konfigurasi fitur tenant.' };
+  }
+}
+
+export async function updateTenantStatusAction(
+  tenantId: string,
+  newStatus: 'ACTIVE' | 'TRIAL' | 'SUSPENDED'
+): Promise<{
+  success: boolean;
+  message: string;
+}> {
+  try {
+    const authCheck = await verifySuperAdminAccess();
+    if (!authCheck.authorized) {
+      return { success: false, message: 'Unauthorized' };
+    }
+
+    const supabaseAdmin = createAdminClient();
+
+    // 1. Update platform_customers if exists
+    await supabaseAdmin
+      .from('platform_customers')
+      .update({ status: newStatus === 'SUSPENDED' ? 'INACTIVE' : 'ACTIVE', updated_at: new Date().toISOString() })
+      .eq('tenant_id', tenantId);
+
+    // 2. Update tenant_products if exists
+    const productStatus = newStatus === 'SUSPENDED' ? 'SUSPENDED' : newStatus === 'TRIAL' ? 'PENDING' : 'ACTIVE';
+    await supabaseAdmin
+      .from('tenant_products')
+      .update({ status: productStatus, updated_at: new Date().toISOString() })
+      .eq('tenant_id', tenantId);
+
+    // 3. Log audit
+    await supabaseAdmin.from('audit_logs').insert({
+      business_id: tenantId,
+      operation: `UPDATE_TENANT_STATUS_${newStatus}`,
+      entity: 'tenants',
+      entity_id: tenantId,
+      payload_sanitized: { newStatus }
+    }).select().maybeSingle();
+
+    return {
+      success: true,
+      message: `Status operasional tenant berhasil diubah menjadi ${newStatus}.`
+    };
+  } catch (err: any) {
+    return { success: false, message: err.message || 'Gagal mengubah status tenant.' };
+  }
+}
+
+export async function updateTenantSubscriptionAction(
+  tenantId: string,
+  payload: {
+    plan_tier: 'Starter' | 'Pro' | 'Enterprise';
+    status: 'ACTIVE' | 'PENDING' | 'SUSPENDED';
+    applyFeaturePreset?: boolean;
+  }
+): Promise<{
+  success: boolean;
+  message: string;
+}> {
+  try {
+    const authCheck = await verifySuperAdminAccess();
+    if (!authCheck.authorized) {
+      return { success: false, message: 'Unauthorized' };
+    }
+
+    const supabaseAdmin = createAdminClient();
+
+    // If applyFeaturePreset is true, align feature flags with the tier
+    if (payload.applyFeaturePreset) {
+      let enabledCodes = [];
+      if (payload.plan_tier === 'Starter') {
+        enabledCodes = ['nota_transaksi', 'service_catalog', 'attendance', 'finance'];
+      } else if (payload.plan_tier === 'Pro') {
+        enabledCodes = ['nota_transaksi', 'spk', 'service_catalog', 'attendance', 'finance', 'revenue', 'sapaan', 'reminder'];
+      } else {
+        enabledCodes = PILIN_STANDARD_FEATURES.map(f => f.feature_code);
+      }
+
+      const flags = PILIN_STANDARD_FEATURES.map((f) => ({
+        tenant_id: tenantId,
+        feature_code: f.feature_code,
+        enabled: enabledCodes.includes(f.feature_code)
+      }));
+
+      await supabaseAdmin
+        .from('tenant_feature_flags')
+        .upsert(flags, { onConflict: 'tenant_id,feature_code' });
+    }
+
+    // Log to audit
+    await supabaseAdmin.from('audit_logs').insert({
+      business_id: tenantId,
+      operation: 'UPDATE_TENANT_SUBSCRIPTION',
+      entity: 'tenant_products',
+      entity_id: tenantId,
+      payload_sanitized: payload
+    }).select().maybeSingle();
+
+    return {
+      success: true,
+      message: `Langganan tenant berhasil diatur ke paket ${payload.plan_tier} (${payload.status}).`
+    };
+  } catch (err: any) {
+    return { success: false, message: err.message || 'Gagal memperbarui paket langganan tenant.' };
   }
 }
 

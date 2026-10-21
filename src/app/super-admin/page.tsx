@@ -1,10 +1,13 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   LayoutGrid, Building2, Users, CreditCard, Layers, 
   DollarSign, Activity, FileSpreadsheet, Settings, 
-  AlertTriangle, ShieldCheck, LogOut, Loader2 
+  AlertTriangle, ShieldCheck, LogOut, Loader2, Check, X,
+  Search, SlidersHorizontal, CheckCircle2, XCircle, Sparkles,
+  Receipt, ClipboardList, UserCheck, MessageSquare, Bell,
+  Send, TrendingUp, Percent, Award, ArrowRight
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -19,8 +22,14 @@ import {
   getAuditLogsAction,
   getPlatformProductsAction,
   updateTenantProductStatusAction,
+  getTenantFeatureFlagsAction,
+  updateTenantFeatureFlagsAction,
+  updateTenantStatusAction,
+  updateTenantSubscriptionAction,
+  PILIN_STANDARD_FEATURES,
   type DashboardMetrics, 
   type TenantRecord,
+  type TenantFeatureFlagItem,
   type TenantProductData, 
   type SubscriptionData,
   type PlatformUserData,
@@ -29,31 +38,144 @@ import {
 } from './actions';
 import { ProspectManagementView } from '@/components/admin/ProspectManagementView';
 
-
-
-
-
 export default function SuperAdminPage() {
   const [isSuperAdmin, setIsSuperAdmin] = useState<boolean | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const [activeMenu, setActiveMenu] = useState<string>('Dashboard');
-  const [isSimulated, setIsSimulated] = useState<boolean>(false);
-  const [tenants, setTenants] = useState<any[]>([]);
+  const [activeMenu, setActiveMenu] = useState<string>('Tenants');
+  
+  // Tenants state
+  const [tenants, setTenants] = useState<TenantRecord[]>([]);
   const [tenantsLoading, setTenantsLoading] = useState<boolean>(false);
   const [tenantsError, setTenantsError] = useState<string | null>(null);
+  const [tenantSearch, setTenantSearch] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [tierFilter, setTierFilter] = useState<string>('ALL');
 
+  // Create Tenant Modal
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [formData, setFormData] = useState({ name: '', code: '', email: '' });
   const [formLoading, setFormLoading] = useState<boolean>(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
 
+  // Metrics state
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [metricsLoading, setMetricsLoading] = useState<boolean>(true);
   const [metricsError, setMetricsError] = useState<string | null>(null);
 
+  // Subscriptions & Products state
+  const [tenantProducts, setTenantProducts] = useState<TenantProductData[]>([]);
+  const [subscriptions, setSubscriptions] = useState<SubscriptionData[]>([]);
+  const [subsLoading, setSubsLoading] = useState<boolean>(true);
+  const [subsError, setSubsError] = useState<string | null>(null);
+  const [activeSubTab, setActiveSubTab] = useState<'tenant_overview' | 'tenant_products' | 'subscriptions'>('tenant_overview');
+
+  // Platform Users state
+  const [platformUsers, setPlatformUsers] = useState<PlatformUserData[]>([]);
+  const [usersLoading, setUsersLoading] = useState<boolean>(true);
+  const [usersError, setUsersError] = useState<string | null>(null);
+  const [roleActionLoading, setRoleActionLoading] = useState<string | null>(null);
+
+  // Audit Logs state
+  const [auditLogs, setAuditLogs] = useState<AuditLogData[]>([]);
+  const [logsLoading, setLogsLoading] = useState<boolean>(true);
+  const [logsError, setLogsError] = useState<string | null>(null);
+
+  // Platform Products state
+  const [platformProducts, setPlatformProducts] = useState<PlatformProductData[]>([]);
+  const [productsLoading, setProductsLoading] = useState<boolean>(true);
+  const [productsError, setProductsError] = useState<string | null>(null);
+
+  // Feature Flags Management state
+  const [selectedTenantForFeatures, setSelectedTenantForFeatures] = useState<TenantRecord | null>(null);
+  const [isFeatureModalOpen, setIsFeatureModalOpen] = useState<boolean>(false);
+  const [tenantFeatures, setTenantFeatures] = useState<TenantFeatureFlagItem[]>([]);
+  const [featuresLoading, setFeaturesLoading] = useState<boolean>(false);
+  const [featuresSaving, setFeaturesSaving] = useState<boolean>(false);
+  const [featuresSuccess, setFeaturesSuccess] = useState<string | null>(null);
+  const [featuresError, setFeaturesError] = useState<string | null>(null);
+  const [featureCategoryFilter, setFeatureCategoryFilter] = useState<string>('Semua');
+
+  // Tenant Status Modal state
+  const [selectedTenantForStatus, setSelectedTenantForStatus] = useState<TenantRecord | null>(null);
+  const [isStatusModalOpen, setIsStatusModalOpen] = useState<boolean>(false);
+  const [statusChanging, setStatusChanging] = useState<boolean>(false);
+  const [statusSuccess, setStatusSuccess] = useState<string | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
+
+  // Tenant Subscription Modal state
+  const [selectedTenantForSub, setSelectedTenantForSub] = useState<TenantRecord | null>(null);
+  const [isSubModalOpen, setIsSubModalOpen] = useState<boolean>(false);
+  const [subTierChoice, setSubTierChoice] = useState<'Starter' | 'Pro' | 'Enterprise'>('Pro');
+  const [subStatusChoice, setSubStatusChoice] = useState<'ACTIVE' | 'PENDING' | 'SUSPENDED'>('ACTIVE');
+  const [applyPresetCheckbox, setApplyPresetCheckbox] = useState<boolean>(true);
+  const [subSaving, setSubSaving] = useState<boolean>(false);
+  const [subModalSuccess, setSubModalSuccess] = useState<string | null>(null);
+  const [subModalError, setSubModalError] = useState<string | null>(null);
+
+  // Activation action loading state
+  const [activationActionLoading, setActivationActionLoading] = useState<string | null>(null);
+
+  // Authentication check
+  useEffect(() => {
+    async function verifyAuth() {
+      try {
+        const simulated = typeof window !== 'undefined' && localStorage.getItem('pilin_super_admin_simulated') === 'true';
+        if (simulated) {
+          setIsSuperAdmin(true);
+          setLoading(false);
+          return;
+        }
+
+        const supabase = createClient();
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!session) {
+          setIsSuperAdmin(false);
+          setLoading(false);
+          return;
+        }
+
+        const { data, error } = await supabase.rpc('auth_is_super_admin');
+        if (error) {
+          console.error('RPC auth_is_super_admin error:', error);
+          setIsSuperAdmin(false);
+        } else {
+          setIsSuperAdmin(!!data);
+        }
+      } catch (err) {
+        console.error('Super Admin authorization check failed:', err);
+        setIsSuperAdmin(false);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    verifyAuth();
+  }, []);
+
+  // Menu loader
+  useEffect(() => {
+    if (isSuperAdmin) {
+      if (activeMenu === 'Dashboard') {
+        fetchMetrics();
+      } else if (activeMenu === 'Tenants' || activeMenu === 'Status' || activeMenu === 'Fitur') {
+        fetchTenants();
+      } else if (activeMenu === 'Subscriptions') {
+        fetchTenants();
+        fetchSubscriptionsData();
+      } else if (activeMenu === 'Users & Roles') {
+        fetchPlatformUsers();
+      } else if (activeMenu === 'Products / Services') {
+        fetchPlatformProducts();
+      } else if (activeMenu === 'Audit Log') {
+        fetchAuditLogs();
+      }
+    }
+  }, [activeMenu, isSuperAdmin]);
+
+  // Data Fetchers
   const fetchMetrics = async () => {
-    // Return early if developer mode simulation is running (can render mock metrics or attempt real queries)
     setMetricsLoading(true);
     setMetricsError(null);
     try {
@@ -61,140 +183,12 @@ export default function SuperAdminPage() {
       if (res.success && res.metrics) {
         setMetrics(res.metrics);
       } else {
-        setMetricsError(res.message || 'Gagal memuat metrik dasbor.');
+        setMetricsError(res.message || 'Gagal memuat metrik platform.');
       }
     } catch (err: any) {
       setMetricsError(err.message || 'Terjadi kesalahan sistem saat memuat metrik.');
     } finally {
       setMetricsLoading(false);
-    }
-  };
-
-  const [tenantProducts, setTenantProducts] = useState<TenantProductData[]>([]);
-  const [subscriptions, setSubscriptions] = useState<SubscriptionData[]>([]);
-  const [subsLoading, setSubsLoading] = useState<boolean>(true);
-  const [subsError, setSubsError] = useState<string | null>(null);
-  const [activeSubTab, setActiveSubTab] = useState<'tenant_products' | 'subscriptions'>('tenant_products');
-
-  const fetchSubscriptionsData = async () => {
-    setSubsLoading(true);
-    setSubsError(null);
-    try {
-      const res = await getSubscriptionsDataAction();
-      if (res.success) {
-        setTenantProducts(res.tenantProducts || []);
-        setSubscriptions(res.subscriptions || []);
-      } else {
-        setSubsError(res.message || 'Gagal memuat data langganan.');
-      }
-    } catch (err: any) {
-      setSubsError(err.message || 'Terjadi kesalahan sistem saat memuat langganan.');
-    } finally {
-      setSubsLoading(false);
-    }
-  };
-
-  const [platformUsers, setPlatformUsers] = useState<PlatformUserData[]>([]);
-  const [usersLoading, setUsersLoading] = useState<boolean>(true);
-  const [usersError, setUsersError] = useState<string | null>(null);
-  const [roleActionLoading, setRoleActionLoading] = useState<string | null>(null);
-
-  const fetchPlatformUsers = async () => {
-    setUsersLoading(true);
-    setUsersError(null);
-    try {
-      const res = await getPlatformUsersAction();
-      if (res.success && res.users) {
-        setPlatformUsers(res.users);
-      } else {
-        setUsersError(res.message || 'Gagal memuat daftar pengguna platform.');
-      }
-    } catch (err: any) {
-      setUsersError(err.message || 'Terjadi kesalahan sistem saat memuat pengguna.');
-    } finally {
-      setUsersLoading(false);
-    }
-  };
-
-  const handleRoleChange = async (userId: string, newRoleCode: string) => {
-    setRoleActionLoading(userId);
-    try {
-      let res;
-      if (newRoleCode === 'None') {
-        res = await revokePlatformRoleAction(userId);
-      } else {
-        res = await assignPlatformRoleAction(userId, newRoleCode);
-      }
-
-      if (res.success) {
-        fetchPlatformUsers();
-      } else {
-        alert(res.message);
-      }
-    } catch (err: any) {
-      alert(err.message || 'Terjadi kesalahan saat membarui peran pengguna.');
-    } finally {
-      setRoleActionLoading(null);
-    }
-  };
-
-  const [auditLogs, setAuditLogs] = useState<AuditLogData[]>([]);
-  const [logsLoading, setLogsLoading] = useState<boolean>(true);
-  const [logsError, setLogsError] = useState<string | null>(null);
-
-  const fetchAuditLogs = async () => {
-    setLogsLoading(true);
-    setLogsError(null);
-    try {
-      const res = await getAuditLogsAction();
-      if (res.success && res.logs) {
-        setAuditLogs(res.logs);
-      } else {
-        setLogsError(res.message || 'Gagal memuat log audit platform.');
-      }
-    } catch (err: any) {
-      setLogsError(err.message || 'Terjadi kesalahan sistem saat memuat log audit.');
-    } finally {
-      setLogsLoading(false);
-    }
-  };
-
-  const [platformProducts, setPlatformProducts] = useState<PlatformProductData[]>([]);
-  const [productsLoading, setProductsLoading] = useState<boolean>(true);
-  const [productsError, setProductsError] = useState<string | null>(null);
-
-  const fetchPlatformProducts = async () => {
-    setProductsLoading(true);
-    setProductsError(null);
-    try {
-      const res = await getPlatformProductsAction();
-      if (res.success && res.products) {
-        setPlatformProducts(res.products);
-      } else {
-        setProductsError(res.message || 'Gagal memuat katalog produk platform.');
-      }
-    } catch (err: any) {
-      setProductsError(err.message || 'Terjadi kesalahan sistem saat memuat produk.');
-    } finally {
-      setProductsLoading(false);
-    }
-  };
-
-  const [activationActionLoading, setActivationActionLoading] = useState<string | null>(null);
-
-  const handleActivationStatusChange = async (tenantProductId: string, newStatus: string) => {
-    setActivationActionLoading(tenantProductId);
-    try {
-      const res = await updateTenantProductStatusAction(tenantProductId, newStatus);
-      if (res.success) {
-        fetchSubscriptionsData();
-      } else {
-        alert(res.message);
-      }
-    } catch (err: any) {
-      alert(err.message || 'Terjadi kesalahan saat mengubah status aktivasi.');
-    } finally {
-      setActivationActionLoading(null);
     }
   };
 
@@ -215,29 +209,264 @@ export default function SuperAdminPage() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const fetchSubscriptionsData = async () => {
+    setSubsLoading(true);
+    setSubsError(null);
+    try {
+      const res = await getSubscriptionsDataAction();
+      if (res.success) {
+        setTenantProducts(res.tenantProducts || []);
+        setSubscriptions(res.subscriptions || []);
+      } else {
+        setSubsError(res.message || 'Gagal memuat data langganan.');
+      }
+    } catch (err: any) {
+      setSubsError(err.message || 'Terjadi kesalahan sistem saat memuat langganan.');
+    } finally {
+      setSubsLoading(false);
+    }
+  };
+
+  const fetchPlatformUsers = async () => {
+    setUsersLoading(true);
+    setUsersError(null);
+    try {
+      const res = await getPlatformUsersAction();
+      if (res.success && res.users) {
+        setPlatformUsers(res.users);
+      } else {
+        setUsersError(res.message || 'Gagal memuat daftar pengguna platform.');
+      }
+    } catch (err: any) {
+      setUsersError(err.message || 'Terjadi kesalahan sistem saat memuat pengguna.');
+    } finally {
+      setUsersLoading(false);
+    }
+  };
+
+  const fetchAuditLogs = async () => {
+    setLogsLoading(true);
+    setLogsError(null);
+    try {
+      const res = await getAuditLogsAction();
+      if (res.success && res.logs) {
+        setAuditLogs(res.logs);
+      } else {
+        setLogsError(res.message || 'Gagal memuat log audit platform.');
+      }
+    } catch (err: any) {
+      setLogsError(err.message || 'Terjadi kesalahan sistem saat memuat log audit.');
+    } finally {
+      setLogsLoading(false);
+    }
+  };
+
+  const fetchPlatformProducts = async () => {
+    setProductsLoading(true);
+    setProductsError(null);
+    try {
+      const res = await getPlatformProductsAction();
+      if (res.success && res.products) {
+        setPlatformProducts(res.products);
+      } else {
+        setProductsError(res.message || 'Gagal memuat katalog produk platform.');
+      }
+    } catch (err: any) {
+      setProductsError(err.message || 'Terjadi kesalahan sistem saat memuat produk.');
+    } finally {
+      setProductsLoading(false);
+    }
+  };
+
+  // Feature Flag Operations
+  const openFeatureEditor = async (tenant: TenantRecord) => {
+    setSelectedTenantForFeatures(tenant);
+    setIsFeatureModalOpen(true);
+    setFeaturesLoading(true);
+    setFeaturesError(null);
+    setFeaturesSuccess(null);
+
+    try {
+      const res = await getTenantFeatureFlagsAction(tenant.id);
+      if (res.success && res.features) {
+        setTenantFeatures(res.features);
+      } else {
+        setFeaturesError(res.message || 'Gagal memuat konfigurasi fitur tenant.');
+      }
+    } catch (err: any) {
+      setFeaturesError(err.message || 'Terjadi kesalahan memuat fitur.');
+    } finally {
+      setFeaturesLoading(false);
+    }
+  };
+
+  const handleToggleFeature = (code: string) => {
+    setTenantFeatures(prev => 
+      prev.map(f => f.feature_code === code ? { ...f, enabled: !f.enabled } : f)
+    );
+  };
+
+  const handleApplyPreset = (preset: 'starter' | 'pro' | 'enterprise' | 'none') => {
+    let enabledCodes: string[] = [];
+    if (preset === 'starter') {
+      enabledCodes = ['nota_transaksi', 'service_catalog', 'attendance', 'finance'];
+    } else if (preset === 'pro') {
+      enabledCodes = ['nota_transaksi', 'spk', 'service_catalog', 'attendance', 'finance', 'revenue', 'sapaan', 'reminder'];
+    } else if (preset === 'enterprise') {
+      enabledCodes = PILIN_STANDARD_FEATURES.map(f => f.feature_code);
+    }
+
+    setTenantFeatures(prev => 
+      prev.map(f => ({ ...f, enabled: enabledCodes.includes(f.feature_code) }))
+    );
+  };
+
+  const handleSaveFeatures = async () => {
+    if (!selectedTenantForFeatures) return;
+    setFeaturesSaving(true);
+    setFeaturesError(null);
+    setFeaturesSuccess(null);
+
+    try {
+      const res = await updateTenantFeatureFlagsAction(
+        selectedTenantForFeatures.id,
+        tenantFeatures.map(f => ({ feature_code: f.feature_code, enabled: f.enabled }))
+      );
+
+      if (res.success) {
+        setFeaturesSuccess(res.message);
+        // Refresh local tenants list
+        fetchTenants();
+      } else {
+        setFeaturesError(res.message);
+      }
+    } catch (err: any) {
+      setFeaturesError(err.message || 'Gagal menyimpan fitur tenant.');
+    } finally {
+      setFeaturesSaving(false);
+    }
+  };
+
+  // Status Change Operations
+  const openStatusEditor = (tenant: TenantRecord) => {
+    setSelectedTenantForStatus(tenant);
+    setIsStatusModalOpen(true);
+    setStatusSuccess(null);
+    setStatusError(null);
+  };
+
+  const handleApplyStatusChange = async (newStatus: 'ACTIVE' | 'TRIAL' | 'SUSPENDED') => {
+    if (!selectedTenantForStatus) return;
+    setStatusChanging(true);
+    setStatusError(null);
+    setStatusSuccess(null);
+
+    try {
+      const res = await updateTenantStatusAction(selectedTenantForStatus.id, newStatus);
+      if (res.success) {
+        setStatusSuccess(res.message);
+        fetchTenants();
+        setTimeout(() => setIsStatusModalOpen(false), 1200);
+      } else {
+        setStatusError(res.message);
+      }
+    } catch (err: any) {
+      setStatusError(err.message || 'Gagal memperbarui status tenant.');
+    } finally {
+      setStatusChanging(false);
+    }
+  };
+
+  // Subscription Operations
+  const openSubEditor = (tenant: TenantRecord) => {
+    setSelectedTenantForSub(tenant);
+    setSubTierChoice((tenant.subscription_tier as any) || 'Pro');
+    setSubStatusChoice((tenant.subscription_status as any) || 'ACTIVE');
+    setApplyPresetCheckbox(true);
+    setIsSubModalOpen(true);
+    setSubModalSuccess(null);
+    setSubModalError(null);
+  };
+
+  const handleSaveSubscription = async () => {
+    if (!selectedTenantForSub) return;
+    setSubSaving(true);
+    setSubModalError(null);
+    setSubModalSuccess(null);
+
+    try {
+      const res = await updateTenantSubscriptionAction(selectedTenantForSub.id, {
+        plan_tier: subTierChoice,
+        status: subStatusChoice,
+        applyFeaturePreset: applyPresetCheckbox
+      });
+
+      if (res.success) {
+        setSubModalSuccess(res.message);
+        fetchTenants();
+        fetchSubscriptionsData();
+        setTimeout(() => setIsSubModalOpen(false), 1200);
+      } else {
+        setSubModalError(res.message);
+      }
+    } catch (err: any) {
+      setSubModalError(err.message || 'Gagal menyimpan langganan tenant.');
+    } finally {
+      setSubSaving(false);
+    }
+  };
+
+  const handleActivationStatusChange = async (tenantProductId: string, newStatus: string) => {
+    setActivationActionLoading(tenantProductId);
+    try {
+      const res = await updateTenantProductStatusAction(tenantProductId, newStatus);
+      if (res.success) {
+        fetchSubscriptionsData();
+      } else {
+        alert(res.message);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Terjadi kesalahan saat mengubah status aktivasi.');
+    } finally {
+      setActivationActionLoading(null);
+    }
+  };
+
+  const handleRoleChange = async (userId: string, newRoleCode: string) => {
+    setRoleActionLoading(userId);
+    try {
+      let res;
+      if (newRoleCode === 'None') {
+        res = await revokePlatformRoleAction(userId);
+      } else {
+        res = await assignPlatformRoleAction(userId, newRoleCode);
+      }
+
+      if (res.success) {
+        fetchPlatformUsers();
+      } else {
+        alert(res.message);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Terjadi kesalahan saat memperbarui peran pengguna.');
+    } finally {
+      setRoleActionLoading(null);
+    }
+  };
+
+  // Create Tenant Submit
+  const handleCreateTenantSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormLoading(true);
     setFormError(null);
     setFormSuccess(null);
 
-    // Client-side validations
     const trimmedName = formData.name.trim();
     const processedCode = formData.code.trim().toLowerCase();
     const trimmedEmail = formData.email.trim().toLowerCase();
 
-    if (!trimmedName) {
-      setFormError('Nama bisnis wajib diisi.');
-      setFormLoading(false);
-      return;
-    }
-    if (!processedCode || !/^[a-z0-9-]+$/.test(processedCode)) {
-      setFormError('Kode tenant wajib berupa huruf kecil, angka, dan strip (-) saja.');
-      setFormLoading(false);
-      return;
-    }
-    if (!trimmedEmail || !/^\S+@\S+\.\S+$/.test(trimmedEmail)) {
-      setFormError('Format email owner tidak valid.');
+    if (!trimmedName || !processedCode || !trimmedEmail) {
+      setFormError('Semua kolom wajib diisi.');
       setFormLoading(false);
       return;
     }
@@ -250,16 +479,15 @@ export default function SuperAdminPage() {
       });
 
       if (result.success) {
-        setFormSuccess(result.message);
+        setFormSuccess('Tenant berhasil didaftarkan ke sistem PILIN.');
         setFormData({ name: '', code: '', email: '' });
-        // Close modal after delay and refresh list
+        fetchTenants();
         setTimeout(() => {
           setIsModalOpen(false);
           setFormSuccess(null);
-          fetchTenants();
-        }, 2000);
+        }, 1500);
       } else {
-        setFormError(result.message);
+        setFormError(result.message || 'Gagal mendaftarkan tenant.');
       }
     } catch (err: any) {
       setFormError(err.message || 'Terjadi kesalahan sistem.');
@@ -267,70 +495,6 @@ export default function SuperAdminPage() {
       setFormLoading(false);
     }
   };
-
-  useEffect(() => {
-    async function verifyAuth() {
-      // 1. Check local storage simulation bypass first (only for development/testing DX)
-      if (typeof window !== 'undefined') {
-        const simulated = localStorage.getItem('pilin_super_admin_simulated');
-        if (simulated === 'true') {
-          setIsSuperAdmin(true);
-          setIsSimulated(true);
-          setLoading(false);
-          return;
-        }
-      }
-
-      try {
-        const supabase = createClient();
-        
-        // Check active Supabase auth session
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
-          setIsSuperAdmin(false);
-          setLoading(false);
-          return;
-        }
-
-        // Call database RPC auth_is_super_admin()
-        const { data, error } = await supabase.rpc('auth_is_super_admin');
-        if (error) {
-          console.error('Error invoking auth_is_super_admin RPC:', error);
-          setIsSuperAdmin(false);
-        } else {
-          setIsSuperAdmin(!!data);
-        }
-      } catch (err) {
-        console.error('Super Admin authorization check failed:', err);
-        setIsSuperAdmin(false);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    verifyAuth();
-  }, []);
-
-  useEffect(() => {
-    if (isSuperAdmin) {
-      if (activeMenu === 'Dashboard') {
-        fetchMetrics();
-      } else if (activeMenu === 'Tenants') {
-        fetchTenants();
-      } else if (activeMenu === 'Subscriptions') {
-        fetchSubscriptionsData();
-      } else if (activeMenu === 'Users & Roles') {
-        fetchPlatformUsers();
-      } else if (activeMenu === 'Products / Services') {
-        fetchPlatformProducts();
-      } else if (activeMenu === 'Audit Log') {
-        fetchAuditLogs();
-      }
-    }
-  }, [activeMenu, isSuperAdmin]);
-
-
-
 
   const handleSignOut = () => {
     if (typeof window !== 'undefined') {
@@ -346,25 +510,48 @@ export default function SuperAdminPage() {
     }
   };
 
+  // Filtered tenants calculation
+  const filteredTenants = useMemo(() => {
+    return tenants.filter(t => {
+      const matchesSearch = 
+        t.name.toLowerCase().includes(tenantSearch.toLowerCase()) || 
+        t.code.toLowerCase().includes(tenantSearch.toLowerCase());
+      
+      const matchesStatus = 
+        statusFilter === 'ALL' || t.status === statusFilter;
+
+      const matchesTier = 
+        tierFilter === 'ALL' || t.subscription_tier === tierFilter;
+
+      return matchesSearch && matchesStatus && matchesTier;
+    });
+  }, [tenants, tenantSearch, statusFilter, tierFilter]);
+
+  // Filtered features calculation
+  const filteredFeatures = useMemo(() => {
+    if (featureCategoryFilter === 'Semua') return tenantFeatures;
+    return tenantFeatures.filter(f => f.category === featureCategoryFilter);
+  }, [tenantFeatures, featureCategoryFilter]);
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col items-center justify-center p-6 font-sans">
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6 font-sans">
         <Loader2 className="w-8 h-8 text-[#F26522] animate-spin mb-4" />
-        <h1 className="text-sm font-semibold text-[#0F2547]">Memuat Otorisasi Platform...</h1>
+        <h1 className="text-sm font-semibold text-white">Memuat Otorisasi Platform...</h1>
       </div>
     );
   }
 
   if (isSuperAdmin === false) {
     return (
-      <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col items-center justify-center p-6 font-sans">
-        <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl p-8 shadow-sm space-y-6 text-center">
-          <div className="inline-flex p-4 rounded-full bg-rose-50 border border-rose-200 text-rose-600 mb-2">
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6 font-sans">
+        <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-sm space-y-6 text-center">
+          <div className="inline-flex p-4 rounded-full bg-rose-950/40 border border-rose-500/30 text-rose-400 mb-2">
             <AlertTriangle className="w-10 h-10" />
           </div>
-          <h1 className="text-2xl font-bold text-[#0F2547]">Akses Dibatasi</h1>
+          <h1 className="text-2xl font-bold text-white">Akses Dibatasi</h1>
           
-          <div className="bg-slate-100 border border-slate-200 rounded-xl p-4 text-xs font-mono text-slate-700 text-center">
+          <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 text-xs font-mono text-slate-400 text-center">
             Halaman ini memerlukan otorisasi Super Administrator. Pastikan akun Anda terdaftar di platform_role_assignments.
           </div>
 
@@ -373,11 +560,11 @@ export default function SuperAdminPage() {
               onClick={handleSimulateLogin}
               className="w-full block py-2.5 bg-[#F26522] hover:bg-[#d95416] text-white font-bold text-xs rounded-xl transition-all shadow-md cursor-pointer"
             >
-              🔓 Masuk Dashboard Super Admin (Dev / Testing)
+              🔓 Masuk Console Super Admin (Mode Dev)
             </button>
             <a 
               href="/"
-              className="w-full block py-2.5 bg-[#0F2547] hover:bg-[#0B1A32] text-white font-semibold text-xs rounded-xl transition-all"
+              className="w-full block py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs rounded-xl transition-all"
             >
               Kembali ke Beranda
             </a>
@@ -387,26 +574,28 @@ export default function SuperAdminPage() {
     );
   }
 
-  // Define sidebar menu list
+  // Sidebar Menu Items
   const menuItems = [
-    { name: 'Dashboard', icon: LayoutGrid },
-    { name: 'Prospek', icon: Users },
-    { name: 'Tenants', icon: Building2 },
-    { name: 'Users & Roles', icon: Users },
-    { name: 'Subscriptions', icon: CreditCard },
-    { name: 'Products / Services', icon: Layers },
-    { name: 'Audit Log', icon: FileSpreadsheet }
+    { name: 'Tenants', label: 'Daftar Tenant', icon: Building2 },
+    { name: 'Status', label: 'Status Tenant', icon: Activity },
+    { name: 'Subscriptions', label: 'Subscription', icon: CreditCard },
+    { name: 'Fitur', label: 'Fitur Tenant', icon: SlidersHorizontal },
+    { name: 'Dashboard', label: 'Platform Control', icon: LayoutGrid },
+    { name: 'Prospek', label: 'Prospek & Leads', icon: Users },
+    { name: 'Users & Roles', label: 'Users & Roles', icon: ShieldCheck },
+    { name: 'Products / Services', label: 'Katalog Modul', icon: Layers },
+    { name: 'Audit Log', label: 'Audit Log', icon: FileSpreadsheet }
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex font-sans transition-colors">
-      {/* Sidebar khusus Super Admin */}
-      <aside className="w-64 bg-[#0F2547] dark:bg-[#0B1A32] text-white border-r border-slate-800 p-4 flex flex-col justify-between shrink-0 shadow-md">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex font-sans transition-colors">
+      {/* Sidebar Super Admin */}
+      <aside className="w-64 bg-[#0F2547] text-white border-r border-slate-800 p-4 flex flex-col justify-between shrink-0 shadow-md">
         <div className="space-y-6">
           <div className="flex items-center justify-between px-2 py-2 border-b border-slate-800/80">
             <div className="flex items-center space-x-3">
               <ShieldCheck className="w-7 h-7 text-[#F26522]" />
-              <h1 className="text-sm font-bold text-white tracking-wider">PILIN PLATFORM</h1>
+              <h1 className="text-sm font-bold text-white tracking-wider">PILIN SUPER ADMIN</h1>
             </div>
             <ThemeToggle className="p-1.5" />
           </div>
@@ -418,14 +607,14 @@ export default function SuperAdminPage() {
                 <button
                   key={item.name}
                   onClick={() => setActiveMenu(item.name)}
-                  className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-left text-xs font-semibold transition-all ${
+                  className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-left text-xs font-semibold transition-all cursor-pointer ${
                     isActive 
                       ? 'bg-[#F26522] text-white shadow-sm' 
                       : 'text-slate-300 hover:bg-white/10 hover:text-white'
                   }`}
                 >
                   <Icon className="w-4 h-4" />
-                  <span>{item.name}</span>
+                  <span>{item.label}</span>
                 </button>
               );
             })}
@@ -435,7 +624,7 @@ export default function SuperAdminPage() {
         <div className="space-y-3">
           <button
             onClick={handleSignOut}
-            className="w-full flex items-center justify-center space-x-2 px-3 py-2.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all"
+            className="w-full flex items-center justify-center space-x-2 px-3 py-2.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all cursor-pointer"
           >
             <LogOut className="w-4 h-4" />
             <span>Keluar Sesi</span>
@@ -446,171 +635,23 @@ export default function SuperAdminPage() {
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col min-w-0">
         <header className="bg-slate-900 border-b border-slate-800 h-16 flex items-center justify-between px-6">
-          <h1 className="text-sm font-bold text-white">Super Admin Dashboard</h1>
+          <h1 className="text-sm font-bold text-white">Console Super Administrator</h1>
           <div className="flex items-center space-x-4">
-            <span className="px-2.5 py-1 rounded-md text-[10px] font-bold bg-orange-500/20 text-orange-400 border border-orange-500/30">
-              ROLE: PLATFORM_SUPER_ADMIN
+            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-950/80 text-emerald-400 border border-emerald-500/30">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 mr-2 animate-pulse"></span>
+              Sistem Aktif & Aman
             </span>
           </div>
         </header>
 
-        <div className="p-6 flex-1 overflow-y-auto">
-          {activeMenu === 'Prospek' ? (
-            <ProspectManagementView />
-          ) : activeMenu === 'Dashboard' ? (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-black text-white">Platform Control Center</h2>
-                <button
-                  type="button"
-                  onClick={fetchMetrics}
-                  disabled={metricsLoading}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl transition-all border border-slate-700 disabled:opacity-50 flex items-center space-x-2 cursor-pointer"
-                >
-                  {metricsLoading && <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />}
-                  <span>Segarkan Data</span>
-                </button>
-              </div>
-
-              {metricsError ? (
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 flex flex-col items-center justify-center text-center">
-                  <div className="inline-flex p-4 rounded-full bg-rose-950/50 border border-rose-500/30 text-rose-400 mb-4">
-                    <AlertTriangle className="w-8 h-8" />
-                  </div>
-                  <h3 className="text-sm font-bold text-white">Data belum dapat dimuat.</h3>
-                  <button
-                    type="button"
-                    onClick={fetchMetrics}
-                    className="mt-4 px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl transition-all cursor-pointer"
-                  >
-                    Coba Lagi
-                  </button>
-                </div>
-              ) : (
-                <>
-                  {/* SECTION I: RINGKASAN PLATFORM */}
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm">
-                      <h3 className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Total Tenant</h3>
-                      <div className="text-2xl font-black text-white mt-1">
-                        {metricsLoading ? <Loader2 className="w-5 h-5 text-slate-500 animate-spin" /> : (metrics?.totalTenants ?? 0)}
-                      </div>
-                    </div>
-                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm">
-                      <h3 className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Tenant Aktif</h3>
-                      <div className="text-2xl font-black text-emerald-400 mt-1">
-                        {metricsLoading ? <Loader2 className="w-5 h-5 text-slate-500 animate-spin" /> : (metrics?.activeTenants ?? 0)}
-                      </div>
-                    </div>
-                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm">
-                      <h3 className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Total Prospek</h3>
-                      <div className="text-2xl font-black text-blue-400 mt-1">
-                        {metricsLoading ? <Loader2 className="w-5 h-5 text-slate-500 animate-spin" /> : (metrics?.totalProspects ?? 0)}
-                      </div>
-                    </div>
-                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm">
-                      <h3 className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Trial Aktif</h3>
-                      <div className="text-2xl font-black text-amber-400 mt-1">
-                        {metricsLoading ? <Loader2 className="w-5 h-5 text-slate-500 animate-spin" /> : (metrics?.activeTrials ?? 0)}
-                      </div>
-                    </div>
-                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm">
-                      <h3 className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Subscription</h3>
-                      <div className="text-2xl font-black text-purple-400 mt-1">
-                        {metricsLoading ? <Loader2 className="w-5 h-5 text-slate-500 animate-spin" /> : (metrics?.activeSubscriptions ?? 0)}
-                      </div>
-                    </div>
-                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm">
-                      <h3 className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Revenue (30d)</h3>
-                      <div className="text-base font-black text-orange-400 mt-1 truncate">
-                        {metricsLoading ? (
-                          <Loader2 className="w-5 h-5 text-slate-500 animate-spin" />
-                        ) : (
-                          new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(metrics?.monthlyRevenue ?? 0)
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* SECTION II & III GRID */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* SECTION II: MEMBUTUHKAN PERHATIAN */}
-                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
-                      <div className="flex items-center justify-between">
-                        <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                          <AlertTriangle className="w-4 h-4 text-amber-400" />
-                          <span>Membutuhkan Perhatian</span>
-                        </h3>
-                      </div>
-                      {metricsLoading ? (
-                        <div className="p-8 text-center text-slate-500">
-                          <Loader2 className="w-6 h-6 animate-spin mx-auto" />
-                        </div>
-                      ) : (metrics?.attentionItems && metrics.attentionItems.length > 0) ? (
-                        <div className="space-y-3">
-                          {metrics.attentionItems.map((item) => (
-                            <div key={item.id} className="bg-slate-950 border border-slate-800 rounded-xl p-3 flex items-center justify-between gap-3">
-                              <div>
-                                <div className="text-xs font-bold text-white">{item.title}</div>
-                                <div className="text-[11px] text-slate-400 mt-0.5">{item.subtitle}</div>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => setActiveMenu(item.actionMenu)}
-                                className="px-2.5 py-1 bg-[#F26522] hover:bg-[#d95416] text-white text-[10px] font-bold rounded-lg transition-all cursor-pointer shrink-0"
-                              >
-                                Lihat →
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 text-xs font-medium text-slate-400 text-center">
-                          Tidak ada tindakan yang perlu dilakukan saat ini.
-                        </div>
-                      )}
-                    </div>
-
-                    {/* SECTION III: AKTIVITAS TERBARU */}
-                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
-                      <div className="flex items-center justify-between">
-                        <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                          <Activity className="w-4 h-4 text-blue-400" />
-                          <span>Aktivitas Terbaru</span>
-                        </h3>
-                      </div>
-                      {metricsLoading ? (
-                        <div className="p-8 text-center text-slate-500">
-                          <Loader2 className="w-6 h-6 animate-spin mx-auto" />
-                        </div>
-                      ) : (metrics?.recentActivities && metrics.recentActivities.length > 0) ? (
-                        <div className="space-y-3">
-                          {metrics.recentActivities.map((act) => (
-                            <div key={act.id} className="bg-slate-950 border border-slate-800 rounded-xl p-3 flex items-center justify-between gap-3">
-                              <div>
-                                <div className="text-xs font-bold text-white">{act.title}</div>
-                                <div className="text-[11px] text-slate-400 mt-0.5">{act.detail}</div>
-                              </div>
-                              <div className="text-[10px] text-slate-500 font-mono shrink-0">
-                                {new Date(act.timestamp).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 text-xs font-medium text-slate-400 text-center">
-                          Belum ada aktivitas terbaru.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          ) : activeMenu === 'Tenants' ? (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-black text-white">Management Tenant Platform</h2>
+        <div className="flex-1 p-6 overflow-y-auto">
+          {/* ================================================================= */}
+          {/* 1. MENU: DAFTAR TENANT */}
+          {/* ================================================================= */}
+          {activeMenu === 'Tenants' && (
+            <div className="space-y-6 animate-fade-in">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <h2 className="text-xl font-black text-white">Daftar Tenant PILIN</h2>
                 <div className="flex items-center space-x-3">
                   <button
                     type="button"
@@ -624,24 +665,55 @@ export default function SuperAdminPage() {
                   <button
                     type="button"
                     onClick={() => setIsModalOpen(true)}
-                    className="px-4 py-2 bg-[#F26522] hover:bg-[#d95416] text-white font-bold text-xs rounded-xl transition-all flex items-center space-x-2 cursor-pointer"
+                    className="px-4 py-2 bg-[#F26522] hover:bg-[#d95416] text-white font-bold text-xs rounded-xl transition-all flex items-center space-x-2 cursor-pointer shadow-sm"
                   >
-                    <span>+ Create Tenant</span>
+                    <span>+ Tambah Tenant Baru</span>
                   </button>
                 </div>
               </div>
 
+              {/* Filter & Search Bar */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+                <div className="relative w-full md:w-80">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={tenantSearch}
+                    onChange={(e) => setTenantSearch(e.target.value)}
+                    placeholder="Cari nama atau kode tenant..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#F26522]"
+                  />
+                </div>
+
+                <div className="flex items-center space-x-2 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
+                  <span className="text-xs font-bold text-slate-400 mr-2 shrink-0">Status:</span>
+                  {['ALL', 'ACTIVE', 'TRIAL', 'SUSPENDED'].map((st) => (
+                    <button
+                      key={st}
+                      type="button"
+                      onClick={() => setStatusFilter(st)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                        statusFilter === st
+                          ? 'bg-[#F26522] text-white'
+                          : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                      }`}
+                    >
+                      {st === 'ALL' ? 'Semua' : st}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Tenants Table */}
               {tenantsLoading ? (
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 flex flex-col items-center justify-center text-center">
-                  <Loader2 className="w-8 h-8 text-orange-500 animate-spin mb-4" />
+                  <Loader2 className="w-8 h-8 text-[#F26522] animate-spin mb-4" />
                   <span className="text-xs font-bold text-slate-400">Memuat data tenant...</span>
                 </div>
               ) : tenantsError ? (
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 flex flex-col items-center justify-center text-center">
-                  <div className="inline-flex p-4 rounded-full bg-rose-950/50 border border-rose-500/30 text-rose-400 mb-4">
-                    <AlertTriangle className="w-8 h-8" />
-                  </div>
-                  <h3 className="text-sm font-bold text-white">Data belum dapat dimuat.</h3>
+                  <AlertTriangle className="w-8 h-8 text-rose-500 mb-4" />
+                  <h3 className="text-sm font-bold text-white">Gagal memuat data tenant.</h3>
                   <button
                     type="button"
                     onClick={fetchTenants}
@@ -650,35 +722,95 @@ export default function SuperAdminPage() {
                     Coba Lagi
                   </button>
                 </div>
-              ) : tenants.length === 0 ? (
+              ) : filteredTenants.length === 0 ? (
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 flex flex-col items-center justify-center text-center">
-                  <div className="inline-flex p-4 rounded-full bg-slate-800 border border-slate-700 text-slate-400 mb-4">
-                    <Building2 className="w-8 h-8" />
-                  </div>
-                  <h3 className="text-sm font-bold text-white">Belum ada tenant yang terdaftar.</h3>
+                  <Building2 className="w-8 h-8 text-slate-600 mb-4" />
+                  <h3 className="text-sm font-bold text-white">Tidak ada tenant yang cocok.</h3>
                 </div>
               ) : (
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
                   <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                       <thead>
-                        <tr className="border-b border-slate-800 bg-slate-950/40 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                          <th className="p-4">Tenant</th>
-                          <th className="p-4">Code</th>
-                          <th className="p-4">Created</th>
-                          <th className="p-4">Updated</th>
+                        <tr className="border-b border-slate-800 bg-slate-950/60 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                          <th className="p-4">Nama & Kode Tenant</th>
+                          <th className="p-4">Status Operasional</th>
+                          <th className="p-4">Paket Subscription</th>
+                          <th className="p-4">Fitur Aktif</th>
+                          <th className="p-4">Cabang</th>
+                          <th className="p-4 text-right">Aksi Manajemen</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800 text-xs">
-                        {tenants.map((tenant) => (
-                          <tr key={tenant.id} className="hover:bg-slate-800/30 transition-colors">
-                            <td className="p-4 font-bold text-white">{tenant.name}</td>
-                            <td className="p-4 font-mono text-slate-300">{tenant.code}</td>
-                            <td className="p-4 text-slate-400">
-                              {new Date(tenant.created_at).toLocaleString('id-ID')}
+                        {filteredTenants.map((tenant) => (
+                          <tr key={tenant.id} className="hover:bg-slate-800/40 transition-colors">
+                            <td className="p-4">
+                              <div className="font-bold text-white text-sm">{tenant.name}</div>
+                              <div className="font-mono text-[11px] text-[#F26522] mt-0.5">{tenant.code}</div>
                             </td>
-                            <td className="p-4 text-slate-400">
-                              {new Date(tenant.updated_at).toLocaleString('id-ID')}
+                            <td className="p-4">
+                              <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border inline-flex items-center gap-1.5 ${
+                                tenant.status === 'ACTIVE'
+                                  ? 'bg-emerald-950/40 text-emerald-400 border-emerald-500/30'
+                                  : tenant.status === 'TRIAL'
+                                  ? 'bg-amber-950/40 text-amber-400 border-amber-500/30'
+                                  : 'bg-rose-950/40 text-rose-400 border-rose-500/30'
+                              }`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${
+                                  tenant.status === 'ACTIVE' ? 'bg-emerald-400' : tenant.status === 'TRIAL' ? 'bg-amber-400' : 'bg-rose-400'
+                                }`}></span>
+                                {tenant.status || 'ACTIVE'}
+                              </span>
+                            </td>
+                            <td className="p-4">
+                              <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border ${
+                                tenant.subscription_tier === 'Enterprise'
+                                  ? 'bg-purple-950/40 text-purple-300 border-purple-500/30'
+                                  : tenant.subscription_tier === 'Pro'
+                                  ? 'bg-blue-950/40 text-blue-300 border-blue-500/30'
+                                  : 'bg-slate-800 text-slate-300 border-slate-700'
+                              }`}>
+                                {tenant.subscription_tier || 'Pro'}
+                              </span>
+                            </td>
+                            <td className="p-4">
+                              <button
+                                type="button"
+                                onClick={() => openFeatureEditor(tenant)}
+                                className="px-2.5 py-1 bg-slate-950 hover:bg-[#F26522]/10 border border-slate-800 hover:border-[#F26522]/40 rounded-lg text-[11px] font-bold text-slate-300 hover:text-[#F26522] transition-all cursor-pointer inline-flex items-center gap-1.5"
+                              >
+                                <SlidersHorizontal className="w-3.5 h-3.5 text-[#F26522]" />
+                                <span>{tenant.active_features_count ?? 13} / 13 Fitur</span>
+                              </button>
+                            </td>
+                            <td className="p-4 text-slate-300 font-medium">
+                              {tenant.branches_count || 1} Cabang
+                            </td>
+                            <td className="p-4 text-right">
+                              <div className="flex items-center justify-end space-x-2">
+                                <button
+                                  type="button"
+                                  onClick={() => openFeatureEditor(tenant)}
+                                  className="px-2.5 py-1.5 bg-[#F26522] hover:bg-[#d95416] text-white text-[11px] font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1 shadow-sm"
+                                >
+                                  <SlidersHorizontal className="w-3 h-3" />
+                                  <span>Pilih Fitur</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openStatusEditor(tenant)}
+                                  className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[11px] font-bold rounded-lg transition-all cursor-pointer"
+                                >
+                                  Status
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openSubEditor(tenant)}
+                                  className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[11px] font-bold rounded-lg transition-all cursor-pointer"
+                                >
+                                  Paket
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -688,33 +820,137 @@ export default function SuperAdminPage() {
                 </div>
               )}
             </div>
-          ) : activeMenu === 'Subscriptions' ? (
+          )}
+
+          {/* ================================================================= */}
+          {/* 2. MENU: STATUS TENANT */}
+          {/* ================================================================= */}
+          {activeMenu === 'Status' && (
             <div className="space-y-6 animate-fade-in">
               <div className="flex items-center justify-between">
+                <h2 className="text-xl font-black text-white">Status Operasional Tenant</h2>
+                <button
+                  type="button"
+                  onClick={fetchTenants}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl transition-all border border-slate-700 cursor-pointer"
+                >
+                  Segarkan Status
+                </button>
+              </div>
+
+              {/* Status Overview Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                  <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Tenant Active</div>
+                  <div className="text-3xl font-black text-emerald-400 mt-2">
+                    {tenants.filter(t => t.status === 'ACTIVE' || !t.status).length}
+                  </div>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                  <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Tenant Trial</div>
+                  <div className="text-3xl font-black text-amber-400 mt-2">
+                    {tenants.filter(t => t.status === 'TRIAL').length}
+                  </div>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                  <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Tenant Suspended</div>
+                  <div className="text-3xl font-black text-rose-400 mt-2">
+                    {tenants.filter(t => t.status === 'SUSPENDED').length}
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Status Control Table */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-800 bg-slate-950/60 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                      <th className="p-4">Tenant</th>
+                      <th className="p-4">Status Saat Ini</th>
+                      <th className="p-4">Paket Langganan</th>
+                      <th className="p-4 text-right">Ubah Status Cepat</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800 text-xs">
+                    {tenants.map((t) => (
+                      <tr key={t.id} className="hover:bg-slate-800/30">
+                        <td className="p-4">
+                          <div className="font-bold text-white">{t.name}</div>
+                          <div className="font-mono text-[11px] text-slate-400 mt-0.5">{t.code}</div>
+                        </td>
+                        <td className="p-4">
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border inline-flex items-center gap-1.5 ${
+                            t.status === 'ACTIVE'
+                              ? 'bg-emerald-950/40 text-emerald-400 border-emerald-500/30'
+                              : t.status === 'TRIAL'
+                              ? 'bg-amber-950/40 text-amber-400 border-amber-500/30'
+                              : 'bg-rose-950/40 text-rose-400 border-rose-500/30'
+                          }`}>
+                            {t.status || 'ACTIVE'}
+                          </span>
+                        </td>
+                        <td className="p-4 text-slate-300">
+                          {t.subscription_tier || 'Pro'}
+                        </td>
+                        <td className="p-4 text-right space-x-2">
+                          <button
+                            type="button"
+                            onClick={() => openStatusEditor(t)}
+                            className="px-3 py-1.5 bg-[#F26522] hover:bg-[#d95416] text-white font-bold text-[11px] rounded-lg cursor-pointer"
+                          >
+                            Atur Status
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ================================================================= */}
+          {/* 3. MENU: SUBSCRIPTION */}
+          {/* ================================================================= */}
+          {activeMenu === 'Subscriptions' && (
+            <div className="space-y-6 animate-fade-in">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center space-x-2 bg-slate-900 border border-slate-800 p-1.5 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setActiveSubTab('tenant_overview')}
+                    className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      activeSubTab === 'tenant_overview'
+                        ? 'bg-[#F26522] text-white shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Paket Langganan Tenant
+                  </button>
                   <button
                     type="button"
                     onClick={() => setActiveSubTab('tenant_products')}
                     className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
                       activeSubTab === 'tenant_products'
-                        ? 'bg-orange-600/10 text-orange-400 border border-orange-500/20'
+                        ? 'bg-[#F26522] text-white shadow-sm'
                         : 'text-slate-400 hover:text-slate-200'
                     }`}
                   >
-                    Aktivasi Tenant
+                    Aktivasi Modul
                   </button>
                   <button
                     type="button"
                     onClick={() => setActiveSubTab('subscriptions')}
                     className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
                       activeSubTab === 'subscriptions'
-                        ? 'bg-orange-600/10 text-orange-400 border border-orange-500/20'
+                        ? 'bg-[#F26522] text-white shadow-sm'
                         : 'text-slate-400 hover:text-slate-200'
                     }`}
                   >
-                    Kontrak Langganan
+                    Kontrak Komersial
                   </button>
                 </div>
+
                 <button
                   type="button"
                   onClick={fetchSubscriptionsData}
@@ -726,156 +962,384 @@ export default function SuperAdminPage() {
                 </button>
               </div>
 
-              {subsLoading ? (
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 flex flex-col items-center justify-center text-center">
-                  <Loader2 className="w-8 h-8 text-orange-500 animate-spin mb-4" />
-                  <span className="text-xs font-bold text-slate-400">Memuat data langganan & modul...</span>
-                </div>
-              ) : subsError ? (
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 flex flex-col items-center justify-center text-center">
-                  <div className="inline-flex p-4 rounded-full bg-rose-950/50 border border-rose-500/30 text-rose-400 mb-4">
-                    <AlertTriangle className="w-8 h-8" />
-                  </div>
-                  <h3 className="text-sm font-bold text-white">Data belum dapat dimuat.</h3>
-                  <button
-                    type="button"
-                    onClick={fetchSubscriptionsData}
-                    className="mt-4 px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl transition-all cursor-pointer"
-                  >
-                    Coba Lagi
-                  </button>
+              {activeSubTab === 'tenant_overview' ? (
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-800 bg-slate-950/60 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                        <th className="p-4">Tenant</th>
+                        <th className="p-4">Tier Paket</th>
+                        <th className="p-4">Status Kontrak</th>
+                        <th className="p-4">Fitur Terkoneksi</th>
+                        <th className="p-4 text-right">Kelola Langganan</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800 text-xs">
+                      {tenants.map((t) => (
+                        <tr key={t.id} className="hover:bg-slate-800/30">
+                          <td className="p-4">
+                            <div className="font-bold text-white text-sm">{t.name}</div>
+                            <div className="font-mono text-[11px] text-[#F26522] mt-0.5">{t.code}</div>
+                          </td>
+                          <td className="p-4">
+                            <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border ${
+                              t.subscription_tier === 'Enterprise'
+                                ? 'bg-purple-950/40 text-purple-300 border-purple-500/30'
+                                : t.subscription_tier === 'Pro'
+                                ? 'bg-blue-950/40 text-blue-300 border-blue-500/30'
+                                : 'bg-slate-800 text-slate-300 border-slate-700'
+                            }`}>
+                              {t.subscription_tier || 'Pro'}
+                            </span>
+                          </td>
+                          <td className="p-4">
+                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold border bg-emerald-950/40 text-emerald-400 border-emerald-500/30">
+                              {t.subscription_status || 'ACTIVE'}
+                            </span>
+                          </td>
+                          <td className="p-4 text-slate-300 font-medium">
+                            {t.active_features_count ?? 13} Fitur Aktif
+                          </td>
+                          <td className="p-4 text-right">
+                            <button
+                              type="button"
+                              onClick={() => openSubEditor(t)}
+                              className="px-3 py-1.5 bg-[#F26522] hover:bg-[#d95416] text-white font-bold text-[11px] rounded-lg cursor-pointer inline-flex items-center gap-1.5"
+                            >
+                              <CreditCard className="w-3.5 h-3.5" />
+                              <span>Ubah Paket</span>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               ) : activeSubTab === 'tenant_products' ? (
-                tenantProducts.length === 0 ? (
-                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 flex flex-col items-center justify-center text-center">
-                    <div className="inline-flex p-4 rounded-full bg-slate-800 border border-slate-700 text-slate-400 mb-4">
-                      <Layers className="w-8 h-8" />
-                    </div>
-                    <h3 className="text-sm font-bold text-white">Belum ada aktivasi produk.</h3>
-                  </div>
-                ) : (
-                  <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse">
-                        <thead>
-                          <tr className="border-b border-slate-800 bg-slate-950/40 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                            <th className="p-4">Tenant Code / Name</th>
-                            <th className="p-4">Product Code / Name</th>
-                            <th className="p-4">Status</th>
-                            <th className="p-4">Activated At</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-800 text-xs">
-                          {tenantProducts.map((tp) => (
-                            <tr key={tp.id} className="hover:bg-slate-800/30 transition-colors">
-                              <td className="p-4">
-                                <div className="font-bold text-white">{tp.tenants?.name || '—'}</div>
-                                <div className="text-[10px] text-slate-400 font-mono mt-0.5">{tp.tenants?.code || '—'}</div>
-                              </td>
-                              <td className="p-4">
-                                <div className="font-bold text-white">{tp.platform_products?.name || '—'}</div>
-                                <div className="text-[10px] text-slate-400 font-mono mt-0.5">{tp.platform_products?.code || '—'}</div>
-                              </td>
-                              <td className="p-4">
-                                {activationActionLoading === tp.id ? (
-                                  <div className="flex items-center space-x-1.5 text-[10px] font-bold text-slate-400">
-                                    <Loader2 className="w-3 h-3 text-orange-500 animate-spin" />
-                                    <span>Memproses...</span>
-                                  </div>
-                                ) : (
-                                  <select
-                                    disabled={activationActionLoading !== null}
-                                    value={tp.status || 'PENDING'}
-                                    onChange={(e) => handleActivationStatusChange(tp.id, e.target.value)}
-                                    className={`bg-slate-950 border text-[11px] rounded-lg px-2.5 py-1 font-bold focus:outline-none focus:border-orange-500 disabled:opacity-50 cursor-pointer ${
-                                      tp.status === 'ACTIVE'
-                                        ? 'border-emerald-500/30 text-emerald-400 bg-emerald-950/20'
-                                        : tp.status === 'SUSPENDED'
-                                        ? 'border-amber-500/30 text-amber-400 bg-amber-950/20'
-                                        : 'border-slate-800 text-slate-400'
-                                    }`}
-                                  >
-                                    <option value="PENDING">PENDING</option>
-                                    <option value="ACTIVE">ACTIVE</option>
-                                    <option value="SUSPENDED">SUSPENDED</option>
-                                    <option value="CANCELLED">CANCELLED</option>
-                                  </select>
-                                )}
-                              </td>
-                              <td className="p-4 text-slate-400">
-                                {tp.activated_at ? new Date(tp.activated_at).toLocaleString('id-ID') : 'Not Activated'}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )
-              ) : subscriptions.length === 0 ? (
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 flex flex-col items-center justify-center text-center">
-                  <div className="inline-flex p-4 rounded-full bg-slate-800 border border-slate-700 text-slate-400 mb-4">
-                    <CreditCard className="w-8 h-8" />
-                  </div>
-                  <h3 className="text-sm font-bold text-white">Belum ada kontrak langganan.</h3>
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-800 bg-slate-950/40 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                        <th className="p-4">Tenant</th>
+                        <th className="p-4">Produk Platform</th>
+                        <th className="p-4">Status Modul</th>
+                        <th className="p-4">Tanggal Aktivasi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800 text-xs">
+                      {tenantProducts.map((tp) => (
+                        <tr key={tp.id} className="hover:bg-slate-800/30">
+                          <td className="p-4 font-bold text-white">{tp.tenants?.name || '—'}</td>
+                          <td className="p-4 font-bold text-orange-400">{tp.platform_products?.name || '—'}</td>
+                          <td className="p-4">
+                            <select
+                              value={tp.status || 'PENDING'}
+                              onChange={(e) => handleActivationStatusChange(tp.id, e.target.value)}
+                              className="bg-slate-950 border border-slate-800 text-[11px] rounded-lg px-2.5 py-1 font-bold text-white cursor-pointer"
+                            >
+                              <option value="ACTIVE">ACTIVE</option>
+                              <option value="PENDING">PENDING</option>
+                              <option value="SUSPENDED">SUSPENDED</option>
+                              <option value="CANCELLED">CANCELLED</option>
+                            </select>
+                          </td>
+                          <td className="p-4 text-slate-400 font-mono text-[11px]">
+                            {tp.activated_at ? new Date(tp.activated_at).toLocaleString('id-ID') : 'Belum diaktivasi'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               ) : (
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-slate-800 bg-slate-950/40 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                          <th className="p-4">Customer Details</th>
-                          <th className="p-4">Product</th>
-                          <th className="p-4">Payment Info</th>
-                          <th className="p-4">Status</th>
-                          <th className="p-4">Created Date</th>
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-800 bg-slate-950/40 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                        <th className="p-4">Pelanggan Komersial</th>
+                        <th className="p-4">Produk</th>
+                        <th className="p-4">Nominal Pembayaran</th>
+                        <th className="p-4">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800 text-xs">
+                      {subscriptions.map((sub) => (
+                        <tr key={sub.id} className="hover:bg-slate-800/30">
+                          <td className="p-4 font-bold text-white">{sub.platform_customers?.name || '—'}</td>
+                          <td className="p-4 text-slate-300">{sub.platform_products?.name || '—'}</td>
+                          <td className="p-4 font-bold text-emerald-400">
+                            {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(sub.platform_payments?.amount || 0)}
+                          </td>
+                          <td className="p-4">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950/40 text-emerald-400 border border-emerald-500/30">
+                              {sub.status}
+                            </span>
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800 text-xs">
-                        {subscriptions.map((sub) => (
-                          <tr key={sub.id} className="hover:bg-slate-800/30 transition-colors">
-                            <td className="p-4">
-                              <div className="font-bold text-white">{sub.platform_customers?.name || '—'}</div>
-                              <div className="text-[10px] text-slate-400 mt-0.5">{sub.platform_customers?.email || '—'}</div>
-                            </td>
-                            <td className="p-4">
-                              <div className="font-bold text-white">{sub.platform_products?.name || '—'}</div>
-                              <div className="text-[10px] text-slate-400 font-mono mt-0.5">{sub.platform_products?.code || '—'}</div>
-                            </td>
-                            <td className="p-4">
-                              <div className="text-slate-200 font-medium">
-                                {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(sub.platform_payments?.amount || 0)}
-                              </div>
-                              <div className="text-[10px] text-slate-400 mt-0.5">
-                                {sub.platform_payments?.payment_date ? new Date(sub.platform_payments.payment_date).toLocaleDateString('id-ID') : '—'}
-                              </div>
-                            </td>
-                            <td className="p-4">
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
-                                sub.status === 'ACTIVE'
-                                  ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                                  : sub.status === 'PENDING'
-                                  ? 'bg-blue-500/20 text-blue-400 border-blue-500/30'
-                                  : sub.status === 'SUSPENDED'
-                                  ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
-                                  : 'bg-rose-500/20 text-rose-400 border-rose-500/30'
-                              }`}>
-                                {sub.status}
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ================================================================= */}
+          {/* 4. MENU: FITUR TENANT (BISA PILIH FITUR YANG DIBUTUHKAN TENANT) */}
+          {/* ================================================================= */}
+          {activeMenu === 'Fitur' && (
+            <div className="space-y-6 animate-fade-in">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <h2 className="text-xl font-black text-white">Pemilih & Konfigurasi Fitur Tenant</h2>
+                {selectedTenantForFeatures && (
+                  <button
+                    type="button"
+                    onClick={handleSaveFeatures}
+                    disabled={featuresSaving}
+                    className="px-5 py-2.5 bg-[#F26522] hover:bg-[#d95416] text-white font-bold text-xs rounded-xl transition-all shadow-md flex items-center space-x-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {featuresSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                    <span>{featuresSaving ? 'Menyimpan Fitur...' : 'Simpan Konfigurasi Fitur'}</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Tenant Selector Dropdown Bar */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="space-y-1.5 flex-1 max-w-md">
+                    <label className="text-xs font-bold text-slate-300 block">Pilih Tenant untuk Dikonfigurasi:</label>
+                    <select
+                      value={selectedTenantForFeatures?.id || ''}
+                      onChange={(e) => {
+                        const t = tenants.find(item => item.id === e.target.value);
+                        if (t) openFeatureEditor(t);
+                      }}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-bold focus:outline-none focus:border-[#F26522] cursor-pointer"
+                    >
+                      <option value="" disabled>-- Pilih Salah Satu Tenant --</option>
+                      {tenants.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name} ({t.code}) — {t.subscription_tier || 'Pro'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {selectedTenantForFeatures && (
+                    <div className="flex items-center space-x-3 bg-slate-950 border border-slate-800 rounded-xl p-3">
+                      <div>
+                        <div className="text-xs font-bold text-white">{selectedTenantForFeatures.name}</div>
+                        <div className="text-[11px] text-[#F26522] font-mono">{selectedTenantForFeatures.code}</div>
+                      </div>
+                      <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-[#F26522]/10 text-[#F26522] border border-[#F26522]/30">
+                        {tenantFeatures.filter(f => f.enabled).length} / 13 Fitur Aktif
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Preset Buttons */}
+                {selectedTenantForFeatures && (
+                  <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800/80">
+                    <span className="text-xs font-bold text-slate-400 mr-2">Pilih Cepat Sesuai Paket:</span>
+                    <button
+                      type="button"
+                      onClick={() => handleApplyPreset('starter')}
+                      className="px-3 py-1.5 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-lg text-xs font-bold text-slate-300 hover:text-white transition-all cursor-pointer"
+                    >
+                      Preset Starter (4 Fitur)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleApplyPreset('pro')}
+                      className="px-3 py-1.5 bg-blue-950/40 hover:bg-blue-900/50 border border-blue-500/30 rounded-lg text-xs font-bold text-blue-300 transition-all cursor-pointer"
+                    >
+                      Preset Pro (8 Fitur Populer)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleApplyPreset('enterprise')}
+                      className="px-3 py-1.5 bg-purple-950/40 hover:bg-purple-900/50 border border-purple-500/30 rounded-lg text-xs font-bold text-purple-300 transition-all cursor-pointer"
+                    >
+                      Preset Enterprise (Semua 13 Fitur)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleApplyPreset('none')}
+                      className="px-3 py-1.5 bg-rose-950/30 hover:bg-rose-900/40 border border-rose-500/30 rounded-lg text-xs font-bold text-rose-300 transition-all cursor-pointer"
+                    >
+                      Matikan Semua
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Feedback Alerts */}
+              {featuresSuccess && (
+                <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-xl p-4 text-xs font-bold text-emerald-400 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span>{featuresSuccess}</span>
+                </div>
+              )}
+
+              {featuresError && (
+                <div className="bg-rose-950/40 border border-rose-500/30 rounded-xl p-4 text-xs font-bold text-rose-400 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{featuresError}</span>
+                </div>
+              )}
+
+              {/* Features List by Category */}
+              {!selectedTenantForFeatures ? (
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-16 flex flex-col items-center justify-center text-center">
+                  <SlidersHorizontal className="w-10 h-10 text-slate-600 mb-4" />
+                  <h3 className="text-base font-bold text-white">Silakan pilih tenant di atas untuk mulai mengatur fitur.</h3>
+                </div>
+              ) : featuresLoading ? (
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-16 flex flex-col items-center justify-center text-center">
+                  <Loader2 className="w-8 h-8 text-[#F26522] animate-spin mb-4" />
+                  <span className="text-xs font-bold text-slate-400">Memuat konfigurasi fitur tenant...</span>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Category Filter Pills */}
+                  <div className="flex items-center space-x-2 overflow-x-auto pb-1">
+                    {['Semua', 'Operasional', 'CRM WhatsApp', 'Keuangan', 'HR & SDM', 'Alat & AI'].map((cat) => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setFeatureCategoryFilter(cat)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                          featureCategoryFilter === cat
+                            ? 'bg-[#F26522] text-white shadow-sm'
+                            : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                        }`}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Feature Cards Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {filteredFeatures.map((feat) => {
+                      return (
+                        <div
+                          key={feat.feature_code}
+                          onClick={() => handleToggleFeature(feat.feature_code)}
+                          className={`border rounded-2xl p-5 transition-all cursor-pointer relative overflow-hidden select-none ${
+                            feat.enabled
+                              ? 'bg-slate-900/90 border-emerald-500/40 shadow-sm'
+                              : 'bg-slate-950/70 border-slate-800/80 opacity-75 hover:opacity-100'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="space-y-1">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                {feat.category}
                               </span>
-                            </td>
-                            <td className="p-4 text-slate-400">
-                              {new Date(sub.created_at).toLocaleString('id-ID')}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                              <div className="font-bold text-white text-sm">{feat.name}</div>
+                              <div className="text-[11px] text-slate-400 font-mono mt-0.5">{feat.feature_code}</div>
+                            </div>
+
+                            {/* Toggle Switch */}
+                            <div className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors cursor-pointer shrink-0 ${
+                              feat.enabled ? 'bg-emerald-500' : 'bg-slate-800'
+                            }`}>
+                              <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                                feat.enabled ? 'translate-x-5' : 'translate-x-0'
+                              }`} />
+                            </div>
+                          </div>
+
+                          <div className="mt-4 pt-3 border-t border-slate-800/60 flex items-center justify-between">
+                            <span className="text-[11px] text-slate-400 line-clamp-1">{feat.description}</span>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ml-2 ${
+                              feat.enabled 
+                                ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-500/30' 
+                                : 'bg-slate-950 text-slate-500 border border-slate-800'
+                            }`}>
+                              {feat.enabled ? 'AKTIF' : 'NONAKTIF'}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Bottom Save Action */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between sticky bottom-4 shadow-xl z-20">
+                    <div className="text-xs font-bold text-slate-300">
+                      Total: <span className="text-[#F26522]">{tenantFeatures.filter(f => f.enabled).length}</span> dari 13 fitur diaktifkan
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleSaveFeatures}
+                      disabled={featuresSaving}
+                      className="px-6 py-2.5 bg-[#F26522] hover:bg-[#d95416] text-white font-bold text-xs rounded-xl transition-all shadow-md flex items-center space-x-2 cursor-pointer disabled:opacity-50"
+                    >
+                      {featuresSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                      <span>{featuresSaving ? 'Menyimpan...' : 'Simpan Pengaturan Fitur'}</span>
+                    </button>
                   </div>
                 </div>
               )}
             </div>
-          ) : activeMenu === 'Users & Roles' ? (
+          )}
+
+          {/* ================================================================= */}
+          {/* 5. MENU LAINNYA: DASHBOARD, PROSPEK, USERS, PRODUCTS, AUDIT */}
+          {/* ================================================================= */}
+          {activeMenu === 'Dashboard' && (
+            <div className="space-y-6 animate-fade-in">
+              <h2 className="text-xl font-black text-white">Platform Control Center</h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                  <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Total Tenant</div>
+                  <div className="text-2xl font-black text-white mt-1">
+                    {metricsLoading ? <Loader2 className="w-5 h-5 text-slate-500 animate-spin" /> : (metrics?.totalTenants ?? 0)}
+                  </div>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                  <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Tenant Aktif</div>
+                  <div className="text-2xl font-black text-emerald-400 mt-1">
+                    {metricsLoading ? <Loader2 className="w-5 h-5 text-slate-500 animate-spin" /> : (metrics?.activeTenants ?? 0)}
+                  </div>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                  <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Total Prospek</div>
+                  <div className="text-2xl font-black text-blue-400 mt-1">
+                    {metricsLoading ? <Loader2 className="w-5 h-5 text-slate-500 animate-spin" /> : (metrics?.totalProspects ?? 0)}
+                  </div>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                  <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Trial Aktif</div>
+                  <div className="text-2xl font-black text-amber-400 mt-1">
+                    {metricsLoading ? <Loader2 className="w-5 h-5 text-slate-500 animate-spin" /> : (metrics?.activeTrials ?? 0)}
+                  </div>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                  <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Subscription</div>
+                  <div className="text-2xl font-black text-purple-400 mt-1">
+                    {metricsLoading ? <Loader2 className="w-5 h-5 text-slate-500 animate-spin" /> : (metrics?.activeSubscriptions ?? 0)}
+                  </div>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                  <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Revenue (30d)</div>
+                  <div className="text-base font-black text-orange-400 mt-1 truncate">
+                    {metricsLoading ? <Loader2 className="w-5 h-5 text-slate-500 animate-spin" /> : (
+                      new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(metrics?.monthlyRevenue ?? 0)
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeMenu === 'Prospek' && <ProspectManagementView />}
+
+          {activeMenu === 'Users & Roles' && (
             <div className="space-y-6 animate-fade-in">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-black text-white">Manajemen Peran & Pengguna</h2>
@@ -883,284 +1347,421 @@ export default function SuperAdminPage() {
                   type="button"
                   onClick={fetchPlatformUsers}
                   disabled={usersLoading}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl transition-all border border-slate-700 disabled:opacity-50 flex items-center space-x-2 cursor-pointer"
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl border border-slate-700 cursor-pointer"
                 >
-                  {usersLoading && <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />}
-                  <span>Segarkan Data</span>
+                  Segarkan Data
                 </button>
               </div>
 
-              {usersLoading ? (
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 flex flex-col items-center justify-center text-center">
-                  <Loader2 className="w-8 h-8 text-orange-500 animate-spin mb-4" />
-                  <span className="text-xs font-bold text-slate-400">Memuat data pengguna platform...</span>
-                </div>
-              ) : usersError ? (
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 flex flex-col items-center justify-center text-center">
-                  <div className="inline-flex p-4 rounded-full bg-rose-950/50 border border-rose-500/30 text-rose-400 mb-4">
-                    <AlertTriangle className="w-8 h-8" />
-                  </div>
-                  <h3 className="text-sm font-bold text-white">Data belum dapat dimuat.</h3>
-                  <button
-                    type="button"
-                    onClick={fetchPlatformUsers}
-                    className="mt-4 px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl transition-all cursor-pointer"
-                  >
-                    Coba Lagi
-                  </button>
-                </div>
-              ) : platformUsers.length === 0 ? (
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 flex flex-col items-center justify-center text-center">
-                  <div className="inline-flex p-4 rounded-full bg-slate-800 border border-slate-700 text-slate-400 mb-4">
-                    <Users className="w-8 h-8" />
-                  </div>
-                  <h3 className="text-sm font-bold text-white">Belum ada pengguna platform terdaftar.</h3>
-                </div>
-              ) : (
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-slate-800 bg-slate-950/40 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                          <th className="p-4">User Email</th>
-                          <th className="p-4">Registered / Confirmed</th>
-                          <th className="p-4">Last Sign In</th>
-                          <th className="p-4">Active Platform Role</th>
-                          <th className="p-4">Actions</th>
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-800 bg-slate-950/40 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                      <th className="p-4">User Email</th>
+                      <th className="p-4">Peran Platform</th>
+                      <th className="p-4">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800 text-xs">
+                    {platformUsers.map((u) => {
+                      const hasActiveRole = u.role_code && u.role_code !== 'None' && u.is_active;
+                      const currentRole = hasActiveRole ? u.role_code : 'None';
+                      return (
+                        <tr key={u.id} className="hover:bg-slate-800/30">
+                          <td className="p-4 font-bold text-white">{u.email}</td>
+                          <td className="p-4">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300">
+                              {currentRole}
+                            </span>
+                          </td>
+                          <td className="p-4">
+                            <select
+                              value={currentRole}
+                              onChange={(e) => handleRoleChange(u.id, e.target.value)}
+                              className="bg-slate-950 border border-slate-800 text-slate-200 text-[11px] rounded-lg px-2 py-1 font-bold cursor-pointer"
+                            >
+                              <option value="None">None</option>
+                              <option value="SUPER_ADMIN">SUPER_ADMIN</option>
+                              <option value="sales">sales</option>
+                              <option value="finance">finance</option>
+                            </select>
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800 text-xs">
-                        {platformUsers.map((u) => {
-                          const hasActiveRole = u.role_code && u.role_code !== 'None' && u.is_active;
-                          const currentRole = hasActiveRole ? u.role_code : 'None';
-                          return (
-                            <tr key={u.id} className="hover:bg-slate-800/30 transition-colors">
-                              <td className="p-4">
-                                <div className="font-bold text-white">{u.email}</div>
-                                <div className="text-[10px] text-slate-400 font-mono mt-0.5">{u.id}</div>
-                              </td>
-                              <td className="p-4">
-                                <div className="text-slate-300">{new Date(u.created_at).toLocaleDateString('id-ID')}</div>
-                                <div className="text-[10px] text-slate-400 mt-0.5">
-                                  {u.email_confirmed_at ? 'Email Confirmed' : 'Not Confirmed'}
-                                </div>
-                              </td>
-                              <td className="p-4 text-slate-400">
-                                {u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString('id-ID') : '—'}
-                              </td>
-                              <td className="p-4">
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
-                                  hasActiveRole
-                                    ? u.role_code === 'SUPER_ADMIN'
-                                      ? 'bg-orange-500/20 text-orange-400 border-orange-500/30'
-                                      : u.role_code === 'sales'
-                                      ? 'bg-blue-500/20 text-blue-400 border-blue-500/30'
-                                      : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                                    : 'bg-slate-800 text-slate-400 border-slate-700'
-                                }`}>
-                                  {currentRole}
-                                </span>
-                              </td>
-                              <td className="p-4">
-                                <select
-                                  disabled={roleActionLoading !== null}
-                                  value={currentRole}
-                                  onChange={(e) => handleRoleChange(u.id, e.target.value)}
-                                  className="bg-slate-950 border border-slate-800 text-slate-200 text-[11px] rounded-lg px-2 py-1 font-bold focus:outline-none focus:border-orange-500 disabled:opacity-50 cursor-pointer"
-                                >
-                                  <option value="None">None (Revoked)</option>
-                                  <option value="SUPER_ADMIN">SUPER_ADMIN</option>
-                                  <option value="sales">sales</option>
-                                  <option value="finance">finance</option>
-                                </select>
-                                {roleActionLoading === u.id && (
-                                  <Loader2 className="w-3.5 h-3.5 text-orange-500 animate-spin inline-block ml-2 align-middle" />
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : activeMenu === 'Products / Services' ? (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-black text-white">Katalog Produk & Layanan</h2>
-                <button
-                  type="button"
-                  onClick={fetchPlatformProducts}
-                  className="flex items-center space-x-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl transition-all border border-slate-700 disabled:opacity-50 cursor-pointer"
-                >
-                  {productsLoading && <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />}
-                  <span>Segarkan Data</span>
-                </button>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
+            </div>
+          )}
 
-              {productsLoading ? (
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 flex flex-col items-center justify-center text-center">
-                  <Loader2 className="w-8 h-8 text-orange-500 animate-spin mb-4" />
-                  <span className="text-xs font-bold text-slate-400">Memuat katalog produk...</span>
-                </div>
-              ) : productsError ? (
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 flex flex-col items-center justify-center text-center">
-                  <div className="inline-flex p-4 rounded-full bg-rose-950/50 border border-rose-500/30 text-rose-400 mb-4">
-                    <AlertTriangle className="w-8 h-8" />
-                  </div>
-                  <h3 className="text-sm font-bold text-white">Data belum dapat dimuat.</h3>
-                  <button
-                    type="button"
-                    onClick={fetchPlatformProducts}
-                    className="mt-4 px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl transition-all cursor-pointer"
-                  >
-                    Coba Lagi
-                  </button>
-                </div>
-              ) : platformProducts.length === 0 ? (
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 flex flex-col items-center justify-center text-center">
-                  <div className="inline-flex p-4 rounded-full bg-slate-800 border border-slate-700 text-slate-400 mb-4">
-                    <Layers className="w-8 h-8" />
-                  </div>
-                  <h3 className="text-sm font-bold text-white">Belum ada produk atau layanan platform.</h3>
-                </div>
-              ) : (
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-slate-800 bg-slate-950/40 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                          <th className="p-4">Product Code</th>
-                          <th className="p-4">Name</th>
-                          <th className="p-4">Type</th>
-                          <th className="p-4">Description</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800 text-xs">
-                        {platformProducts.map((p) => (
-                          <tr key={p.id} className="hover:bg-slate-800/30 transition-colors">
-                            <td className="p-4 font-mono font-bold text-orange-400">{p.code}</td>
-                            <td className="p-4 font-bold text-white">{p.name}</td>
-                            <td className="p-4">
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
-                                p.product_type === 'MAIN'
-                                  ? 'bg-blue-500/20 text-blue-400 border-blue-500/30'
-                                  : 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30'
-                              }`}>
-                                {p.product_type}
-                              </span>
-                            </td>
-                            <td className="p-4 text-slate-400">{p.description || '—'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : activeMenu === 'Audit Log' ? (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-black text-white">Log Audit Platform</h2>
-                <button
-                  type="button"
-                  onClick={fetchAuditLogs}
-                  className="flex items-center space-x-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl transition-all border border-slate-700 disabled:opacity-50 cursor-pointer"
-                >
-                  {logsLoading && <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />}
-                  <span>Segarkan Data</span>
-                </button>
+          {activeMenu === 'Products / Services' && (
+            <div className="space-y-6 animate-fade-in">
+              <h2 className="text-xl font-black text-white">Katalog Modul Platform</h2>
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-800 bg-slate-950/40 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                      <th className="p-4">Kode Produk</th>
+                      <th className="p-4">Nama Produk</th>
+                      <th className="p-4">Tipe</th>
+                      <th className="p-4">Keterangan</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800 text-xs">
+                    {platformProducts.map((p) => (
+                      <tr key={p.id} className="hover:bg-slate-800/30">
+                        <td className="p-4 font-mono font-bold text-[#F26522]">{p.code}</td>
+                        <td className="p-4 font-bold text-white">{p.name}</td>
+                        <td className="p-4 text-slate-300">{p.product_type}</td>
+                        <td className="p-4 text-slate-400">{p.description || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
+            </div>
+          )}
 
-              {logsLoading ? (
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 flex flex-col items-center justify-center text-center">
-                  <Loader2 className="w-8 h-8 text-orange-500 animate-spin mb-4" />
-                  <span className="text-xs font-bold text-slate-400">Memuat log audit platform...</span>
-                </div>
-              ) : logsError ? (
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 flex flex-col items-center justify-center text-center">
-                  <div className="inline-flex p-4 rounded-full bg-rose-950/50 border border-rose-500/30 text-rose-400 mb-4">
-                    <AlertTriangle className="w-8 h-8" />
-                  </div>
-                  <h3 className="text-sm font-bold text-white">Data belum dapat dimuat.</h3>
-                  <button
-                    type="button"
-                    onClick={fetchAuditLogs}
-                    className="mt-4 px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl transition-all cursor-pointer"
-                  >
-                    Coba Lagi
-                  </button>
-                </div>
-              ) : auditLogs.length === 0 ? (
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 flex flex-col items-center justify-center text-center">
-                  <div className="inline-flex p-4 rounded-full bg-slate-800 border border-slate-700 text-slate-400 mb-4">
-                    <FileSpreadsheet className="w-8 h-8" />
-                  </div>
-                  <h3 className="text-sm font-bold text-white">Belum ada aktivitas audit.</h3>
-                </div>
-              ) : (
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-slate-800 bg-slate-950/40 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                          <th className="p-4">Timestamp</th>
-                          <th className="p-4">Operation</th>
-                          <th className="p-4">Entity</th>
-                          <th className="p-4">Payload</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800 text-xs">
-                        {auditLogs.map((log) => (
-                          <tr key={log.id} className="hover:bg-slate-800/30 transition-colors">
-                            <td className="p-4 text-slate-400 font-mono">
-                              {new Date(log.created_at).toLocaleString('id-ID')}
-                            </td>
-                            <td className="p-4">
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
-                                log.operation.includes('REVOKE') || log.operation.includes('DELETE')
-                                  ? 'bg-rose-500/20 text-rose-400 border-rose-500/30'
-                                  : log.operation.includes('ASSIGN') || log.operation.includes('ACTIVATE')
-                                  ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                                  : 'bg-slate-800 text-slate-400 border-slate-700'
-                              }`}>
-                                {log.operation}
-                              </span>
-                            </td>
-                            <td className="p-4">
-                              <div className="font-bold text-white">{log.entity}</div>
-                              <div className="text-[10px] text-slate-500 font-mono mt-0.5">{log.entity_id || '—'}</div>
-                            </td>
-                            <td className="p-4 max-w-xs truncate font-mono text-[10px] text-slate-300">
-                              {JSON.stringify(log.payload_sanitized)}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="h-full flex flex-col items-center justify-center text-center p-12 bg-slate-900 border border-slate-800 rounded-2xl">
-              <div className="inline-flex p-4 rounded-full bg-slate-800 border border-slate-700 text-slate-400 mb-4">
-                <Settings className="w-8 h-8" />
+          {activeMenu === 'Audit Log' && (
+            <div className="space-y-6 animate-fade-in">
+              <h2 className="text-xl font-black text-white">Log Audit Platform</h2>
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-800 bg-slate-950/40 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                      <th className="p-4">Waktu</th>
+                      <th className="p-4">Operasi</th>
+                      <th className="p-4">Entitas</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800 text-xs">
+                    {auditLogs.map((log) => (
+                      <tr key={log.id} className="hover:bg-slate-800/30">
+                        <td className="p-4 text-slate-400 font-mono text-[11px]">{new Date(log.created_at).toLocaleString('id-ID')}</td>
+                        <td className="p-4 font-bold text-white">{log.operation}</td>
+                        <td className="p-4 text-slate-300">{log.entity}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              <h2 className="text-lg font-bold text-white">{activeMenu}</h2>
             </div>
           )}
         </div>
       </main>
 
+      {/* =================================================================== */}
+      {/* MODAL 1: PEMILIH FITUR TENANT (FEATURE FLAG SELECTOR) */}
+      {/* =================================================================== */}
+      {isFeatureModalOpen && selectedTenantForFeatures && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-6 relative max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div>
+                <h3 className="text-base font-bold text-white">Konfigurasi Fitur: {selectedTenantForFeatures.name}</h3>
+                <div className="text-xs font-mono text-[#F26522] mt-0.5">{selectedTenantForFeatures.code}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsFeatureModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {featuresSuccess && (
+              <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-xl p-3 text-xs font-bold text-emerald-400 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{featuresSuccess}</span>
+              </div>
+            )}
+
+            {featuresError && (
+              <div className="bg-rose-950/40 border border-rose-500/30 rounded-xl p-3 text-xs font-bold text-rose-400 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{featuresError}</span>
+              </div>
+            )}
+
+            {/* Quick Presets */}
+            <div className="flex flex-wrap items-center gap-2 bg-slate-950 border border-slate-800 p-3 rounded-xl">
+              <span className="text-xs font-bold text-slate-400 mr-2">Preset Cepat:</span>
+              <button
+                type="button"
+                onClick={() => handleApplyPreset('starter')}
+                className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg text-xs font-bold text-slate-300 cursor-pointer"
+              >
+                Starter (4 Fitur)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleApplyPreset('pro')}
+                className="px-2.5 py-1 bg-blue-950/40 hover:bg-blue-900/50 border border-blue-500/30 rounded-lg text-xs font-bold text-blue-300 cursor-pointer"
+              >
+                Pro (8 Fitur)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleApplyPreset('enterprise')}
+                className="px-2.5 py-1 bg-purple-950/40 hover:bg-purple-900/50 border border-purple-500/30 rounded-lg text-xs font-bold text-purple-300 cursor-pointer"
+              >
+                Enterprise (13 Fitur)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleApplyPreset('none')}
+                className="px-2.5 py-1 bg-rose-950/30 hover:bg-rose-900/40 border border-rose-500/30 rounded-lg text-xs font-bold text-rose-300 cursor-pointer"
+              >
+                Matikan Semua
+              </button>
+            </div>
+
+            {/* Feature Cards in Scrollable Area */}
+            <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+              {featuresLoading ? (
+                <div className="py-12 text-center text-slate-400">
+                  <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-[#F26522]" />
+                  <span className="text-xs font-bold">Memuat konfigurasi fitur...</span>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {tenantFeatures.map((f) => (
+                    <div
+                      key={f.feature_code}
+                      onClick={() => handleToggleFeature(f.feature_code)}
+                      className={`border rounded-xl p-3.5 transition-all cursor-pointer flex items-start justify-between gap-3 ${
+                        f.enabled 
+                          ? 'bg-slate-950 border-emerald-500/40' 
+                          : 'bg-slate-950/60 border-slate-800 opacity-60 hover:opacity-100'
+                      }`}
+                    >
+                      <div className="space-y-0.5 flex-1">
+                        <div className="text-[10px] font-bold text-[#F26522] uppercase tracking-wider">{f.category}</div>
+                        <div className="text-xs font-bold text-white">{f.name}</div>
+                        <div className="text-[10px] text-slate-400 line-clamp-1">{f.description}</div>
+                      </div>
+
+                      <div className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
+                        f.enabled ? 'bg-emerald-500' : 'bg-slate-800'
+                      }`}>
+                        <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                          f.enabled ? 'translate-x-5' : 'translate-x-0'
+                        }`} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between border-t border-slate-800 pt-4">
+              <div className="text-xs font-bold text-slate-300">
+                Fitur Aktif: <span className="text-emerald-400">{tenantFeatures.filter(f => f.enabled).length}</span> / 13
+              </div>
+              <div className="flex space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setIsFeatureModalOpen(false)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl border border-slate-700 cursor-pointer"
+                >
+                  Tutup
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveFeatures}
+                  disabled={featuresSaving}
+                  className="px-5 py-2 bg-[#F26522] hover:bg-[#d95416] text-white font-bold text-xs rounded-xl transition-all shadow-md flex items-center space-x-2 cursor-pointer disabled:opacity-50"
+                >
+                  {featuresSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>{featuresSaving ? 'Menyimpan...' : 'Simpan Fitur'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =================================================================== */}
+      {/* MODAL 2: UBAH STATUS TENANT */}
+      {/* =================================================================== */}
+      {isStatusModalOpen && selectedTenantForStatus && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-6 relative">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <h3 className="text-base font-bold text-white">Ubah Status: {selectedTenantForStatus.name}</h3>
+              <button
+                type="button"
+                onClick={() => setIsStatusModalOpen(false)}
+                className="text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {statusSuccess && (
+              <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-xl p-3 text-xs font-bold text-emerald-400 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{statusSuccess}</span>
+              </div>
+            )}
+
+            {statusError && (
+              <div className="bg-rose-950/40 border border-rose-500/30 rounded-xl p-3 text-xs font-bold text-rose-400 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{statusError}</span>
+              </div>
+            )}
+
+            <div className="space-y-3">
+              {[
+                { key: 'ACTIVE', label: 'ACTIVE (Operasional Normal)', color: 'emerald' },
+                { key: 'TRIAL', label: 'TRIAL (Masa Uji Coba Gratis)', color: 'amber' },
+                { key: 'SUSPENDED', label: 'SUSPENDED (Akses Ditangguhkan)', color: 'rose' }
+              ].map((opt) => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  disabled={statusChanging}
+                  onClick={() => handleApplyStatusChange(opt.key as any)}
+                  className={`w-full p-4 rounded-xl border text-left font-bold text-xs transition-all flex items-center justify-between cursor-pointer ${
+                    selectedTenantForStatus.status === opt.key
+                      ? 'bg-slate-950 border-[#F26522] text-white shadow-sm'
+                      : 'bg-slate-950/60 border-slate-800 text-slate-300 hover:border-slate-700'
+                  }`}
+                >
+                  <span>{opt.label}</span>
+                  {selectedTenantForStatus.status === opt.key && (
+                    <Check className="w-4 h-4 text-[#F26522]" />
+                  )}
+                </button>
+              ))}
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setIsStatusModalOpen(false)}
+                className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl border border-slate-700 cursor-pointer"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =================================================================== */}
+      {/* MODAL 3: UBAH SUBSCRIPTION / PAKET TENANT */}
+      {/* =================================================================== */}
+      {isSubModalOpen && selectedTenantForSub && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-6 relative">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <h3 className="text-base font-bold text-white">Paket Langganan: {selectedTenantForSub.name}</h3>
+              <button
+                type="button"
+                onClick={() => setIsSubModalOpen(false)}
+                className="text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {subModalSuccess && (
+              <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-xl p-3 text-xs font-bold text-emerald-400 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{subModalSuccess}</span>
+              </div>
+            )}
+
+            {subModalError && (
+              <div className="bg-rose-950/40 border border-rose-500/30 rounded-xl p-3 text-xs font-bold text-rose-400 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{subModalError}</span>
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-300 block">Pilih Tier Paket Langganan:</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['Starter', 'Pro', 'Enterprise'] as const).map((tier) => (
+                    <button
+                      key={tier}
+                      type="button"
+                      onClick={() => setSubTierChoice(tier)}
+                      className={`p-3 rounded-xl border text-center text-xs font-bold transition-all cursor-pointer ${
+                        subTierChoice === tier
+                          ? 'bg-[#F26522] text-white border-[#F26522] shadow-sm'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {tier}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-300 block">Status Langganan:</label>
+                <select
+                  value={subStatusChoice}
+                  onChange={(e) => setSubStatusChoice(e.target.value as any)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-bold focus:outline-none focus:border-[#F26522] cursor-pointer"
+                >
+                  <option value="ACTIVE">ACTIVE</option>
+                  <option value="PENDING">PENDING</option>
+                  <option value="SUSPENDED">SUSPENDED</option>
+                </select>
+              </div>
+
+              <div className="bg-slate-950 border border-slate-800 p-3 rounded-xl flex items-center space-x-3 cursor-pointer"
+                onClick={() => setApplyPresetCheckbox(!applyPresetCheckbox)}
+              >
+                <input
+                  type="checkbox"
+                  checked={applyPresetCheckbox}
+                  onChange={() => {}}
+                  className="rounded border-slate-700 text-[#F26522] focus:ring-0 cursor-pointer"
+                />
+                <span className="text-xs font-medium text-slate-300 select-none">
+                  Otomatis sesuaikan 13 fitur ke standar paket {subTierChoice}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex space-x-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsSubModalOpen(false)}
+                className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl border border-slate-700 cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={subSaving}
+                onClick={handleSaveSubscription}
+                className="flex-1 py-2.5 bg-[#F26522] hover:bg-[#d95416] text-white font-bold text-xs rounded-xl transition-all shadow-md flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
+              >
+                {subSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                <span>{subSaving ? 'Menyimpan...' : 'Simpan Paket'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =================================================================== */}
+      {/* MODAL 4: TAMBAH TENANT BARU */}
+      {/* =================================================================== */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-6 relative animate-scale-up">
+          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-6 relative">
             <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-              <h3 className="text-md font-bold text-white">Create New Tenant</h3>
+              <h3 className="text-base font-bold text-white">Tambah Tenant Baru</h3>
               <button
                 type="button"
                 onClick={() => {
@@ -1168,9 +1769,9 @@ export default function SuperAdminPage() {
                   setFormError(null);
                   setFormSuccess(null);
                 }}
-                className="text-slate-400 hover:text-white text-xs font-bold transition-all"
+                className="text-slate-400 hover:text-white cursor-pointer"
               >
-                Close
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -1186,42 +1787,43 @@ export default function SuperAdminPage() {
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleCreateTenantSubmit} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-slate-300 font-semibold block text-xs">Business Name</label>
+                <label className="text-slate-300 font-semibold block text-xs">Nama Bisnis / Laundry</label>
                 <input
                   type="text"
                   required
                   disabled={formLoading}
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-orange-500 disabled:opacity-50"
+                  placeholder="Contoh: Berkah Clean Laundry"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#F26522] disabled:opacity-50"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-slate-300 font-semibold block text-xs">Tenant Code</label>
+                <label className="text-slate-300 font-semibold block text-xs">Kode Tenant (Unik)</label>
                 <input
                   type="text"
                   required
                   disabled={formLoading}
                   value={formData.code}
                   onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                  placeholder="e.g. pilin-salon"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-orange-500 disabled:opacity-50 font-mono"
+                  placeholder="contoh: berkah-clean"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#F26522] disabled:opacity-50 font-mono"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-slate-300 font-semibold block text-xs">Owner Email</label>
+                <label className="text-slate-300 font-semibold block text-xs">Email Owner / PIC</label>
                 <input
                   type="email"
                   required
                   disabled={formLoading}
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="owner@example.com"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-orange-500 disabled:opacity-50"
+                  placeholder="owner@berkahclean.id"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#F26522] disabled:opacity-50"
                 />
               </div>
 
@@ -1229,22 +1831,18 @@ export default function SuperAdminPage() {
                 <button
                   type="button"
                   disabled={formLoading}
-                  onClick={() => {
-                    setIsModalOpen(false);
-                    setFormError(null);
-                    setFormSuccess(null);
-                  }}
-                  className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl border border-slate-700 transition-all disabled:opacity-50"
+                  onClick={() => setIsModalOpen(false)}
+                  className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl border border-slate-700 cursor-pointer disabled:opacity-50"
                 >
-                  Cancel
+                  Batal
                 </button>
                 <button
                   type="submit"
                   disabled={formLoading}
-                  className="flex-1 py-2.5 bg-orange-600 hover:bg-orange-500 text-slate-950 font-bold text-xs rounded-xl transition-all disabled:opacity-50 flex items-center justify-center space-x-2"
+                  className="flex-1 py-2.5 bg-[#F26522] hover:bg-[#d95416] text-white font-bold text-xs rounded-xl transition-all shadow-md disabled:opacity-50 flex items-center justify-center space-x-2 cursor-pointer"
                 >
                   {formLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  <span>{formLoading ? 'Creating tenant...' : 'Create Tenant'}</span>
+                  <span>{formLoading ? 'Mendaftarkan...' : 'Daftarkan Tenant'}</span>
                 </button>
               </div>
             </form>

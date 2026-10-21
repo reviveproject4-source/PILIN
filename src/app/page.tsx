@@ -15,11 +15,23 @@ function MainErpAppContent() {
   const searchParams = useSearchParams();
   const roleParam = searchParams.get('role') as DashboardRole | null;
   const directParam = searchParams.get('direct');
+  const demoParam = searchParams.get('demo') === 'true' || searchParams.get('mode') === 'demo';
 
   const [activeRole, setActiveRole] = useState<DashboardRole | null>(null);
   const [activeUserName, setActiveUserName] = useState<string>('');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
+  const [isDemoMode, setIsDemoMode] = useState<boolean>(demoParam);
+
+  const targetBusinessId = isDemoMode ? 'demo-tenant' : 'tenant-001';
+
+  useEffect(() => {
+    if (demoParam) {
+      setIsDemoMode(true);
+    } else if (searchParams.get('mode') === 'live') {
+      setIsDemoMode(false);
+    }
+  }, [demoParam, searchParams]);
 
   useEffect(() => {
     if (roleParam) {
@@ -36,10 +48,10 @@ function MainErpAppContent() {
   useEffect(() => {
     let isMounted = true;
     if (isAuthenticated && activeRole) {
-      if (activeRole === 'OWNER') {
+      if (activeRole === 'OWNER' || isDemoMode) {
         setIsAuthorized(true);
       } else {
-        PeopleRepository.hasAuthorizedEmployeeForRole('tenant-001', activeRole).then((authorized) => {
+        PeopleRepository.hasAuthorizedEmployeeForRole(targetBusinessId, activeRole).then((authorized) => {
           if (isMounted) setIsAuthorized(authorized);
         });
       }
@@ -47,12 +59,29 @@ function MainErpAppContent() {
       setIsAuthorized(null);
     }
     return () => { isMounted = false; };
-  }, [isAuthenticated, activeRole]);
+  }, [isAuthenticated, activeRole, isDemoMode, targetBusinessId]);
 
-  const handleLoginSuccess = (role: DashboardRole, name: string) => {
+  const handleLoginSuccess = (role: DashboardRole, name: string, isDemo: boolean = false) => {
     setActiveRole(role);
     setActiveUserName(name);
+    setIsDemoMode(isDemo);
     setIsAuthenticated(true);
+  };
+
+  const handleRoleChange = (newRole: DashboardRole) => {
+    setActiveRole(newRole);
+    const defaultNames: Record<string, string> = {
+      OWNER: isDemoMode ? 'Demo Owner' : 'Owner',
+      KEPALA_CABANG: isDemoMode ? 'Demo Kepala Cabang' : 'Kepala Cabang',
+      KASIR: isDemoMode ? 'Demo Kasir' : 'Kasir',
+      TEAM_PRODUKSI: isDemoMode ? 'Demo Tim Produksi' : 'Tim Produksi',
+      PEGAWAI: isDemoMode ? 'Demo Tim Produksi' : 'Tim Produksi',
+    };
+    setActiveUserName(defaultNames[newRole] || newRole);
+    if (typeof window !== 'undefined') {
+      const mode = isDemoMode ? 'demo' : 'live';
+      window.history.replaceState({}, '', `?mode=${mode}&role=${newRole}&direct=true`);
+    }
   };
 
   const handleLogout = () => {
@@ -60,16 +89,18 @@ function MainErpAppContent() {
     setActiveRole(null);
     setActiveUserName('');
     setIsAuthorized(null);
+    setIsDemoMode(false);
     if (typeof window !== 'undefined') {
       window.history.replaceState({}, '', window.location.pathname);
     }
   };
 
-  // 1. UNAUTHENTICATED: LOGIN GATE
+  // 1. UNAUTHENTICATED: LOGIN GATE WITH 2 JALUR SELECTOR
   if (!isAuthenticated || !activeRole) {
     return (
       <LoginGate
         defaultRole={roleParam === ('PEGAWAI' as any) ? 'TEAM_PRODUKSI' : roleParam}
+        initialTrack={isDemoMode ? 'DEMO' : 'LIVE'}
         onLoginSuccess={handleLoginSuccess}
       />
     );
@@ -97,17 +128,15 @@ function MainErpAppContent() {
     );
   }
 
-  const demoParam = searchParams.get('demo') === 'true' || searchParams.get('mode') === 'demo';
-
   // 3. OWNER ERP WORKSPACE
   if (activeRole === 'OWNER') {
     return (
       <OwnerDashboard
-        businessId="tenant-001"
+        businessId={targetBusinessId}
         branchId="branch-001"
         actorUserId="user-owner-01"
-        isDemo={demoParam}
-        onRoleChange={(role) => setActiveRole(role as DashboardRole)}
+        isDemo={isDemoMode}
+        onRoleChange={handleRoleChange}
         onLogout={handleLogout}
       />
     );
@@ -117,13 +146,21 @@ function MainErpAppContent() {
   if (activeRole === 'KASIR') {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
-        <DashboardTopBar role="KASIR" userName={activeUserName} onLogout={handleLogout} />
+        <DashboardTopBar
+          role="KASIR"
+          userName={activeUserName}
+          onLogout={handleLogout}
+          onRoleChange={handleRoleChange}
+          isDemo={isDemoMode}
+          businessId={targetBusinessId}
+        />
         <main className="flex-1 w-full p-4 sm:p-6 space-y-6">
           <KasirTransactionWorkspace
             actorUserId="user-kasir-01"
             actorName={activeUserName || 'Kasir'}
-            businessId="tenant-001"
+            businessId={targetBusinessId}
             branchId="branch-001"
+            isDemo={isDemoMode}
           />
         </main>
       </div>
@@ -134,13 +171,21 @@ function MainErpAppContent() {
   if (activeRole === 'TEAM_PRODUKSI') {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
-        <DashboardTopBar role="TEAM_PRODUKSI" userName={activeUserName} onLogout={handleLogout} />
+        <DashboardTopBar
+          role="TEAM_PRODUKSI"
+          userName={activeUserName}
+          onLogout={handleLogout}
+          onRoleChange={handleRoleChange}
+          isDemo={isDemoMode}
+          businessId={targetBusinessId}
+        />
         <main className="flex-1 w-full p-4 sm:p-6 space-y-6">
           <TeamProduksiWorkspace
             actorUserId="user-prod-01"
             actorName={activeUserName || 'Tim Produksi'}
-            businessId="tenant-001"
+            businessId={targetBusinessId}
             branchId="branch-001"
+            isDemo={isDemoMode}
           />
         </main>
       </div>
@@ -150,13 +195,21 @@ function MainErpAppContent() {
   // 6. KEPALA CABANG ERP WORKSPACE
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
-      <DashboardTopBar role="KEPALA_CABANG" userName={activeUserName} onLogout={handleLogout} />
+      <DashboardTopBar
+        role="KEPALA_CABANG"
+        userName={activeUserName}
+        onLogout={handleLogout}
+        onRoleChange={handleRoleChange}
+        isDemo={isDemoMode}
+        businessId={targetBusinessId}
+      />
       <div className="flex-1 w-full flex">
         <ManagementControlDashboard
           actorUserId="user-kc-01"
           actorRole="KEPALA_CABANG"
-          businessId="tenant-001"
+          businessId={targetBusinessId}
           branchId="branch-001"
+          isDemo={isDemoMode}
         />
       </div>
     </div>
