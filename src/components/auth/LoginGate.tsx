@@ -92,6 +92,29 @@ export function LoginGate({
         return;
       }
 
+      if (typeof window !== 'undefined') {
+        try {
+          const existing = JSON.parse(localStorage.getItem('pilin_registered_tenants') || '[]');
+          const newEntry = {
+            id: res.prospectId || `reg-${Date.now()}`,
+            name: regBusinessName.trim(),
+            ownerName: regOwnerName.trim(),
+            whatsapp: regWhatsapp.trim(),
+            email: regEmail.trim(),
+            employeeCount: regBranchCount,
+            createdAt: new Date().toISOString(),
+            status: 'NEW',
+            trialStatus: 'PENDING_APPROVAL',
+          };
+          // Filter out existing by email or whatsapp
+          const filtered = existing.filter((e: any) => e.email !== newEntry.email && e.whatsapp !== newEntry.whatsapp);
+          filtered.unshift(newEntry);
+          localStorage.setItem('pilin_registered_tenants', JSON.stringify(filtered.slice(0, 50)));
+        } catch {
+          // ignore
+        }
+      }
+
       setRegisteredSummary({
         businessName: regBusinessName.trim(),
         whatsapp: regWhatsapp.trim(),
@@ -368,16 +391,17 @@ export function LoginGate({
               <CheckCircle2 className="w-6 h-6" />
             </div>
 
-            <div className="space-y-1">
+            <div>
               <h2 className="text-base font-black text-white">
                 Pendaftaran Berhasil Dikirim
               </h2>
-              <div className="text-xs text-slate-300 font-medium leading-relaxed px-2">
-                Data usaha <span className="text-white font-bold">{registeredSummary?.businessName}</span> telah diterima. Tim Super Admin akan segera meninjau dan mengaktifkan akun Anda.
-              </div>
             </div>
 
-            <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-300 space-y-1 text-left">
+            <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-300 space-y-1.5 text-left">
+              <div className="flex justify-between">
+                <span className="text-slate-400 font-semibold">Nama Usaha:</span>
+                <span className="text-white font-bold">{registeredSummary?.businessName}</span>
+              </div>
               <div className="flex justify-between">
                 <span className="text-slate-400 font-semibold">Tujuan Notifikasi:</span>
                 <span className="text-emerald-400 font-bold">{registeredSummary?.whatsapp}</span>

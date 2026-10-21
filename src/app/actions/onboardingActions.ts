@@ -1,6 +1,7 @@
 'use server';
 
 import { createAdminClient } from '@/lib/supabase/admin';
+import { PendingRegistrationStore } from '@/domains/tenant/pendingRegistrationStore';
 
 export interface OnboardingPayload {
   ownerName: string;
@@ -44,12 +45,22 @@ export async function submitOwnerOnboardingAction(payload: OnboardingPayload): P
 
   const now = new Date();
   const trialEnd = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
-  let prospectId = `prospect-${Date.now()}`;
 
+  // 1. Immediately store in resilient persistent server store
+  const persistentRecord = PendingRegistrationStore.add({
+    name: cleanBusinessName,
+    ownerName: cleanOwnerName,
+    whatsapp: cleanContactNumber,
+    email: cleanEmail,
+    employeeCount: cleanEmployeeCount,
+  });
+
+  const prospectId = persistentRecord.id;
+
+  // 2. Also attempt sync to Supabase if database credentials are live
   try {
     const supabaseAdmin = createAdminClient();
 
-    // 1. Anti-duplicate / Idempotency Check in pilin_prospects
     try {
       const { data: existingProspect } = await supabaseAdmin
         .from('pilin_prospects')
@@ -58,7 +69,6 @@ export async function submitOwnerOnboardingAction(payload: OnboardingPayload): P
         .maybeSingle();
 
       if (existingProspect?.id) {
-        prospectId = existingProspect.id;
         await supabaseAdmin
           .from('pilin_prospects')
           .update({
@@ -73,7 +83,7 @@ export async function submitOwnerOnboardingAction(payload: OnboardingPayload): P
           })
           .eq('id', existingProspect.id);
       } else {
-        const { data: inserted, error: insertError } = await supabaseAdmin
+        await supabaseAdmin
           .from('pilin_prospects')
           .insert({
             name: cleanBusinessName,
@@ -86,21 +96,12 @@ export async function submitOwnerOnboardingAction(payload: OnboardingPayload): P
             trial_start: now.toISOString(),
             trial_end: trialEnd.toISOString(),
             trial_status: 'PENDING_APPROVAL',
-          })
-          .select('id')
-          .single();
-
-        if (inserted?.id) {
-          prospectId = inserted.id;
-        } else if (insertError) {
-          console.warn('Notice inserting into pilin_prospects:', insertError.message);
-        }
+          });
       }
     } catch (dbErr: any) {
-      console.warn('Notice querying pilin_prospects:', dbErr.message);
+      console.warn('Notice syncing to pilin_prospects:', dbErr.message);
     }
 
-    // 2. Also populate platform_customers if table exists for complete CRM alignment
     try {
       const { data: existingPlatformCustomer } = await supabaseAdmin
         .from('platform_customers')
@@ -121,10 +122,10 @@ export async function submitOwnerOnboardingAction(payload: OnboardingPayload): P
           });
       }
     } catch (e: any) {
-      console.warn('platform_customers secondary sync notice:', e.message);
+      console.warn('Notice syncing to platform_customers:', e.message);
     }
   } catch (err: any) {
-    console.warn('Database client initialization notice:', err.message);
+    console.warn('Notice database client initialization:', err.message);
   }
 
   return {

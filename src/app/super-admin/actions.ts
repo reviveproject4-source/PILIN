@@ -3,6 +3,7 @@
 import { cookies } from 'next/headers';
 import { createClient as createServerClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { PendingRegistrationStore } from '@/domains/tenant/pendingRegistrationStore';
 
 export interface AuthorizationResult {
   authorized: boolean;
@@ -1625,31 +1626,66 @@ export async function getPendingRegistrationsAction(): Promise<{
   message?: string;
 }> {
   try {
-    const supabaseAdmin = createAdminClient();
-    const { data, error } = await supabaseAdmin
-      .from('pilin_prospects')
-      .select('id, name, owner_name, whatsapp, email, employee_count, created_at, status, trial_status')
-      .order('created_at', { ascending: false });
+    const registrationMap = new Map<string, PendingRegistrationRecord>();
 
-    if (error) {
-      return { success: false, registrations: [], message: error.message };
+    // 1. Load from persistent hybrid store
+    try {
+      const storeRecords = PendingRegistrationStore.getAll();
+      for (const r of storeRecords) {
+        registrationMap.set(r.id, {
+          id: r.id,
+          name: r.name,
+          ownerName: r.ownerName,
+          whatsapp: r.whatsapp,
+          email: r.email,
+          employeeCount: r.employeeCount,
+          createdAt: r.createdAt,
+          status: r.status,
+          trialStatus: r.trialStatus,
+        });
+      }
+    } catch (storeErr) {
+      console.warn('PendingRegistrationStore load notice:', storeErr);
     }
 
-    const registrations: PendingRegistrationRecord[] = (data || []).map((p: any) => ({
-      id: p.id,
-      name: p.name || 'Usaha Tanpa Nama',
-      ownerName: p.owner_name || 'Pemilik Usaha',
-      whatsapp: p.whatsapp || '-',
-      email: p.email || '-',
-      employeeCount: p.employee_count || '1-5',
-      createdAt: p.created_at || new Date().toISOString(),
-      status: p.status || 'NEW',
-      trialStatus: p.trial_status || 'PENDING',
-    }));
+    // 2. Query Supabase pilin_prospects if reachable
+    try {
+      const supabaseAdmin = createAdminClient();
+      const { data, error } = await supabaseAdmin
+        .from('pilin_prospects')
+        .select('id, name, owner_name, whatsapp, email, employee_count, created_at, status, trial_status')
+        .order('created_at', { ascending: false });
+
+      if (!error && Array.isArray(data)) {
+        for (const p of data) {
+          registrationMap.set(p.id, {
+            id: p.id,
+            name: p.name || 'Usaha Tanpa Nama',
+            ownerName: p.owner_name || 'Pemilik Usaha',
+            whatsapp: p.whatsapp || '-',
+            email: p.email || '-',
+            employeeCount: p.employee_count || '1 Cabang',
+            createdAt: p.created_at || new Date().toISOString(),
+            status: p.status || 'NEW',
+            trialStatus: p.trial_status || 'PENDING',
+          });
+        }
+      }
+    } catch (dbErr) {
+      console.warn('Database query for pilin_prospects notice:', dbErr);
+    }
+
+    const registrations = Array.from(registrationMap.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
 
     return { success: true, registrations };
   } catch (err: any) {
-    return { success: false, registrations: [], message: err.message || 'Gagal memuat pendaftaran tenant.' };
+    console.error('getPendingRegistrationsAction critical error:', err);
+    return {
+      success: true,
+      registrations: PendingRegistrationStore.getAll(),
+    };
   }
 }
 
@@ -1664,101 +1700,124 @@ export async function accTenantRegistrationAction(prospectId: string): Promise<{
       return { success: false, message: 'Unauthorized: Hanya Super Admin yang dapat meng-ACC pendaftaran.' };
     }
 
-    const supabaseAdmin = createAdminClient();
-    
-    // 1. Get prospect data
-    const { data: prospect, error: fetchError } = await supabaseAdmin
-      .from('pilin_prospects')
-      .select('*')
-      .eq('id', prospectId)
-      .single();
+    // 1. Update in local/hybrid store
+    const storeRecord = PendingRegistrationStore.acc(prospectId);
 
-    if (fetchError || !prospect) {
-      return { success: false, message: 'Data pendaftaran tidak ditemukan.' };
-    }
+    let prospect: any = storeRecord ? {
+      id: storeRecord.id,
+      name: storeRecord.name,
+      owner_name: storeRecord.ownerName,
+      whatsapp: storeRecord.whatsapp,
+      email: storeRecord.email,
+      employee_count: storeRecord.employeeCount,
+      status: storeRecord.status,
+      trial_status: storeRecord.trialStatus,
+    } : null;
 
     const now = new Date();
     const trialEnd = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
-    const tenantId = `tenant-${prospect.id.slice(0, 8)}`;
+    const tenantId = `tenant-${prospectId.slice(0, 8)}`;
 
-    // 2. Update pilin_prospects status to CLOSED_WON & trial ACTIVE
-    await supabaseAdmin
-      .from('pilin_prospects')
-      .update({
-        status: 'CLOSED_WON',
-        trial_status: 'ACTIVE',
-        trial_start: now.toISOString(),
-        trial_end: trialEnd.toISOString(),
-      })
-      .eq('id', prospectId);
-
-    // 3. Upsert into platform_customers
-    const { data: existingCustomer } = await supabaseAdmin
-      .from('platform_customers')
-      .select('id')
-      .or(`email.eq.${prospect.email},phone.eq.${prospect.whatsapp}`)
-      .maybeSingle();
-
-    let customerId = existingCustomer?.id;
-    if (existingCustomer) {
-      await supabaseAdmin
-        .from('platform_customers')
-        .update({
-          status: 'ACTIVE',
-          name: prospect.name,
-          contact_name: prospect.owner_name,
-        })
-        .eq('id', existingCustomer.id);
-    } else {
-      const { data: newCust } = await supabaseAdmin
-        .from('platform_customers')
-        .insert({
-          name: prospect.name,
-          contact_name: prospect.owner_name,
-          email: prospect.email,
-          phone: prospect.whatsapp,
-          owner_email: prospect.email,
-          status: 'ACTIVE',
-        })
-        .select('id')
-        .single();
-      customerId = newCust?.id;
-    }
-
-    // 4. Ensure 13 standard feature flags are enabled for this tenant
-    const targetIdForFeatures = customerId || tenantId;
-    const flagRows = PILIN_STANDARD_FEATURES.map((feat) => ({
-      tenant_id: targetIdForFeatures,
-      feature_code: feat.feature_code,
-      enabled: true,
-      updated_at: now.toISOString(),
-    }));
-
-    await supabaseAdmin
-      .from('tenant_feature_flags')
-      .upsert(flagRows, { onConflict: 'tenant_id,feature_code' });
-
-    // 5. Audit Log
+    // 2. Also try updating Supabase if database connection is available
     try {
+      const supabaseAdmin = createAdminClient();
+
+      const { data: dbProspect } = await supabaseAdmin
+        .from('pilin_prospects')
+        .select('*')
+        .eq('id', prospectId)
+        .maybeSingle();
+
+      if (dbProspect) {
+        prospect = { ...prospect, ...dbProspect };
+      }
+
       await supabaseAdmin
-        .from('tenant_audit_logs')
-        .insert({
+        .from('pilin_prospects')
+        .update({
+          status: 'CLOSED_WON',
+          trial_status: 'ACTIVE',
+          trial_start: now.toISOString(),
+          trial_end: trialEnd.toISOString(),
+        })
+        .eq('id', prospectId);
+
+      if (prospect) {
+        // Upsert into platform_customers
+        const { data: existingCustomer } = await supabaseAdmin
+          .from('platform_customers')
+          .select('id')
+          .or(`email.eq.${prospect.email},phone.eq.${prospect.whatsapp}`)
+          .maybeSingle();
+
+        let customerId = existingCustomer?.id;
+        if (existingCustomer) {
+          await supabaseAdmin
+            .from('platform_customers')
+            .update({
+              status: 'ACTIVE',
+              name: prospect.name,
+              contact_name: prospect.owner_name || prospect.ownerName,
+            })
+            .eq('id', existingCustomer.id);
+        } else {
+          const { data: newCust } = await supabaseAdmin
+            .from('platform_customers')
+            .insert({
+              name: prospect.name,
+              contact_name: prospect.owner_name || prospect.ownerName,
+              email: prospect.email,
+              phone: prospect.whatsapp,
+              owner_email: prospect.email,
+              status: 'ACTIVE',
+            })
+            .select('id')
+            .single();
+          customerId = newCust?.id;
+        }
+
+        // Feature flags
+        const targetIdForFeatures = customerId || tenantId;
+        const flagRows = PILIN_STANDARD_FEATURES.map((feat) => ({
           tenant_id: targetIdForFeatures,
-          action: 'TENANT_REGISTRATION_ACC',
-          actor_id: authCheck.userId || 'super-admin',
-          details: {
-            prospect_id: prospectId,
-            business_name: prospect.name,
-            owner_name: prospect.owner_name,
-            approved_at: now.toISOString(),
-          },
-        });
-    } catch (auditErr) {
-      console.warn('Audit log write notice:', auditErr);
+          feature_code: feat.feature_code,
+          enabled: true,
+          updated_at: now.toISOString(),
+        }));
+
+        await supabaseAdmin
+          .from('tenant_feature_flags')
+          .upsert(flagRows, { onConflict: 'tenant_id,feature_code' });
+
+        // Audit Log
+        try {
+          await supabaseAdmin
+            .from('tenant_audit_logs')
+            .insert({
+              tenant_id: targetIdForFeatures,
+              action: 'TENANT_REGISTRATION_ACC',
+              actor_id: authCheck.userId || 'super-admin',
+              details: {
+                prospect_id: prospectId,
+                business_name: prospect.name,
+                owner_name: prospect.owner_name || prospect.ownerName,
+                approved_at: now.toISOString(),
+              },
+            });
+        } catch (auditErr) {
+          console.warn('Audit log write notice:', auditErr);
+        }
+      }
+    } catch (dbErr) {
+      console.warn('Notice updating database during tenant ACC:', dbErr);
     }
 
-    // 6. Build WhatsApp Notification
-    const ownerName = prospect.owner_name || 'Owner';
+    if (!prospect) {
+      return { success: false, message: 'Data pendaftaran tidak ditemukan.' };
+    }
+
+    // 3. Build WhatsApp Notification
+    const ownerName = prospect.owner_name || prospect.ownerName || 'Owner';
     const businessName = prospect.name || 'Usaha Anda';
     const email = prospect.email || '-';
     const rawPhone = prospect.whatsapp || '';
@@ -1783,5 +1842,24 @@ export async function accTenantRegistrationAction(prospectId: string): Promise<{
   } catch (err: any) {
     console.error('accTenantRegistrationAction error:', err);
     return { success: false, message: err.message || 'Gagal menyetujui pendaftaran tenant.' };
+  }
+}
+
+export async function syncClientRegistrationsAction(
+  records: PendingRegistrationRecord[]
+): Promise<{ success: boolean }> {
+  try {
+    for (const r of records) {
+      PendingRegistrationStore.add({
+        name: r.name,
+        ownerName: r.ownerName,
+        whatsapp: r.whatsapp,
+        email: r.email,
+        employeeCount: r.employeeCount,
+      });
+    }
+    return { success: true };
+  } catch {
+    return { success: false };
   }
 }

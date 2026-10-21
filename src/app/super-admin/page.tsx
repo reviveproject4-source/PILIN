@@ -28,6 +28,7 @@ import {
   updateTenantSubscriptionAction,
   getPendingRegistrationsAction,
   accTenantRegistrationAction,
+  syncClientRegistrationsAction,
   type PendingRegistrationRecord,
   type AccNotificationPayload,
   PILIN_STANDARD_FEATURES,
@@ -67,9 +68,36 @@ export default function SuperAdminPage() {
     setPendingLoading(true);
     try {
       const res = await getPendingRegistrationsAction();
-      if (res.success) {
-        setPendingRegistrations(res.registrations);
+      let records: PendingRegistrationRecord[] = res.success ? [...res.registrations] : [];
+
+      if (typeof window !== 'undefined') {
+        try {
+          const localStored: PendingRegistrationRecord[] = JSON.parse(
+            localStorage.getItem('pilin_registered_tenants') || '[]'
+          );
+          if (localStored.length > 0) {
+            const map = new Map<string, PendingRegistrationRecord>();
+            for (const r of records) map.set(r.id, r);
+            const toSync: PendingRegistrationRecord[] = [];
+            let hasNewFromLocal = false;
+            for (const lr of localStored) {
+              if (!map.has(lr.id)) {
+                map.set(lr.id, lr);
+                toSync.push(lr);
+                hasNewFromLocal = true;
+              }
+            }
+            records = Array.from(map.values()).sort(
+              (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
+            if (hasNewFromLocal && toSync.length > 0) {
+              syncClientRegistrationsAction(toSync).catch(() => {});
+            }
+          }
+        } catch {}
       }
+
+      setPendingRegistrations(records);
     } catch (e) {
       console.error('Failed to fetch pending registrations', e);
     } finally {
@@ -82,6 +110,17 @@ export default function SuperAdminPage() {
     try {
       const res = await accTenantRegistrationAction(prospectId);
       if (res.success && res.notification) {
+        if (typeof window !== 'undefined') {
+          try {
+            const localStored: PendingRegistrationRecord[] = JSON.parse(
+              localStorage.getItem('pilin_registered_tenants') || '[]'
+            );
+            const updated = localStored.map((r) =>
+              r.id === prospectId ? { ...r, status: 'CLOSED_WON' as const, trialStatus: 'ACTIVE' } : r
+            );
+            localStorage.setItem('pilin_registered_tenants', JSON.stringify(updated));
+          } catch {}
+        }
         setAccModalData(res.notification);
         setIsAccModalOpen(true);
         fetchPendingRegistrations();
