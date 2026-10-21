@@ -1598,8 +1598,190 @@ export async function updateProspectFollowUpAction(payload: {
 }
 
 
+export interface PendingRegistrationRecord {
+  id: string;
+  name: string;
+  ownerName: string;
+  whatsapp: string;
+  email: string;
+  employeeCount: string;
+  createdAt: string;
+  status: string;
+  trialStatus: string;
+}
 
+export interface AccNotificationPayload {
+  ownerName: string;
+  businessName: string;
+  phone: string;
+  email: string;
+  messageText: string;
+  waUrl: string;
+}
 
+export async function getPendingRegistrationsAction(): Promise<{
+  success: boolean;
+  registrations: PendingRegistrationRecord[];
+  message?: string;
+}> {
+  try {
+    const supabaseAdmin = createAdminClient();
+    const { data, error } = await supabaseAdmin
+      .from('pilin_prospects')
+      .select('id, name, owner_name, whatsapp, email, employee_count, created_at, status, trial_status')
+      .order('created_at', { ascending: false });
 
+    if (error) {
+      return { success: false, registrations: [], message: error.message };
+    }
 
+    const registrations: PendingRegistrationRecord[] = (data || []).map((p: any) => ({
+      id: p.id,
+      name: p.name || 'Usaha Tanpa Nama',
+      ownerName: p.owner_name || 'Pemilik Usaha',
+      whatsapp: p.whatsapp || '-',
+      email: p.email || '-',
+      employeeCount: p.employee_count || '1-5',
+      createdAt: p.created_at || new Date().toISOString(),
+      status: p.status || 'NEW',
+      trialStatus: p.trial_status || 'PENDING',
+    }));
 
+    return { success: true, registrations };
+  } catch (err: any) {
+    return { success: false, registrations: [], message: err.message || 'Gagal memuat pendaftaran tenant.' };
+  }
+}
+
+export async function accTenantRegistrationAction(prospectId: string): Promise<{
+  success: boolean;
+  message: string;
+  notification?: AccNotificationPayload;
+}> {
+  try {
+    const authCheck = await verifySuperAdminAccess();
+    if (!authCheck.authorized) {
+      return { success: false, message: 'Unauthorized: Hanya Super Admin yang dapat meng-ACC pendaftaran.' };
+    }
+
+    const supabaseAdmin = createAdminClient();
+    
+    // 1. Get prospect data
+    const { data: prospect, error: fetchError } = await supabaseAdmin
+      .from('pilin_prospects')
+      .select('*')
+      .eq('id', prospectId)
+      .single();
+
+    if (fetchError || !prospect) {
+      return { success: false, message: 'Data pendaftaran tidak ditemukan.' };
+    }
+
+    const now = new Date();
+    const trialEnd = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+    const tenantId = `tenant-${prospect.id.slice(0, 8)}`;
+
+    // 2. Update pilin_prospects status to CLOSED_WON & trial ACTIVE
+    await supabaseAdmin
+      .from('pilin_prospects')
+      .update({
+        status: 'CLOSED_WON',
+        trial_status: 'ACTIVE',
+        trial_start: now.toISOString(),
+        trial_end: trialEnd.toISOString(),
+      })
+      .eq('id', prospectId);
+
+    // 3. Upsert into platform_customers
+    const { data: existingCustomer } = await supabaseAdmin
+      .from('platform_customers')
+      .select('id')
+      .or(`email.eq.${prospect.email},phone.eq.${prospect.whatsapp}`)
+      .maybeSingle();
+
+    let customerId = existingCustomer?.id;
+    if (existingCustomer) {
+      await supabaseAdmin
+        .from('platform_customers')
+        .update({
+          status: 'ACTIVE',
+          name: prospect.name,
+          contact_name: prospect.owner_name,
+        })
+        .eq('id', existingCustomer.id);
+    } else {
+      const { data: newCust } = await supabaseAdmin
+        .from('platform_customers')
+        .insert({
+          name: prospect.name,
+          contact_name: prospect.owner_name,
+          email: prospect.email,
+          phone: prospect.whatsapp,
+          owner_email: prospect.email,
+          status: 'ACTIVE',
+        })
+        .select('id')
+        .single();
+      customerId = newCust?.id;
+    }
+
+    // 4. Ensure 13 standard feature flags are enabled for this tenant
+    const targetIdForFeatures = customerId || tenantId;
+    const flagRows = PILIN_STANDARD_FEATURES.map((feat) => ({
+      tenant_id: targetIdForFeatures,
+      feature_code: feat.feature_code,
+      enabled: true,
+      updated_at: now.toISOString(),
+    }));
+
+    await supabaseAdmin
+      .from('tenant_feature_flags')
+      .upsert(flagRows, { onConflict: 'tenant_id,feature_code' });
+
+    // 5. Audit Log
+    try {
+      await supabaseAdmin
+        .from('tenant_audit_logs')
+        .insert({
+          tenant_id: targetIdForFeatures,
+          action: 'TENANT_REGISTRATION_ACC',
+          actor_id: authCheck.userId || 'super-admin',
+          details: {
+            prospect_id: prospectId,
+            business_name: prospect.name,
+            owner_name: prospect.owner_name,
+            approved_at: now.toISOString(),
+          },
+        });
+    } catch (auditErr) {
+      console.warn('Audit log write notice:', auditErr);
+    }
+
+    // 6. Build WhatsApp Notification
+    const ownerName = prospect.owner_name || 'Owner';
+    const businessName = prospect.name || 'Usaha Anda';
+    const email = prospect.email || '-';
+    const rawPhone = prospect.whatsapp || '';
+    const cleanPhone = rawPhone.replace(/[^0-9]/g, '').replace(/^0/, '62');
+
+    const messageText = `Halo ${ownerName},\n\nPendaftaran usaha "${businessName}" di PILIN ERP telah DISETUJUI oleh Super Admin!\nAkun tenant Anda kini sudah AKTIF dan seluruh modul sistem siap digunakan.\n\n🔗 Akses Portal: https://pilin.id\n👤 Role Masuk: OWNER\n📧 Email / ID: ${email}\n\nSelamat mengelola operasional cabang Anda dengan PILIN ERP!`;
+
+    const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(messageText)}`;
+
+    return {
+      success: true,
+      message: `Pendaftaran ${businessName} berhasil di-ACC & diaktifkan!`,
+      notification: {
+        ownerName,
+        businessName,
+        phone: rawPhone,
+        email,
+        messageText,
+        waUrl,
+      },
+    };
+  } catch (err: any) {
+    console.error('accTenantRegistrationAction error:', err);
+    return { success: false, message: err.message || 'Gagal menyetujui pendaftaran tenant.' };
+  }
+}

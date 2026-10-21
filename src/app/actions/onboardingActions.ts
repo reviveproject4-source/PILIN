@@ -90,7 +90,7 @@ export async function submitOwnerOnboardingAction(payload: OnboardingPayload): P
           email: cleanEmail,
           employee_count: cleanEmployeeCount,
           source: 'FORM_TRIAL',
-          status: 'PROSPEK BARU',
+          status: 'NEW',
           trial_start: now.toISOString(),
           trial_end: trialEnd.toISOString(),
           trial_status: 'ACTIVE',
@@ -109,7 +109,7 @@ export async function submitOwnerOnboardingAction(payload: OnboardingPayload): P
             whatsapp: cleanContactNumber,
             email: cleanEmail,
             source: 'FORM_TRIAL',
-            status: 'PROSPEK BARU',
+            status: 'NEW',
           })
           .select('id')
           .single();

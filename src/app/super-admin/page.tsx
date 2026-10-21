@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  LayoutGrid, Building2, Users, CreditCard, Layers, 
+  LayoutGrid, Building2, Users, CreditCard, Layers, UserPlus, Phone, Mail, 
   DollarSign, Activity, FileSpreadsheet, Settings, 
   AlertTriangle, ShieldCheck, LogOut, Loader2, Check, X,
   Search, SlidersHorizontal, CheckCircle2, XCircle, Sparkles,
@@ -26,6 +26,10 @@ import {
   updateTenantFeatureFlagsAction,
   updateTenantStatusAction,
   updateTenantSubscriptionAction,
+  getPendingRegistrationsAction,
+  accTenantRegistrationAction,
+  type PendingRegistrationRecord,
+  type AccNotificationPayload,
   PILIN_STANDARD_FEATURES,
   type DashboardMetrics, 
   type TenantRecord,
@@ -50,6 +54,48 @@ export default function SuperAdminPage() {
   const [tenantSearch, setTenantSearch] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [tierFilter, setTierFilter] = useState<string>('ALL');
+  // Pending Registrations State
+  const [tenantTab, setTenantTab] = useState<'ACTIVE' | 'PENDING'>('ACTIVE');
+  const [pendingRegistrations, setPendingRegistrations] = useState<PendingRegistrationRecord[]>([]);
+  const [pendingLoading, setPendingLoading] = useState<boolean>(false);
+  const [isAccing, setIsAccing] = useState<string | null>(null);
+  const [isAccModalOpen, setIsAccModalOpen] = useState<boolean>(false);
+  const [accModalData, setAccModalData] = useState<AccNotificationPayload | null>(null);
+  const [copyFeedback, setCopyFeedback] = useState<boolean>(false);
+
+  const fetchPendingRegistrations = async () => {
+    setPendingLoading(true);
+    try {
+      const res = await getPendingRegistrationsAction();
+      if (res.success) {
+        setPendingRegistrations(res.registrations);
+      }
+    } catch (e) {
+      console.error('Failed to fetch pending registrations', e);
+    } finally {
+      setPendingLoading(false);
+    }
+  };
+
+  const handleAccRegistration = async (prospectId: string) => {
+    setIsAccing(prospectId);
+    try {
+      const res = await accTenantRegistrationAction(prospectId);
+      if (res.success && res.notification) {
+        setAccModalData(res.notification);
+        setIsAccModalOpen(true);
+        fetchPendingRegistrations();
+        fetchTenants();
+      } else {
+        alert(res.message || 'Gagal meng-ACC tenant.');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Terjadi kesalahan saat menyetujui pendaftaran.');
+    } finally {
+      setIsAccing(null);
+    }
+  };
+
 
   // Create Tenant Modal
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -672,6 +718,148 @@ export default function SuperAdminPage() {
                 </div>
               </div>
 
+              {/* SUB-TAB NAV */}
+              <div className="flex items-center space-x-2 border-b border-slate-800 pb-3">
+                <button
+                  type="button"
+                  onClick={() => setTenantTab('ACTIVE')}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center space-x-2 cursor-pointer ${
+                    tenantTab === 'ACTIVE'
+                      ? 'bg-[#F26522] text-white shadow-md'
+                      : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                  }`}
+                >
+                  <Building2 className="w-3.5 h-3.5" />
+                  <span>Tenant Aktif</span>
+                  <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-black/40">
+                    {tenants.length}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setTenantTab('PENDING'); fetchPendingRegistrations(); }}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center space-x-2 cursor-pointer ${
+                    tenantTab === 'PENDING'
+                      ? 'bg-amber-600 text-white shadow-md'
+                      : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                  }`}
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>Pendaftaran Baru (Pending ACC)</span>
+                  {pendingRegistrations.filter(r => r.status === 'NEW').length > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-amber-400 text-slate-950">
+                      {pendingRegistrations.filter(r => r.status === 'NEW').length} Baru
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              {/* VIEW: PENDING REGISTRATIONS */}
+              {tenantTab === 'PENDING' && (
+                <div className="space-y-4">
+                  {pendingLoading ? (
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 flex flex-col items-center justify-center text-center">
+                      <Loader2 className="w-8 h-8 text-amber-500 animate-spin mb-4" />
+                      <span className="text-xs font-bold text-slate-400">Memuat data pendaftaran tenant...</span>
+                    </div>
+                  ) : pendingRegistrations.length === 0 ? (
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center space-y-3">
+                      <div className="w-12 h-12 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center mx-auto">
+                        <UserPlus className="w-6 h-6" />
+                      </div>
+                      <h3 className="text-sm font-bold text-white">Tidak ada pendaftaran baru</h3>
+                      <div className="text-xs text-slate-400">Semua pendaftaran tenant telah selesai diproses atau belum ada pengajuan baru.</div>
+                    </div>
+                  ) : (
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="border-b border-slate-800 bg-slate-950/70 text-slate-400 uppercase font-bold text-[10px] tracking-wider">
+                              <th className="p-4">Nama Usaha / Brand</th>
+                              <th className="p-4">Pemilik / PIC</th>
+                              <th className="p-4">Kontak WhatsApp</th>
+                              <th className="p-4">Email Usaha</th>
+                              <th className="p-4">Cabang</th>
+                              <th className="p-4">Waktu Daftar</th>
+                              <th className="p-4">Status</th>
+                              <th className="p-4 text-right">Aksi Super Admin</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/60">
+                            {pendingRegistrations.map((reg) => (
+                              <tr key={reg.id} className="hover:bg-slate-800/40 transition-colors">
+                                <td className="p-4 font-bold text-white">
+                                  <div className="flex items-center space-x-2.5">
+                                    <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 font-black">
+                                      <Building2 className="w-4 h-4" />
+                                    </div>
+                                    <span>{reg.name}</span>
+                                  </div>
+                                </td>
+                                <td className="p-4 text-slate-300 font-semibold">{reg.ownerName}</td>
+                                <td className="p-4 text-emerald-400 font-mono font-bold">
+                                  <div className="flex items-center gap-1.5">
+                                    <Phone className="w-3 h-3 text-emerald-500 shrink-0" />
+                                    <span>{reg.whatsapp}</span>
+                                  </div>
+                                </td>
+                                <td className="p-4 text-slate-300 font-mono text-[11px]">{reg.email}</td>
+                                <td className="p-4 text-slate-300">{reg.employeeCount}</td>
+                                <td className="p-4 text-slate-400 text-[11px]">
+                                  {new Date(reg.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                </td>
+                                <td className="p-4">
+                                  {reg.status === 'CLOSED_WON' ? (
+                                    <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                                      Ter-ACC & Aktif
+                                    </span>
+                                  ) : (
+                                    <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse">
+                                      Menunggu ACC
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="p-4 text-right">
+                                  {reg.status === 'CLOSED_WON' ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleAccRegistration(reg.id)}
+                                      disabled={isAccing === reg.id}
+                                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[11px] font-bold rounded-lg transition-all cursor-pointer inline-flex items-center gap-1.5"
+                                    >
+                                      <Send className="w-3 h-3 text-emerald-400" />
+                                      <span>Kirim Ulang Notif</span>
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleAccRegistration(reg.id)}
+                                      disabled={isAccing === reg.id}
+                                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold rounded-lg transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-md shadow-emerald-950/40 disabled:opacity-50"
+                                    >
+                                      {isAccing === reg.id ? (
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                      ) : (
+                                        <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                                      )}
+                                      <span>ACC & Kirim Notif</span>
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* VIEW: ACTIVE TENANTS */}
+              {tenantTab === 'ACTIVE' && (
+                <>
               {/* Filter & Search Bar */}
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
                 <div className="relative w-full md:w-80">
@@ -818,6 +1006,8 @@ export default function SuperAdminPage() {
                     </table>
                   </div>
                 </div>
+              )}
+                </>
               )}
             </div>
           )}
