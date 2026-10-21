@@ -10,6 +10,7 @@ import { DashboardTopBar, DashboardRole } from '@/components/layout/DashboardTop
 import { LoginGate } from '@/components/auth/LoginGate';
 import { AccessBlockedScreen } from '@/components/auth/AccessBlockedScreen';
 import { PeopleRepository } from '@/domains/people/peopleRepository';
+import { TenantService } from '@/domains/tenant/tenantService';
 
 function MainErpAppContent() {
   const searchParams = useSearchParams();
@@ -23,7 +24,7 @@ function MainErpAppContent() {
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
   const [isDemoMode, setIsDemoMode] = useState<boolean>(demoParam);
 
-  const targetBusinessId = isDemoMode ? 'demo-tenant' : 'tenant-001';
+  const targetBusinessId = isDemoMode ? 'demo-tenant' : (TenantService.getOnboardingData()?.businessId || 'tenant-001');
 
   useEffect(() => {
     if (demoParam) {
@@ -101,6 +102,7 @@ function MainErpAppContent() {
       <LoginGate
         defaultRole={roleParam === ('PEGAWAI' as any) ? 'TEAM_PRODUKSI' : roleParam}
         initialTrack={isDemoMode ? 'DEMO' : 'LIVE'}
+        allowDemoToggle={demoParam}
         onLoginSuccess={handleLoginSuccess}
       />
     );

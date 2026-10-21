@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Lock, User, ArrowRight, ShieldCheck, Sparkles } from 'lucide-react';
+import { Lock, User, ArrowRight, ShieldCheck } from 'lucide-react';
 import { DashboardRole } from '@/components/layout/DashboardTopBar';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
@@ -9,14 +9,24 @@ interface LoginGateProps {
   onLoginSuccess: (role: DashboardRole, username: string, isDemo: boolean) => void;
   defaultRole?: DashboardRole | null;
   initialTrack?: 'LIVE' | 'DEMO';
+  allowDemoToggle?: boolean;
 }
 
-export function LoginGate({ onLoginSuccess, defaultRole, initialTrack = 'LIVE' }: LoginGateProps) {
-  const [selectedTrack, setSelectedTrack] = useState<'LIVE' | 'DEMO'>(initialTrack);
+export function LoginGate({
+  onLoginSuccess,
+  defaultRole,
+  initialTrack = 'LIVE',
+  allowDemoToggle = false,
+}: LoginGateProps) {
+  const [selectedTrack, setSelectedTrack] = useState<'LIVE' | 'DEMO'>(
+    allowDemoToggle ? initialTrack : 'LIVE'
+  );
   const [selectedRole, setSelectedRole] = useState<DashboardRole>(defaultRole || 'OWNER');
   const [username, setUsername] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const isDemo = allowDemoToggle && selectedTrack === 'DEMO';
 
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,7 +36,6 @@ export function LoginGate({ onLoginSuccess, defaultRole, initialTrack = 'LIVE' }
     }
 
     setErrorMessage(null);
-    const isDemo = selectedTrack === 'DEMO';
     const finalUserName = username.trim() || (
       selectedRole === 'OWNER' ? (isDemo ? 'Demo Owner' : 'Owner') :
       selectedRole === 'KEPALA_CABANG' ? (isDemo ? 'Demo Kepala Cabang' : 'Kepala Cabang') :
@@ -38,6 +47,7 @@ export function LoginGate({ onLoginSuccess, defaultRole, initialTrack = 'LIVE' }
   };
 
   const handleQuickDemoEnter = (role: DashboardRole = 'OWNER') => {
+    if (!allowDemoToggle) return;
     setSelectedRole(role);
     const roleName =
       role === 'OWNER' ? 'Demo Owner' :
@@ -55,7 +65,7 @@ export function LoginGate({ onLoginSuccess, defaultRole, initialTrack = 'LIVE' }
       </div>
 
       {/* Main Login Card */}
-      <div className="max-w-md w-full mx-auto bg-slate-950 p-8 rounded-2xl border border-slate-800 shadow-2xl space-y-5 my-auto">
+      <div className="max-w-md w-full mx-auto bg-slate-950 p-8 rounded-2xl border border-slate-800 shadow-2xl space-y-6 my-auto">
         {/* Brand Logo & Header */}
         <div className="text-center space-y-3">
           <div className="inline-block bg-slate-900 p-4 rounded-2xl border border-slate-800 shadow-inner">
@@ -71,44 +81,33 @@ export function LoginGate({ onLoginSuccess, defaultRole, initialTrack = 'LIVE' }
           </h1>
         </div>
 
-        {/* 2 JALUR SELECTOR */}
-        <div className="grid grid-cols-2 p-1 bg-slate-900 rounded-xl border border-slate-800">
-          <button
-            type="button"
-            onClick={() => { setSelectedTrack('LIVE'); setErrorMessage(null); }}
-            className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-              selectedTrack === 'LIVE'
-                ? 'bg-emerald-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <span className="w-2 h-2 rounded-full bg-white"></span>
-            <span>Jalur Tenant Live</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => { setSelectedTrack('DEMO'); setErrorMessage(null); }}
-            className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-              selectedTrack === 'DEMO'
-                ? 'bg-[#F26522] text-white shadow-md'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <span className="w-2 h-2 rounded-full bg-white animate-pulse"></span>
-            <span>Jalur Demo</span>
-          </button>
-        </div>
-
-        {/* Track Status Badge */}
-        {selectedTrack === 'LIVE' ? (
-          <div className="px-3 py-2 rounded-xl text-[11px] font-bold bg-emerald-950/50 text-emerald-300 border border-emerald-800/60 text-center flex items-center justify-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
-            <span>Jalur Operasional Resmi • Bersih Dari Data Dummy</span>
-          </div>
-        ) : (
-          <div className="px-3 py-2 rounded-xl text-[11px] font-bold bg-amber-950/50 text-amber-300 border border-amber-800/60 text-center flex items-center justify-center gap-2">
-            <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-            <span>Jalur Simulasi Sandbox • Dilengkapi Contoh Data Demo</span>
+        {/* DEMO TRACK SELECTOR (ONLY SHOWN IF EXPLICITLY ALLOWED VIA ?mode=demo) */}
+        {allowDemoToggle && (
+          <div className="grid grid-cols-2 p-1 bg-slate-900 rounded-xl border border-slate-800">
+            <button
+              type="button"
+              onClick={() => { setSelectedTrack('LIVE'); setErrorMessage(null); }}
+              className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                selectedTrack === 'LIVE'
+                  ? 'bg-emerald-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-white"></span>
+              <span>Jalur Tenant Live</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setSelectedTrack('DEMO'); setErrorMessage(null); }}
+              className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                selectedTrack === 'DEMO'
+                  ? 'bg-[#F26522] text-white shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-white animate-pulse"></span>
+              <span>Jalur Demo</span>
+            </button>
           </div>
         )}
 
@@ -150,7 +149,7 @@ export function LoginGate({ onLoginSuccess, defaultRole, initialTrack = 'LIVE' }
 
           <div>
             <label className="text-xs font-bold text-slate-300 block mb-1">
-              {selectedTrack === 'LIVE' ? 'Email / ID Pegawai:' : 'Nama Penguji Demo (Opsional):'}
+              Email / ID Pegawai:
             </label>
             <div className="relative">
               <User className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
@@ -158,46 +157,38 @@ export function LoginGate({ onLoginSuccess, defaultRole, initialTrack = 'LIVE' }
                 type="text"
                 value={username}
                 onChange={e => setUsername(e.target.value)}
-                placeholder={selectedTrack === 'LIVE' ? 'Masukkan email / kode pegawai resmi...' : 'Contoh: Tamu Demo (Opsional)'}
+                placeholder="Masukkan email / kode pegawai..."
                 className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#F26522]"
               />
             </div>
           </div>
 
-          {selectedTrack === 'LIVE' && (
-            <div>
-              <label className="text-xs font-bold text-slate-300 block mb-1">
-                Kata Sandi / PIN Security:
-              </label>
-              <div className="relative">
-                <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
-                <input
-                  type="password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#F26522]"
-                />
-              </div>
+          <div>
+            <label className="text-xs font-bold text-slate-300 block mb-1">
+              Kata Sandi / PIN Security:
+            </label>
+            <div className="relative">
+              <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+              <input
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#F26522]"
+              />
             </div>
-          )}
+          </div>
 
           <button
             type="submit"
-            className={`w-full py-3 text-white font-bold rounded-xl text-xs transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer mt-2 ${
-              selectedTrack === 'LIVE'
-                ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-900/30'
-                : 'bg-[#F26522] hover:bg-[#d95416] shadow-orange-900/30'
-            }`}
+            className="w-full py-3 bg-[#F26522] hover:bg-[#d95416] text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-orange-950/40 flex items-center justify-center gap-2 cursor-pointer mt-2"
           >
             <ShieldCheck className="w-4 h-4" />
-            <span>
-              {selectedTrack === 'LIVE' ? 'MASUK KE JALUR TENANT LIVE' : `MASUK KE JALUR DEMO (${selectedRole})`}
-            </span>
+            <span>MASUK KE DASHBOARD ERP</span>
             <ArrowRight className="w-4 h-4" />
           </button>
 
-          {selectedTrack === 'DEMO' && (
+          {allowDemoToggle && selectedTrack === 'DEMO' && (
             <div className="space-y-2 pt-2 border-t border-slate-800">
               <div className="text-[11px] font-extrabold text-amber-400 uppercase tracking-wider text-center">
                 Akses Cepat Jalur Demo (1-Tap Langsung Masuk)
@@ -253,8 +244,8 @@ export function LoginGate({ onLoginSuccess, defaultRole, initialTrack = 'LIVE' }
       </div>
 
       {/* Footer */}
-      <div className="text-center text-[11px] text-slate-600 font-mono">
-        PILIN ERP v2.4 — 2 Jalur Terisolasi: Live Tenant & Demo Sandbox
+      <div className="text-center text-[11px] text-slate-500 font-medium">
+        PILIN ERP — Sistem Operasional &amp; Manajemen Cabang Terintegrasi
       </div>
     </div>
   );
