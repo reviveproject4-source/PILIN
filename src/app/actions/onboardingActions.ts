@@ -61,11 +61,12 @@ export async function submitOwnerOnboardingAction(payload: OnboardingPayload): P
   try {
     const supabaseAdmin = createAdminClient();
 
+    // 2a. Sync to pilin_prospects (schema: id, name, whatsapp, created_at, status)
     try {
       const { data: existingProspect } = await supabaseAdmin
         .from('pilin_prospects')
         .select('id')
-        .or(`email.eq.${cleanEmail},whatsapp.eq.${cleanContactNumber}`)
+        .eq('whatsapp', cleanContactNumber)
         .maybeSingle();
 
       if (existingProspect?.id) {
@@ -73,13 +74,7 @@ export async function submitOwnerOnboardingAction(payload: OnboardingPayload): P
           .from('pilin_prospects')
           .update({
             name: cleanBusinessName,
-            owner_name: cleanOwnerName,
-            whatsapp: cleanContactNumber,
-            email: cleanEmail,
-            employee_count: cleanEmployeeCount,
-            source: 'WELCOME_REGISTER',
-            trial_start: now.toISOString(),
-            trial_end: trialEnd.toISOString(),
+            status: 'NEW',
           })
           .eq('id', existingProspect.id);
       } else {
@@ -87,21 +82,15 @@ export async function submitOwnerOnboardingAction(payload: OnboardingPayload): P
           .from('pilin_prospects')
           .insert({
             name: cleanBusinessName,
-            owner_name: cleanOwnerName,
             whatsapp: cleanContactNumber,
-            email: cleanEmail,
-            employee_count: cleanEmployeeCount,
-            source: 'WELCOME_REGISTER',
             status: 'NEW',
-            trial_start: now.toISOString(),
-            trial_end: trialEnd.toISOString(),
-            trial_status: 'PENDING_APPROVAL',
           });
       }
     } catch (dbErr: any) {
       console.warn('Notice syncing to pilin_prospects:', dbErr.message);
     }
 
+    // 2b. Sync to platform_customers (schema: id, name, contact_name, email, phone, owner_email, status)
     try {
       const { data: existingPlatformCustomer } = await supabaseAdmin
         .from('platform_customers')
@@ -109,7 +98,19 @@ export async function submitOwnerOnboardingAction(payload: OnboardingPayload): P
         .or(`email.eq.${cleanEmail},phone.eq.${cleanContactNumber}`)
         .maybeSingle();
 
-      if (!existingPlatformCustomer) {
+      if (existingPlatformCustomer?.id) {
+        await supabaseAdmin
+          .from('platform_customers')
+          .update({
+            name: cleanBusinessName,
+            contact_name: cleanOwnerName,
+            email: cleanEmail,
+            phone: cleanContactNumber,
+            owner_email: cleanEmail,
+            status: 'ACTIVE',
+          })
+          .eq('id', existingPlatformCustomer.id);
+      } else {
         await supabaseAdmin
           .from('platform_customers')
           .insert({
@@ -118,7 +119,7 @@ export async function submitOwnerOnboardingAction(payload: OnboardingPayload): P
             email: cleanEmail,
             phone: cleanContactNumber,
             owner_email: cleanEmail,
-            status: 'TRIAL',
+            status: 'ACTIVE',
           });
       }
     } catch (e: any) {

@@ -1653,7 +1653,7 @@ export async function getPendingRegistrationsAction(): Promise<{
       const supabaseAdmin = createAdminClient();
       const { data, error } = await supabaseAdmin
         .from('pilin_prospects')
-        .select('id, name, owner_name, whatsapp, email, employee_count, created_at, status, trial_status')
+        .select('id, name, whatsapp, created_at, status')
         .order('created_at', { ascending: false });
 
       if (!error && Array.isArray(data)) {
@@ -1661,18 +1661,53 @@ export async function getPendingRegistrationsAction(): Promise<{
           registrationMap.set(p.id, {
             id: p.id,
             name: p.name || 'Usaha Tanpa Nama',
-            ownerName: p.owner_name || 'Pemilik Usaha',
+            ownerName: p.name || 'Pemilik Usaha',
             whatsapp: p.whatsapp || '-',
-            email: p.email || '-',
-            employeeCount: p.employee_count || '1 Cabang',
+            email: '-',
+            employeeCount: '1 Cabang',
             createdAt: p.created_at || new Date().toISOString(),
-            status: p.status || 'NEW',
-            trialStatus: p.trial_status || 'PENDING',
+            status: p.status === 'CLOSED_WON' ? 'CLOSED_WON' : 'NEW',
+            trialStatus: p.status === 'CLOSED_WON' ? 'ACTIVE' : 'PENDING_APPROVAL',
           });
         }
       }
     } catch (dbErr) {
       console.warn('Database query for pilin_prospects notice:', dbErr);
+    }
+
+    // 3. Query platform_customers if reachable (contains owner contact & email)
+    try {
+      const supabaseAdmin = createAdminClient();
+      const { data: customers, error: custError } = await supabaseAdmin
+        .from('platform_customers')
+        .select('id, name, contact_name, email, phone, status, created_at')
+        .order('created_at', { ascending: false });
+
+      if (!custError && Array.isArray(customers)) {
+        for (const c of customers) {
+          let matchedKey = c.id;
+          for (const [key, val] of registrationMap.entries()) {
+            if (val.whatsapp === c.phone || val.name.toLowerCase() === c.name.toLowerCase()) {
+              matchedKey = key;
+              break;
+            }
+          }
+          const prev = registrationMap.get(matchedKey);
+          registrationMap.set(matchedKey, {
+            id: matchedKey,
+            name: c.name || prev?.name || 'Usaha Tanpa Nama',
+            ownerName: c.contact_name || prev?.ownerName || 'Pemilik Usaha',
+            whatsapp: c.phone || prev?.whatsapp || '-',
+            email: c.email || prev?.email || '-',
+            employeeCount: prev?.employeeCount || '1 Cabang',
+            createdAt: c.created_at || prev?.createdAt || new Date().toISOString(),
+            status: prev?.status || 'NEW',
+            trialStatus: prev?.trialStatus || 'PENDING_APPROVAL',
+          });
+        }
+      }
+    } catch (custDbErr) {
+      console.warn('Database query for platform_customers notice:', custDbErr);
     }
 
     const registrations = Array.from(registrationMap.values()).sort(
@@ -1736,9 +1771,6 @@ export async function accTenantRegistrationAction(prospectId: string): Promise<{
         .from('pilin_prospects')
         .update({
           status: 'CLOSED_WON',
-          trial_status: 'ACTIVE',
-          trial_start: now.toISOString(),
-          trial_end: trialEnd.toISOString(),
         })
         .eq('id', prospectId);
 
