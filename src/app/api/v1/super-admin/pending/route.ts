@@ -112,3 +112,41 @@ export async function GET() {
     }, { status: 500 });
   }
 }
+
+export async function DELETE(request: Request) {
+  try {
+    const body = await request.json();
+    const { id } = body;
+
+    if (!id) {
+      return NextResponse.json({ success: false, message: 'ID pendaftaran wajib diisi.' }, { status: 400 });
+    }
+
+    // 1. Delete from local store
+    try {
+      PendingRegistrationStore.delete(id);
+    } catch (e) {
+      console.warn('PendingRegistrationStore.delete notice:', e);
+    }
+
+    // 2. Delete from Supabase
+    try {
+      const supabaseAdmin = createAdminClient();
+      await supabaseAdmin.from('pilin_prospects').delete().eq('id', id);
+      await supabaseAdmin.from('platform_customers').delete().eq('id', id);
+    } catch (dbErr) {
+      console.warn('Database delete notice in pending route:', dbErr);
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Pendaftaran berhasil dihapus dari sistem.',
+      id,
+    });
+  } catch (err: any) {
+    return NextResponse.json({
+      success: false,
+      message: err.message || 'Gagal menghapus pendaftaran.',
+    }, { status: 500 });
+  }
+}

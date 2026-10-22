@@ -7,7 +7,7 @@ import {
   AlertTriangle, ShieldCheck, LogOut, Loader2, Check, X,
   Search, SlidersHorizontal, CheckCircle2, XCircle, Sparkles,
   Receipt, ClipboardList, UserCheck, MessageSquare, Bell,
-  Send, TrendingUp, Percent, Award, ArrowRight
+  Send, Trash2, TrendingUp, Percent, Award, ArrowRight
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -60,6 +60,38 @@ export default function SuperAdminPage() {
   const [pendingRegistrations, setPendingRegistrations] = useState<PendingRegistrationRecord[]>([]);
   const [pendingLoading, setPendingLoading] = useState<boolean>(false);
   const [isAccing, setIsAccing] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
+
+  const handleDeleteRegistration = async (id: string, name: string) => {
+    if (!window.confirm(`Hapus data pendaftaran "${name}"? Data akan dibersihkan dari console super admin.`)) {
+      return;
+    }
+    setIsDeleting(id);
+    try {
+      const res = await fetch('/api/v1/super-admin/pending', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPendingRegistrations((prev) => prev.filter((r) => r.id !== id));
+        if (typeof window !== 'undefined') {
+          try {
+            const localStored = JSON.parse(localStorage.getItem('pilin_registered_tenants') || '[]');
+            const filtered = localStored.filter((r: any) => r.id !== id);
+            localStorage.setItem('pilin_registered_tenants', JSON.stringify(filtered));
+          } catch {}
+        }
+      } else {
+        alert(data.message || 'Gagal menghapus data pendaftaran.');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Terjadi kesalahan saat menghapus pendaftaran.');
+    } finally {
+      setIsDeleting(null);
+    }
+  };
   const [isAccModalOpen, setIsAccModalOpen] = useState<boolean>(false);
   const [accModalData, setAccModalData] = useState<AccNotificationPayload | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<boolean>(false);
@@ -823,6 +855,7 @@ export default function SuperAdminPage() {
                                   )}
                                 </td>
                                 <td className="p-4 text-right">
+                                  <div className="inline-flex items-center gap-1.5 justify-end">
                                   {reg.status === 'CLOSED_WON' ? (
                                     <button
                                       type="button"
@@ -848,6 +881,20 @@ export default function SuperAdminPage() {
                                       <span>ACC & Kirim Notif</span>
                                     </button>
                                   )}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteRegistration(reg.id, reg.name)}
+                                    disabled={isDeleting === reg.id}
+                                    title="Hapus data pendaftaran"
+                                    className="p-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 border border-rose-500/30 rounded-lg transition-all cursor-pointer inline-flex items-center justify-center disabled:opacity-50"
+                                  >
+                                    {isDeleting === reg.id ? (
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    ) : (
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    )}
+                                  </button>
+                                  </div>
                                 </td>
                               </tr>
                             ))}

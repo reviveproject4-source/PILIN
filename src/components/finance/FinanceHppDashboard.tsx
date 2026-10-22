@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { FinancialReportService, ProfitAndLossReport, MultiPeriodSummary } from '@/domains/finance/financialReportService';
 import { POSTransactionService } from '@/domains/commerce/POSTransactionService';
-import { DollarSign, TrendingUp, ArrowDownRight, ArrowUpRight, BarChart2, PieChart, Scale, Wallet, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { DollarSign, TrendingUp, ArrowDownRight, ArrowUpRight, BarChart2, PieChart, Scale, Wallet, AlertTriangle, CheckCircle2, FileSpreadsheet, Printer } from 'lucide-react';
 
 interface FinanceHppDashboardProps {
   isDemo?: boolean;
@@ -35,18 +35,120 @@ export function FinanceHppDashboard({ isDemo = false }: FinanceHppDashboardProps
   const [activeReportTab, setActiveReportTab] = useState<'PROFIT_LOSS' | 'BALANCE_SHEET' | 'CASH_FLOW'>('PROFIT_LOSS');
   const [periodTab, setPeriodTab] = useState<'MONTHLY' | 'DAILY'>('MONTHLY');
 
+  const handleExportExcel = () => {
+    const csvRows: string[] = [];
+    const today = new Date().toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' });
+
+    if (activeReportTab === 'PROFIT_LOSS') {
+      csvRows.push('LAPORAN RUGI LABA (PROFIT & LOSS) - PILIN ERP');
+      csvRows.push(`Tanggal Dibuat,"${today}"`);
+      csvRows.push(`Periode Tinjauan,"${periodTab === 'MONTHLY' ? 'Bulanan (6 Bulan Terakhir)' : 'Harian (7 Hari Terakhir)'}"`);
+      csvRows.push('');
+      csvRows.push('KOMPONEN KEUANGAN,NILAI (RP)');
+      csvRows.push(`Total Pendapatan (Revenue),${report.totalRevenue}`);
+      csvRows.push(`Harga Pokok Penjualan (HPP),${report.totalHpp}`);
+      csvRows.push(`Laba Kotor (Gross Profit),${report.grossProfit}`);
+      csvRows.push(`Beban Operasional (OPEX),${report.totalExpenses}`);
+      csvRows.push(`Laba Bersih (Net Profit),${report.netProfit}`);
+      csvRows.push(`Margin Laba Bersih (%),"${report.profitMarginPercent}%"`);
+      csvRows.push('');
+      csvRows.push(`RIWAYAT PERBANDINGAN PERFORMA (${periodTab === 'MONTHLY' ? 'BULANAN' : 'HARIAN'})`);
+      csvRows.push('Periode,Revenue (Omzet),Beban (Expense),Net Profit (Laba Bersih),Margin Laba');
+      const periods = periodTab === 'MONTHLY' ? monthlyPeriods : dailyPeriods;
+      periods.forEach((p) => {
+        csvRows.push(`"${p.periodLabel}",${p.revenue},${p.expenses},${p.netProfit},"${p.profitMargin}%"`);
+      });
+    } else if (activeReportTab === 'CASH_FLOW') {
+      csvRows.push('LAPORAN ARUS KAS (CASH FLOW) - PILIN ERP');
+      csvRows.push(`Tanggal Dibuat,"${today}"`);
+      csvRows.push('');
+      csvRows.push('KOMPONEN ARUS KAS,NILAI (RP)');
+      csvRows.push('Operating Cash Inflows (Kas Masuk),292150000');
+      csvRows.push('- Kas Tunai Laci Kasir,98420000');
+      csvRows.push('- Nontunai / Bank Transfer & QRIS,193730000');
+      csvRows.push('');
+      csvRows.push('Operating Cash Outflows (Kas Keluar),182750000');
+      csvRows.push('- Pembelian Bahan Baku & Stok,70350000');
+      csvRows.push('- Beban Operasional & Listrik,11240000');
+      csvRows.push('');
+      csvRows.push('Arus Kas Bersih (Net Cash Flow),109400000');
+      csvRows.push('Status Rekonsiliasi,"Kasir & Bank Reconciled"');
+    } else {
+      csvRows.push('STRUKTUR NERACA KEUANGAN (BALANCE SHEET) - PILIN ERP');
+      csvRows.push(`Tanggal Dibuat,"${today}"`);
+      csvRows.push('');
+      csvRows.push('KOMPONEN NERACA,NILAI (RP)');
+      csvRows.push('1. Total Aset (Kas Piutang Perlengkapan),0');
+      csvRows.push('2. Total Liabilitas (Hutang Usaha & Beban Akrual),0');
+      csvRows.push('3. Total Ekuitas (Modal Disetor & Laba Ditahan),0');
+    }
+
+    const csvString = '\uFEFF' + csvRows.join('\r\n');
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `Laporan_Keuangan_PILIN_${activeReportTab}_${new Date().toISOString().substring(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Title Bar & Main Report Navigation */}
-      <div className="flex flex-wrap items-center justify-between gap-4 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-        <div>
+      <div className="hidden print:block pb-4 border-b-2 border-slate-900 mb-6 text-black">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-black tracking-tight text-slate-900">PILIN ERP — LAPORAN KEUANGAN RESMI</h1>
+            <div className="text-sm font-bold text-slate-700 mt-1">
+              {activeReportTab === 'PROFIT_LOSS' && 'Laporan Rugi Laba (Profit & Loss Statement)'}
+              {activeReportTab === 'BALANCE_SHEET' && 'Laporan Neraca (Balance Sheet Statement)'}
+              {activeReportTab === 'CASH_FLOW' && 'Laporan Arus Kas (Cash Flow Statement)'}
+            </div>
+          </div>
+          <div className="text-right text-xs font-semibold text-slate-600">
+            <div>Tanggal Cetak: {new Date().toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
+            <div>Multi-Branch Business Intelligence System</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Top Title Bar & Main Report Navigation */}
+      <div className="flex flex-wrap items-center justify-between gap-4 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm print:hidden">
+        <div className="flex items-center gap-4">
           <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
             Laporan Keuangan Perusahaan
           </h2>
         </div>
 
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={handleExportExcel}
+            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2 cursor-pointer"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>Export Excel (.csv)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handlePrint}
+            className="px-3.5 py-2 bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-slate-100 border border-slate-700 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2 cursor-pointer"
+          >
+            <Printer className="w-4 h-4 text-[#F26522]" />
+            <span>Cetak Laporan / PDF</span>
+          </button>
+        </div>
+
         {/* 3 Main Financial Report Sub-Tabs */}
-        <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+        <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 w-full sm:w-auto">
           <button
             onClick={() => setActiveReportTab('PROFIT_LOSS')}
             className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${

@@ -112,4 +112,12 @@ export class PendingRegistrationStore {
 
     return null;
   }
+
+  static delete(id: string): boolean {
+    let store = this.getStore();
+    store = store.filter((r) => r.id !== id);
+    globalThis.__PILIN_REGISTRATIONS__ = store;
+    this.saveToFile(store);
+    return true;
+  }
 }
