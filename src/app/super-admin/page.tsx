@@ -246,6 +246,7 @@ export default function SuperAdminPage() {
         fetchMetrics();
       } else if (activeMenu === 'Tenants' || activeMenu === 'Status' || activeMenu === 'Fitur') {
         fetchTenants();
+        fetchPendingRegistrations();
       } else if (activeMenu === 'Subscriptions') {
         fetchTenants();
         fetchSubscriptionsData();
@@ -791,6 +792,15 @@ export default function SuperAdminPage() {
                     </span>
                   )}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => fetchPendingRegistrations()}
+                  disabled={pendingLoading}
+                  className="px-3 py-2 rounded-xl text-xs font-bold bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 transition-all flex items-center space-x-1.5 cursor-pointer ml-auto disabled:opacity-50"
+                >
+                  <Activity className={`w-3.5 h-3.5 ${pendingLoading ? 'animate-spin' : ''}`} />
+                  <span>Segarkan</span>
+                </button>
               </div>
 
               {/* VIEW: PENDING REGISTRATIONS */}
@@ -806,8 +816,7 @@ export default function SuperAdminPage() {
                       <div className="w-12 h-12 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center mx-auto">
                         <UserPlus className="w-6 h-6" />
                       </div>
-                      <h3 className="text-sm font-bold text-white">Tidak ada pendaftaran baru</h3>
-                      <div className="text-xs text-slate-400">Semua pendaftaran tenant telah selesai diproses atau belum ada pengajuan baru.</div>
+                      <h3 className="text-sm font-bold text-slate-400">Belum Ada Pendaftaran Baru</h3>
                     </div>
                   ) : (
                     <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
