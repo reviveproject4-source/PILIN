@@ -98,6 +98,9 @@ export default function SuperAdminPage() {
       }
 
       setPendingRegistrations(records);
+      if (records.filter(r => r.status === 'NEW').length > 0) {
+        setTenantTab(prev => (prev === 'ACTIVE' && tenants.length === 0 ? 'PENDING' : prev));
+      }
     } catch (e) {
       console.error('Failed to fetch pending registrations', e);
     } finally {
@@ -701,6 +704,11 @@ export default function SuperAdminPage() {
                 >
                   <Icon className="w-4 h-4" />
                   <span>{item.label}</span>
+                  {item.name === 'Tenants' && pendingRegistrations.filter(r => r.status === 'NEW').length > 0 && (
+                    <span className="ml-auto px-1.5 py-0.5 rounded-full text-[10px] font-black bg-amber-400 text-slate-950 animate-pulse">
+                      {pendingRegistrations.filter(r => r.status === 'NEW').length}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -908,6 +916,32 @@ export default function SuperAdminPage() {
               {/* VIEW: ACTIVE TENANTS */}
               {tenantTab === 'ACTIVE' && (
                 <>
+              {/* Alert Banner If Pending Registration Exists */}
+              {pendingRegistrations.filter(r => r.status === 'NEW').length > 0 && (
+                <div className="p-4 bg-amber-950/40 border border-amber-500/40 rounded-2xl flex flex-wrap items-center justify-between gap-3 shadow-lg">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold">
+                      <Bell className="w-5 h-5 animate-pulse" />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-white">
+                        Ada {pendingRegistrations.filter(r => r.status === 'NEW').length} Pendaftaran Baru Menunggu ACC
+                      </span>
+                      <span className="px-2.5 py-1 rounded-full text-xs font-black bg-amber-400 text-slate-950">
+                        {pendingRegistrations.filter(r => r.status === 'NEW')[0]?.name}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setTenantTab('PENDING')}
+                    className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl transition-all shadow-md cursor-pointer flex items-center space-x-1.5"
+                  >
+                    <span>Buka &amp; ACC Sekarang</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
               {/* Filter & Search Bar */}
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
                 <div className="relative w-full md:w-80">
