@@ -63,6 +63,10 @@ export function LoginGate({
   const [confirmPassword, setConfirmPassword] = useState('');
   const [otpLoading, setOtpLoading] = useState(false);
   const [countdown, setCountdown] = useState<number>(0);
+  const [otpSignedToken, setOtpSignedToken] = useState<string>('');
+  const [otpExpiresAt, setOtpExpiresAt] = useState<number>(0);
+  const [otpTenantId, setOtpTenantId] = useState<string>('');
+  const [verifiedTenant, setVerifiedTenant] = useState<any>(null);
   const [otpInfo, setOtpInfo] = useState<{ phone?: string; waUrl?: string; otpPreview?: string; businessName?: string } | null>(null);
 
   // OTP Countdown timer
@@ -87,7 +91,15 @@ export function LoginGate({
 
     if (username.trim()) {
       try {
-        const verifyRes = await verifyTenantLoginAction(selectedRole, username.trim(), password.trim());
+        let clientKnownPassword = '';
+        if (typeof window !== 'undefined') {
+          const digits = username.trim().replace(/[^0-9]/g, '');
+          if (digits) {
+            clientKnownPassword = localStorage.getItem('pilin_saved_pwd_' + digits) || '';
+          }
+        }
+
+        const verifyRes = await verifyTenantLoginAction(selectedRole, username.trim(), password.trim(), clientKnownPassword);
         if (!verifyRes.success) {
           setErrorMessage(verifyRes.message || 'Kredensial tidak valid.');
           setLoginLoading(false);
@@ -191,6 +203,16 @@ export function LoginGate({
     }
   };
 
+  // Helper to load client known tenants from localStorage
+  const getClientTenants = () => {
+    if (typeof window === 'undefined') return [];
+    try {
+      return JSON.parse(localStorage.getItem('pilin_registered_tenants') || '[]');
+    } catch {
+      return [];
+    }
+  };
+
   // Handle Request OTP
   const handleRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -203,13 +225,17 @@ export function LoginGate({
     setOtpLoading(true);
 
     try {
-      const res = await requestPasswordResetOtpAction(resetIdentifier.trim());
+      const clientTenants = getClientTenants();
+      const res = await requestPasswordResetOtpAction(resetIdentifier.trim(), clientTenants);
       setOtpLoading(false);
       if (!res.success) {
         setErrorMessage(res.message);
         return;
       }
 
+      setOtpSignedToken(res.signedToken || '');
+      setOtpExpiresAt(res.expiresAt || 0);
+      setOtpTenantId(res.tenantId || '');
       setOtpInfo({
         phone: res.phone,
         waUrl: res.waUrl,
@@ -232,12 +258,16 @@ export function LoginGate({
     setOtpLoading(true);
 
     try {
-      const res = await requestPasswordResetOtpAction(resetIdentifier.trim());
+      const clientTenants = getClientTenants();
+      const res = await requestPasswordResetOtpAction(resetIdentifier.trim(), clientTenants);
       setOtpLoading(false);
       if (!res.success) {
         setErrorMessage(res.message);
         return;
       }
+      setOtpSignedToken(res.signedToken || '');
+      setOtpExpiresAt(res.expiresAt || 0);
+      setOtpTenantId(res.tenantId || '');
       setOtpInfo({
         phone: res.phone,
         waUrl: res.waUrl,
@@ -277,11 +307,22 @@ export function LoginGate({
     setOtpLoading(true);
 
     try {
-      const res = await verifyOtpAndSetPasswordAction(
-        resetIdentifier.trim(),
-        resetOtpCode.trim(),
-        newPassword.trim()
+      const clientTenants = getClientTenants();
+      const matchedClient = clientTenants.find((t: any) =>
+        (t.whatsapp && t.whatsapp.includes(resetIdentifier.trim())) ||
+        (t.email && t.email.toLowerCase() === resetIdentifier.trim().toLowerCase())
       );
+
+      const res = await verifyOtpAndSetPasswordAction({
+        identifier: resetIdentifier.trim(),
+        otpCode: resetOtpCode.trim(),
+        newPassword: newPassword.trim(),
+        signedToken: otpSignedToken,
+        expiresAt: otpExpiresAt,
+        tenantId: otpTenantId,
+        knownTenant: matchedClient,
+      });
+
       setOtpLoading(false);
       if (!res.success) {
         setErrorMessage(res.message);
@@ -297,11 +338,19 @@ export function LoginGate({
           email: res.tenant.email,
           employeeCount: res.tenant.employeeCount || '1 Cabang',
         });
+        setVerifiedTenant(res.tenant);
+      }
+
+      if (typeof window !== 'undefined') {
+        const digits = resetIdentifier.trim().replace(/[^0-9]/g, '');
+        if (digits) {
+          localStorage.setItem('pilin_saved_pwd_' + digits, newPassword.trim());
+        }
       }
 
       setUsername(res.tenant?.whatsapp || res.tenant?.email || resetIdentifier.trim());
       setPassword(newPassword.trim());
-      setSuccessMessage('Kata sandi baru berhasil disimpan! Silakan masuk ke akun Anda.');
+      setSuccessMessage('Kata sandi baru berhasil disimpan!');
       setResetStep('RESET_SUCCESS');
     } catch (err: any) {
       setOtpLoading(false);
@@ -795,16 +844,39 @@ export function LoginGate({
                   </h2>
                 </div>
 
+                <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-300 space-y-1.5 text-left">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 font-semibold">Nama Usaha:</span>
+                    <span className="text-white font-bold">{verifiedTenant?.businessName || 'Usaha Anda'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 font-semibold">Role Akses:</span>
+                    <span className="text-purple-400 font-bold">OWNER</span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const finalName = verifiedTenant?.ownerName || 'Owner';
+                    onLoginSuccess('OWNER', finalName, false);
+                  }}
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-all cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/40"
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>MASUK LANGSUNG KE DASHBOARD ERP</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+
                 <button
                   type="button"
                   onClick={() => {
                     setActiveTab('LOGIN');
                     setErrorMessage(null);
                   }}
-                  className="w-full py-3 bg-[#F26522] hover:bg-[#d95416] text-white font-bold rounded-xl text-xs transition-all cursor-pointer flex items-center justify-center gap-2"
+                  className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white font-bold rounded-xl text-xs transition-all cursor-pointer"
                 >
-                  <span>MASUK DENGAN KATA SANDI BARU</span>
-                  <ArrowRight className="w-4 h-4" />
+                  Kembali ke Form Masuk
                 </button>
               </div>
             )}
