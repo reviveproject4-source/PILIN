@@ -123,6 +123,7 @@ export default function SuperAdminPage() {
       if (data.success && data.notification) {
         setAccModalData(data.notification);
         setIsAccModalOpen(true);
+        setTenantTab('ACTIVE');
         fetchPendingRegistrations();
         fetchTenants();
       } else {
@@ -346,9 +347,9 @@ export default function SuperAdminPage() {
   };
 
   // Feature Flag Operations
-  const openFeatureEditor = async (tenant: TenantRecord) => {
+  const openFeatureEditor = async (tenant: TenantRecord, openModal: boolean = true) => {
     setSelectedTenantForFeatures(tenant);
-    setIsFeatureModalOpen(true);
+    if (openModal) setIsFeatureModalOpen(true);
     setFeaturesLoading(true);
     setFeaturesError(null);
     setFeaturesSuccess(null);
@@ -366,6 +367,13 @@ export default function SuperAdminPage() {
       setFeaturesLoading(false);
     }
   };
+
+  // Auto-select first tenant in Fitur tab if none selected
+  useEffect(() => {
+    if (activeMenu === 'Fitur' && tenants.length > 0 && !selectedTenantForFeatures) {
+      openFeatureEditor(tenants[0], false);
+    }
+  }, [activeMenu, tenants, selectedTenantForFeatures]);
 
   const handleToggleFeature = (code: string) => {
     setTenantFeatures(prev => 
@@ -1039,7 +1047,7 @@ export default function SuperAdminPage() {
                             <td className="p-4">
                               <button
                                 type="button"
-                                onClick={() => openFeatureEditor(tenant)}
+                                onClick={() => openFeatureEditor(tenant, true)}
                                 className="px-2.5 py-1 bg-slate-950 hover:bg-[#F26522]/10 border border-slate-800 hover:border-[#F26522]/40 rounded-lg text-[11px] font-bold text-slate-300 hover:text-[#F26522] transition-all cursor-pointer inline-flex items-center gap-1.5"
                               >
                                 <SlidersHorizontal className="w-3.5 h-3.5 text-[#F26522]" />
@@ -1378,7 +1386,7 @@ export default function SuperAdminPage() {
                       value={selectedTenantForFeatures?.id || ''}
                       onChange={(e) => {
                         const t = tenants.find(item => item.id === e.target.value);
-                        if (t) openFeatureEditor(t);
+                        if (t) openFeatureEditor(t, false);
                       }}
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-bold focus:outline-none focus:border-[#F26522] cursor-pointer"
                     >

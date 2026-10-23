@@ -446,6 +446,53 @@ export async function getTenantsAction(): Promise<{
     }
 
     const supabaseAdmin = createAdminClient();
+
+    // Auto-reconcile active platform_customers to tenants table if missing
+    try {
+      const { data: activeCustomers } = await supabaseAdmin
+        .from('platform_customers')
+        .select('*')
+        .eq('status', 'ACTIVE');
+
+      if (activeCustomers && activeCustomers.length > 0) {
+        for (const cust of activeCustomers) {
+          if (!cust.tenant_id) {
+            const { data: existingT } = await supabaseAdmin
+              .from('tenants')
+              .select('id')
+              .ilike('name', cust.name)
+              .maybeSingle();
+
+            let tId = existingT?.id;
+            if (!tId) {
+              const cleanCode = (cust.name || 'TENANT').replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 8) + '01';
+              const { data: newT } = await supabaseAdmin
+                .from('tenants')
+                .insert({ name: cust.name, code: cleanCode })
+                .select('id')
+                .single();
+              tId = newT?.id;
+            }
+
+            if (tId) {
+              await supabaseAdmin
+                .from('platform_customers')
+                .update({ tenant_id: tId })
+                .eq('id', cust.id);
+
+              const flagRows = PILIN_STANDARD_FEATURES.map((f) => ({
+                tenant_id: tId,
+                feature_code: f.feature_code,
+                enabled: true,
+              }));
+              await supabaseAdmin.from('tenant_feature_flags').upsert(flagRows, { onConflict: 'tenant_id,feature_code' });
+            }
+          }
+        }
+      }
+    } catch (recErr) {
+      console.warn('Reconciliation notice in getTenantsAction:', recErr);
+    }
     
     // 1. Fetch tenants
     const { data: tenantsData, error: tenantsError } = await supabaseAdmin

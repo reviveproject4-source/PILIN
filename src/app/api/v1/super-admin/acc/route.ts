@@ -26,7 +26,6 @@ export async function POST(request: Request) {
     } : null;
 
     const now = new Date();
-    const tenantId = `tenant-${prospectId.slice(0, 8)}`;
 
     // 2. Update Supabase
     try {
@@ -60,18 +59,44 @@ export async function POST(request: Request) {
         };
       }
 
-      // Update pilin_prospects status to CLOSED_WON
-      await supabaseAdmin
-        .from('pilin_prospects')
-        .update({ status: 'CLOSED_WON' })
-        .eq('id', prospectId);
+      const businessName = prospect?.name || 'Usaha Tenant';
+      const cleanCode = businessName.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 8) + '01';
 
-      // Create or update platform_customers
+      // A. Create or Find Tenant in `tenants` table
+      let tenantRecord: any = null;
+      const { data: existingTenant } = await supabaseAdmin
+        .from('tenants')
+        .select('*')
+        .ilike('name', businessName)
+        .maybeSingle();
+
+      if (existingTenant) {
+        tenantRecord = existingTenant;
+      } else {
+        const { data: createdTenant, error: insertTenantErr } = await supabaseAdmin
+          .from('tenants')
+          .insert({
+            name: businessName,
+            code: cleanCode,
+          })
+          .select()
+          .single();
+
+        if (insertTenantErr) {
+          console.warn('insertTenantErr:', insertTenantErr);
+        }
+        tenantRecord = createdTenant;
+      }
+
+      const actualTenantId = tenantRecord?.id || `tenant-${prospectId.slice(0, 8)}`;
+
+      // B. Create or update platform_customers
       let customerId = dbCustomer?.id;
       if (dbCustomer) {
         await supabaseAdmin
           .from('platform_customers')
           .update({
+            tenant_id: tenantRecord?.id || null,
             status: 'ACTIVE',
             updated_at: now.toISOString(),
           })
@@ -80,11 +105,12 @@ export async function POST(request: Request) {
         const { data: newCust } = await supabaseAdmin
           .from('platform_customers')
           .insert({
-            name: prospect.name || 'Usaha Tenant',
+            name: businessName,
             contact_name: prospect.owner_name || prospect.name || 'Owner',
             email: prospect.email || 'tenant@pilin.id',
             phone: prospect.whatsapp || '',
             owner_email: prospect.email || 'tenant@pilin.id',
+            tenant_id: tenantRecord?.id || null,
             status: 'ACTIVE',
           })
           .select('id')
@@ -92,10 +118,20 @@ export async function POST(request: Request) {
         customerId = newCust?.id;
       }
 
-      // Ensure 13 standard feature flags are enabled
-      const targetIdForFeatures = customerId || tenantId;
+      // C. Ensure default subscription product in tenant_products
+      if (tenantRecord) {
+        await supabaseAdmin
+          .from('tenant_products')
+          .upsert({
+            tenant_id: tenantRecord.id,
+            product_id: 'e1e1e1e1-e1e1-e1e1-e1e1-e1e1e1e1e1e1',
+            status: 'ACTIVE',
+          }, { onConflict: 'tenant_id,product_id' });
+      }
+
+      // D. Ensure 13 standard feature flags are enabled in tenant_feature_flags
       const flagRows = PILIN_STANDARD_FEATURES.map((feat) => ({
-        tenant_id: targetIdForFeatures,
+        tenant_id: actualTenantId,
         feature_code: feat.feature_code,
         enabled: true,
         updated_at: now.toISOString(),
@@ -104,6 +140,13 @@ export async function POST(request: Request) {
       await supabaseAdmin
         .from('tenant_feature_flags')
         .upsert(flagRows, { onConflict: 'tenant_id,feature_code' });
+
+      // E. Update pilin_prospects status to CLOSED_WON
+      await supabaseAdmin
+        .from('pilin_prospects')
+        .update({ status: 'CLOSED_WON' })
+        .eq('id', prospectId);
+
     } catch (dbErr) {
       console.warn('Database update notice during ACC API:', dbErr);
     }
