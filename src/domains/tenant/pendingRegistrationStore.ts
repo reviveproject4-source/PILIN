@@ -12,6 +12,8 @@ export interface RegistrationRecord {
   createdAt: string;
   status: 'NEW' | 'CLOSED_WON' | 'REJECTED';
   trialStatus: string;
+  temporaryPin?: string;
+  password?: string;
 }
 
 const TMP_FILE = path.join(os.tmpdir(), 'pilin_pending_registrations.json');
@@ -89,12 +91,15 @@ export class PendingRegistrationStore {
     );
   }
 
-  static acc(id: string): RegistrationRecord | null {
+  static acc(id: string, temporaryPin?: string): RegistrationRecord | null {
     const store = this.getStore();
     const target = store.find((r) => r.id === id);
     if (target) {
       target.status = 'CLOSED_WON';
       target.trialStatus = 'ACTIVE';
+      if (temporaryPin) {
+        target.temporaryPin = temporaryPin;
+      }
       this.saveToFile(store);
       return target;
     }
@@ -105,12 +110,106 @@ export class PendingRegistrationStore {
     if (fileTarget) {
       fileTarget.status = 'CLOSED_WON';
       fileTarget.trialStatus = 'ACTIVE';
+      if (temporaryPin) {
+        fileTarget.temporaryPin = temporaryPin;
+      }
       this.saveToFile(fileRecords);
       globalThis.__PILIN_REGISTRATIONS__ = fileRecords;
       return fileTarget;
     }
 
     return null;
+  }
+
+  private static normalizePhone(phone: string): string {
+    const digits = (phone || '').replace(/[^0-9]/g, '');
+    if (digits.startsWith('62')) return digits.slice(2);
+    if (digits.startsWith('0')) return digits.slice(1);
+    return digits;
+  }
+
+  static findByPhoneOrEmail(identifier: string): RegistrationRecord | null {
+    if (!identifier) return null;
+    const cleanId = identifier.trim().toLowerCase();
+    const cleanPhone = this.normalizePhone(cleanId);
+
+    const all = this.getAll();
+    return (
+      all.find((r) => {
+        if (r.email && r.email.toLowerCase() === cleanId) return true;
+        if (r.whatsapp) {
+          const recPhone = this.normalizePhone(r.whatsapp);
+          if (recPhone && cleanPhone && (recPhone === cleanPhone || recPhone.endsWith(cleanPhone) || cleanPhone.endsWith(recPhone))) {
+            return true;
+          }
+        }
+        return false;
+      }) || null
+    );
+  }
+
+  static setPassword(identifier: string, newPassword: string): boolean {
+    const target = this.findByPhoneOrEmail(identifier);
+    if (!target) return false;
+
+    const store = this.getStore();
+    const match = store.find((r) => r.id === target.id);
+    if (match) {
+      match.password = newPassword;
+      this.saveToFile(store);
+      return true;
+    }
+
+    const fileRecords = this.loadFromFile();
+    const fileMatch = fileRecords.find((r) => r.id === target.id);
+    if (fileMatch) {
+      fileMatch.password = newPassword;
+      this.saveToFile(fileRecords);
+      globalThis.__PILIN_REGISTRATIONS__ = fileRecords;
+      return true;
+    }
+
+    return false;
+  }
+
+  static verifyCredentials(
+    identifier: string,
+    passwordInput: string
+  ): { valid: boolean; record?: RegistrationRecord; reason?: string } {
+    const record = this.findByPhoneOrEmail(identifier);
+    if (!record) {
+      return { valid: false, reason: 'Akun atau nomor WhatsApp tidak terdaftar.' };
+    }
+
+    // If tenant has not been ACC'd yet
+    if (record.status !== 'CLOSED_WON' && record.trialStatus !== 'ACTIVE') {
+      return { valid: false, record, reason: 'Pendaftaran akun sedang menunggu persetujuan (ACC) Super Admin.' };
+    }
+
+    const cleanInput = passwordInput?.trim() || '';
+
+    // If explicit password set
+    if (record.password) {
+      if (record.password === cleanInput) {
+        return { valid: true, record };
+      }
+      return { valid: false, record, reason: 'Kata sandi atau PIN salah.' };
+    }
+
+    // If temporary PIN exists
+    if (record.temporaryPin) {
+      if (record.temporaryPin === cleanInput) {
+        return { valid: true, record };
+      }
+    }
+
+    // Fallback: 4-digit last phone digits
+    const normPhone = this.normalizePhone(record.whatsapp);
+    if (normPhone.length >= 4 && normPhone.endsWith(cleanInput)) {
+      return { valid: true, record };
+    }
+
+    return { valid: false, record, reason: 'Kata sandi atau PIN salah. Silakan gunakan menu Reset Password via WhatsApp.' };
   }
 
   static delete(id: string): boolean {

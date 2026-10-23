@@ -1752,8 +1752,9 @@ export async function accTenantRegistrationAction(prospectId: string): Promise<{
       return { success: false, message: 'Unauthorized: Hanya Super Admin yang dapat meng-ACC pendaftaran.' };
     }
 
-    // 1. Update in local/hybrid store
-    const storeRecord = PendingRegistrationStore.acc(prospectId);
+    // 1. Update in local/hybrid store with temporary PIN
+    const tempPin = Math.floor(100000 + Math.random() * 900000).toString();
+    const storeRecord = PendingRegistrationStore.acc(prospectId, tempPin);
 
     let prospect: any = storeRecord ? {
       id: storeRecord.id,
@@ -1872,7 +1873,7 @@ export async function accTenantRegistrationAction(prospectId: string): Promise<{
     const rawPhone = prospect.whatsapp || '';
     const cleanPhone = rawPhone.replace(/[^0-9]/g, '').replace(/^0/, '62');
 
-    const messageText = `Halo ${ownerName},\n\nPendaftaran usaha "${businessName}" di PILIN ERP telah DISETUJUI oleh Super Admin!\nAkun tenant Anda kini sudah AKTIF dan seluruh modul sistem siap digunakan.\n\n🔗 Akses Portal: https://pilin.id\n👤 Role Masuk: OWNER\n📧 Email / ID: ${email}\n\nSelamat mengelola operasional cabang Anda dengan PILIN ERP!`;
+    const messageText = `Halo ${ownerName},\n\nPendaftaran usaha "${businessName}" di PILIN ERP telah DISETUJUI oleh Super Admin!\nAkun tenant Anda kini sudah AKTIF dan seluruh modul sistem siap digunakan.\n\n🔗 Akses Portal: https://pilin.id\n👤 Role Masuk: OWNER\n📧 Email / ID: ${email}\n🔑 PIN Masuk Sementara: ${tempPin}\n\n(Catatan: Anda dapat langsung masuk dengan PIN di atas atau mengatur kata sandi kapan saja melalui tombol "Reset Password via WhatsApp" di halaman login).\n\nSelamat mengelola operasional cabang Anda bersama PILIN ERP!`;
 
     const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(messageText)}`;
 

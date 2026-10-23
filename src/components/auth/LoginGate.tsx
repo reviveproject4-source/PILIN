@@ -1,9 +1,28 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Lock, User, ArrowRight, ShieldCheck, UserPlus, Building2, Phone, Mail, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import {
+  Lock,
+  User,
+  ArrowRight,
+  ShieldCheck,
+  UserPlus,
+  Building2,
+  Phone,
+  Mail,
+  CheckCircle2,
+  KeyRound,
+  MessageSquare,
+  RotateCcw,
+} from 'lucide-react';
 import { DashboardRole } from '@/components/layout/DashboardTopBar';
 import { submitOwnerOnboardingAction } from '@/app/actions/onboardingActions';
+import {
+  requestPasswordResetOtpAction,
+  verifyOtpAndSetPasswordAction,
+  verifyTenantLoginAction,
+} from '@/app/actions/authActions';
+import { TenantService } from '@/domains/tenant/tenantService';
 
 interface LoginGateProps {
   onLoginSuccess: (role: DashboardRole, username: string, isDemo: boolean) => void;
@@ -15,16 +34,17 @@ interface LoginGateProps {
 export function LoginGate({
   onLoginSuccess,
   defaultRole,
-  allowDemoToggle = false,
 }: LoginGateProps) {
-  // Navigation State: 'LOGIN' | 'REGISTER' | 'REGISTER_SUCCESS'
-  const [activeTab, setActiveTab] = useState<'LOGIN' | 'REGISTER' | 'REGISTER_SUCCESS'>('LOGIN');
+  // Navigation State: 'LOGIN' | 'REGISTER' | 'REGISTER_SUCCESS' | 'RESET_PASSWORD'
+  const [activeTab, setActiveTab] = useState<'LOGIN' | 'REGISTER' | 'REGISTER_SUCCESS' | 'RESET_PASSWORD'>('LOGIN');
 
   // Login Form States
   const [selectedRole, setSelectedRole] = useState<DashboardRole>(defaultRole || 'OWNER');
   const [username, setUsername] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [loginLoading, setLoginLoading] = useState(false);
 
   // Registration Form States
   const [regBusinessName, setRegBusinessName] = useState('');
@@ -35,8 +55,26 @@ export function LoginGate({
   const [isRegistering, setIsRegistering] = useState(false);
   const [registeredSummary, setRegisteredSummary] = useState<{ businessName: string; whatsapp: string } | null>(null);
 
+  // Reset Password & OTP States
+  const [resetStep, setResetStep] = useState<'REQUEST_OTP' | 'VERIFY_OTP' | 'RESET_SUCCESS'>('REQUEST_OTP');
+  const [resetIdentifier, setResetIdentifier] = useState('');
+  const [resetOtpCode, setResetOtpCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [countdown, setCountdown] = useState<number>(0);
+  const [otpInfo, setOtpInfo] = useState<{ phone?: string; waUrl?: string; otpPreview?: string; businessName?: string } | null>(null);
+
+  // OTP Countdown timer
+  useEffect(() => {
+    if (countdown > 0) {
+      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [countdown]);
+
   // Handle Login Submit
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedRole) {
       setErrorMessage('Pilih role / jabatan akses terlebih dahulu.');
@@ -44,6 +82,33 @@ export function LoginGate({
     }
 
     setErrorMessage(null);
+    setSuccessMessage(null);
+    setLoginLoading(true);
+
+    if (username.trim()) {
+      try {
+        const verifyRes = await verifyTenantLoginAction(selectedRole, username.trim(), password.trim());
+        if (!verifyRes.success) {
+          setErrorMessage(verifyRes.message || 'Kredensial tidak valid.');
+          setLoginLoading(false);
+          return;
+        }
+        if (verifyRes.tenant) {
+          TenantService.completeOnboarding({
+            businessId: verifyRes.tenant.businessId,
+            businessName: verifyRes.tenant.businessName,
+            ownerName: verifyRes.tenant.ownerName,
+            contactNumber: verifyRes.tenant.whatsapp,
+            email: verifyRes.tenant.email,
+            employeeCount: verifyRes.tenant.employeeCount || '1 Cabang',
+          });
+        }
+      } catch {
+        // Fallback if network or offline
+      }
+    }
+
+    setLoginLoading(false);
     const finalUserName = username.trim() || (
       selectedRole === 'OWNER' ? 'Owner' :
       selectedRole === 'KEPALA_CABANG' ? 'Kepala Cabang' :
@@ -106,7 +171,6 @@ export function LoginGate({
             status: 'NEW',
             trialStatus: 'PENDING_APPROVAL',
           };
-          // Filter out existing by email or whatsapp
           const filtered = existing.filter((e: any) => e.email !== newEntry.email && e.whatsapp !== newEntry.whatsapp);
           filtered.unshift(newEntry);
           localStorage.setItem('pilin_registered_tenants', JSON.stringify(filtered.slice(0, 50)));
@@ -124,6 +188,124 @@ export function LoginGate({
     } catch (err: any) {
       setErrorMessage(err.message || 'Terjadi gangguan saat memproses pendaftaran.');
       setIsRegistering(false);
+    }
+  };
+
+  // Handle Request OTP
+  const handleRequestOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetIdentifier.trim()) {
+      setErrorMessage('Nomor WhatsApp atau Email wajib diisi.');
+      return;
+    }
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setOtpLoading(true);
+
+    try {
+      const res = await requestPasswordResetOtpAction(resetIdentifier.trim());
+      setOtpLoading(false);
+      if (!res.success) {
+        setErrorMessage(res.message);
+        return;
+      }
+
+      setOtpInfo({
+        phone: res.phone,
+        waUrl: res.waUrl,
+        otpPreview: res.otpPreview,
+        businessName: res.businessName,
+      });
+      setResetStep('VERIFY_OTP');
+      setCountdown(60);
+      setSuccessMessage(res.message);
+    } catch (err: any) {
+      setOtpLoading(false);
+      setErrorMessage(err.message || 'Gagal memproses permintaan OTP.');
+    }
+  };
+
+  // Handle Resend OTP
+  const handleResendOtp = async () => {
+    if (countdown > 0) return;
+    setErrorMessage(null);
+    setOtpLoading(true);
+
+    try {
+      const res = await requestPasswordResetOtpAction(resetIdentifier.trim());
+      setOtpLoading(false);
+      if (!res.success) {
+        setErrorMessage(res.message);
+        return;
+      }
+      setOtpInfo({
+        phone: res.phone,
+        waUrl: res.waUrl,
+        otpPreview: res.otpPreview,
+        businessName: res.businessName,
+      });
+      setCountdown(60);
+      setSuccessMessage('Kode OTP baru telah disiapkan ke WhatsApp.');
+    } catch (err: any) {
+      setOtpLoading(false);
+      setErrorMessage(err.message || 'Gagal mengirim ulang kode OTP.');
+    }
+  };
+
+  // Handle Verify OTP and Save New Password
+  const handleVerifyOtpAndSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetOtpCode.trim()) {
+      setErrorMessage('Masukkan 6 digit kode OTP.');
+      return;
+    }
+    if (!newPassword.trim()) {
+      setErrorMessage('Kata sandi baru wajib diisi.');
+      return;
+    }
+    if (newPassword.trim().length < 4) {
+      setErrorMessage('Kata sandi baru minimal 4 karakter.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setErrorMessage('Konfirmasi kata sandi tidak sesuai.');
+      return;
+    }
+
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setOtpLoading(true);
+
+    try {
+      const res = await verifyOtpAndSetPasswordAction(
+        resetIdentifier.trim(),
+        resetOtpCode.trim(),
+        newPassword.trim()
+      );
+      setOtpLoading(false);
+      if (!res.success) {
+        setErrorMessage(res.message);
+        return;
+      }
+
+      if (res.tenant) {
+        TenantService.completeOnboarding({
+          businessId: res.tenant.businessId,
+          businessName: res.tenant.businessName,
+          ownerName: res.tenant.ownerName,
+          contactNumber: res.tenant.whatsapp,
+          email: res.tenant.email,
+          employeeCount: res.tenant.employeeCount || '1 Cabang',
+        });
+      }
+
+      setUsername(res.tenant?.whatsapp || res.tenant?.email || resetIdentifier.trim());
+      setPassword(newPassword.trim());
+      setSuccessMessage('Kata sandi baru berhasil disimpan! Silakan masuk ke akun Anda.');
+      setResetStep('RESET_SUCCESS');
+    } catch (err: any) {
+      setOtpLoading(false);
+      setErrorMessage(err.message || 'Gagal memverifikasi OTP.');
     }
   };
 
@@ -150,11 +332,11 @@ export function LoginGate({
         </div>
 
         {/* Tab Selector: Masuk vs Daftar */}
-        {activeTab !== 'REGISTER_SUCCESS' && (
+        {activeTab !== 'REGISTER_SUCCESS' && activeTab !== 'RESET_PASSWORD' && (
           <div className="grid grid-cols-2 p-1 bg-slate-900 rounded-xl border border-slate-800">
             <button
               type="button"
-              onClick={() => { setActiveTab('LOGIN'); setErrorMessage(null); }}
+              onClick={() => { setActiveTab('LOGIN'); setErrorMessage(null); setSuccessMessage(null); }}
               className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
                 activeTab === 'LOGIN'
                   ? 'bg-[#F26522] text-white shadow-md'
@@ -166,7 +348,7 @@ export function LoginGate({
             </button>
             <button
               type="button"
-              onClick={() => { setActiveTab('REGISTER'); setErrorMessage(null); }}
+              onClick={() => { setActiveTab('REGISTER'); setErrorMessage(null); setSuccessMessage(null); }}
               className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
                 activeTab === 'REGISTER'
                   ? 'bg-emerald-600 text-white shadow-md'
@@ -183,6 +365,13 @@ export function LoginGate({
         {errorMessage && (
           <div className="p-3 bg-rose-950/80 border border-rose-800 text-rose-300 rounded-xl text-xs font-semibold">
             {errorMessage}
+          </div>
+        )}
+
+        {/* Success Alert */}
+        {successMessage && (
+          <div className="p-3 bg-emerald-950/80 border border-emerald-800 text-emerald-300 rounded-xl text-xs font-semibold">
+            {successMessage}
           </div>
         )}
 
@@ -218,7 +407,7 @@ export function LoginGate({
 
             <div>
               <label className="text-xs font-bold text-slate-300 block mb-1">
-                Email / ID Pegawai:
+                Email / Nomor WhatsApp / ID Pegawai:
               </label>
               <div className="relative">
                 <User className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
@@ -226,16 +415,31 @@ export function LoginGate({
                   type="text"
                   value={username}
                   onChange={e => setUsername(e.target.value)}
-                  placeholder="Masukkan email / kode pegawai..."
+                  placeholder="Masukkan nomor WhatsApp atau email..."
                   className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#F26522]"
                 />
               </div>
             </div>
 
             <div>
-              <label className="text-xs font-bold text-slate-300 block mb-1">
-                Kata Sandi / PIN Security:
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-bold text-slate-300 block">
+                  Kata Sandi / PIN Security:
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('RESET_PASSWORD');
+                    setResetStep('REQUEST_OTP');
+                    setResetIdentifier(username.trim());
+                    setErrorMessage(null);
+                    setSuccessMessage(null);
+                  }}
+                  className="text-[11px] font-bold text-amber-400 hover:text-amber-300 transition-colors cursor-pointer"
+                >
+                  Lupa Password? Reset via WhatsApp
+                </button>
+              </div>
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
                 <input
@@ -250,17 +454,18 @@ export function LoginGate({
 
             <button
               type="submit"
-              className="w-full py-3 bg-[#F26522] hover:bg-[#d95416] text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-orange-950/40 flex items-center justify-center gap-2 cursor-pointer mt-2"
+              disabled={loginLoading}
+              className="w-full py-3 bg-[#F26522] hover:bg-[#d95416] text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-orange-950/40 flex items-center justify-center gap-2 cursor-pointer mt-2 disabled:opacity-50"
             >
               <ShieldCheck className="w-4 h-4" />
-              <span>MASUK KE DASHBOARD ERP</span>
+              <span>{loginLoading ? 'MEMVERIFIKASI...' : 'MASUK KE DASHBOARD ERP'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
 
             <div className="text-center pt-2">
               <button
                 type="button"
-                onClick={() => { setActiveTab('REGISTER'); setErrorMessage(null); }}
+                onClick={() => { setActiveTab('REGISTER'); setErrorMessage(null); setSuccessMessage(null); }}
                 className="text-xs font-bold text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer"
               >
                 Belum memiliki akun usaha? Daftar Tenant Baru →
@@ -269,7 +474,7 @@ export function LoginGate({
           </form>
         )}
 
-        {/* TAB 2: DAFTAR TENANT BARU (WELCOME SCREEN PENDAFTARAN) */}
+        {/* TAB 2: DAFTAR TENANT BARU */}
         {activeTab === 'REGISTER' && (
           <form onSubmit={handleRegisterSubmit} className="space-y-3.5">
             <div>
@@ -282,7 +487,7 @@ export function LoginGate({
                   type="text"
                   value={regBusinessName}
                   onChange={e => setRegBusinessName(e.target.value)}
-                  placeholder="Contoh: Laundry Express Mandiri"
+                  placeholder="Contoh: Toko Berkah Retail / Salon Cantik"
                   className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
                   required
                 />
@@ -291,7 +496,7 @@ export function LoginGate({
 
             <div>
               <label className="text-xs font-bold text-slate-300 block mb-1">
-                Nama Pemilik / PIC Penanggung Jawab:
+                Nama Pemilik / Penanggung Jawab (PIC):
               </label>
               <div className="relative">
                 <User className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
@@ -299,7 +504,7 @@ export function LoginGate({
                   type="text"
                   value={regOwnerName}
                   onChange={e => setRegOwnerName(e.target.value)}
-                  placeholder="Contoh: Budi Santoso"
+                  placeholder="Nama lengkap Anda..."
                   className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
                   required
                 />
@@ -308,7 +513,7 @@ export function LoginGate({
 
             <div>
               <label className="text-xs font-bold text-slate-300 block mb-1">
-                Nomor WhatsApp (Tujuan Notifikasi ACC):
+                Nomor WhatsApp Aktif:
               </label>
               <div className="relative">
                 <Phone className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
@@ -316,7 +521,7 @@ export function LoginGate({
                   type="tel"
                   value={regWhatsapp}
                   onChange={e => setRegWhatsapp(e.target.value)}
-                  placeholder="Contoh: 081234567890"
+                  placeholder="081234567890"
                   className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
                   required
                 />
@@ -333,7 +538,7 @@ export function LoginGate({
                   type="email"
                   value={regEmail}
                   onChange={e => setRegEmail(e.target.value)}
-                  placeholder="Contoh: usaha@domain.com"
+                  placeholder="usaha@email.com"
                   className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
                   required
                 />
@@ -342,40 +547,33 @@ export function LoginGate({
 
             <div>
               <label className="text-xs font-bold text-slate-300 block mb-1">
-                Estimasi Jumlah Cabang:
+                Jumlah Cabang Operasional:
               </label>
               <select
                 value={regBranchCount}
                 onChange={e => setRegBranchCount(e.target.value)}
                 className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
               >
-                <option value="1 Cabang">1 Cabang (Outlet Utama)</option>
-                <option value="2 - 3 Cabang">2 - 3 Cabang</option>
-                <option value="4 - 10 Cabang">4 - 10 Cabang</option>
-                <option value="> 10 Cabang">Lebih dari 10 Cabang</option>
+                <option value="1 Cabang">1 Cabang (Toko Tunggal)</option>
+                <option value="2-3 Cabang">2 - 3 Cabang</option>
+                <option value="4-10 Cabang">4 - 10 Cabang</option>
+                <option value=">10 Cabang">&gt; 10 Cabang (Enterprise)</option>
               </select>
             </div>
 
             <button
               type="submit"
               disabled={isRegistering}
-              className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-emerald-950/40 flex items-center justify-center gap-2 cursor-pointer mt-3"
+              className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-emerald-950/40 flex items-center justify-center gap-2 cursor-pointer mt-3 disabled:opacity-50"
             >
-              {isRegistering ? (
-                <span>Memproses Pendaftaran...</span>
-              ) : (
-                <>
-                  <UserPlus className="w-4 h-4" />
-                  <span>KIRIM PENDAFTARAN TENANT</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
+              <UserPlus className="w-4 h-4" />
+              <span>{isRegistering ? 'MEMPROSES PENDAFTARAN...' : 'KIRIM PENDAFTARAN TENANT'}</span>
             </button>
 
-            <div className="text-center pt-2">
+            <div className="text-center pt-1">
               <button
                 type="button"
-                onClick={() => { setActiveTab('LOGIN'); setErrorMessage(null); }}
+                onClick={() => { setActiveTab('LOGIN'); setErrorMessage(null); setSuccessMessage(null); }}
                 className="text-xs font-bold text-slate-400 hover:text-white transition-colors cursor-pointer"
               >
                 Sudah memiliki akun terdaftar? Masuk ke Portal →
@@ -417,6 +615,7 @@ export function LoginGate({
               onClick={() => {
                 setActiveTab('LOGIN');
                 setErrorMessage(null);
+                setSuccessMessage(null);
                 setRegBusinessName('');
                 setRegOwnerName('');
                 setRegWhatsapp('');
@@ -426,6 +625,189 @@ export function LoginGate({
             >
               Kembali ke Halaman Masuk
             </button>
+          </div>
+        )}
+
+        {/* TAB 4: RESET PASSWORD VIA WHATSAPP OTP */}
+        {activeTab === 'RESET_PASSWORD' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h2 className="text-sm font-extrabold text-white flex items-center gap-2">
+                <KeyRound className="w-4 h-4 text-amber-400" />
+                <span>Reset Kata Sandi via WhatsApp OTP</span>
+              </h2>
+              <button
+                type="button"
+                onClick={() => { setActiveTab('LOGIN'); setErrorMessage(null); setSuccessMessage(null); }}
+                className="text-xs font-bold text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                ✕ Batal
+              </button>
+            </div>
+
+            {/* STEP 1: REQUEST OTP */}
+            {resetStep === 'REQUEST_OTP' && (
+              <form onSubmit={handleRequestOtp} className="space-y-4">
+                <div>
+                  <label className="text-xs font-bold text-slate-300 block mb-1">
+                    Nomor WhatsApp atau Email Terdaftar:
+                  </label>
+                  <div className="relative">
+                    <Phone className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                    <input
+                      type="text"
+                      value={resetIdentifier}
+                      onChange={e => setResetIdentifier(e.target.value)}
+                      placeholder="081234567890 / email@usaha.com"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={otpLoading}
+                  className="w-full py-3 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-amber-950/40 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  <span>{otpLoading ? 'MENYIAPKAN OTP...' : 'KIRIM KODE OTP KE WHATSAPP'}</span>
+                </button>
+
+                <div className="text-center pt-1">
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab('LOGIN'); setErrorMessage(null); setSuccessMessage(null); }}
+                    className="text-xs font-bold text-slate-400 hover:text-white transition-colors cursor-pointer"
+                  >
+                    ← Kembali ke Halaman Masuk
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* STEP 2: VERIFY OTP & SET NEW PASSWORD */}
+            {resetStep === 'VERIFY_OTP' && (
+              <form onSubmit={handleVerifyOtpAndSave} className="space-y-3.5">
+                <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl text-xs space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400 font-semibold">Tujuan WhatsApp:</span>
+                    <span className="text-emerald-400 font-bold">{otpInfo?.phone || resetIdentifier}</span>
+                  </div>
+
+                  {otpInfo?.waUrl && (
+                    <a
+                      href={otpInfo.waUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block text-center py-2 px-3 bg-emerald-600/20 border border-emerald-500/40 hover:bg-emerald-600/30 text-emerald-300 font-bold rounded-lg text-xs transition-all"
+                    >
+                      Buka Pesan WhatsApp untuk Kode OTP →
+                    </a>
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-300 block mb-1">
+                    Masukkan 6 Digit Kode OTP:
+                  </label>
+                  <div className="relative">
+                    <KeyRound className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                    <input
+                      type="text"
+                      maxLength={6}
+                      value={resetOtpCode}
+                      onChange={e => setResetOtpCode(e.target.value.replace(/[^0-9]/g, ''))}
+                      placeholder="123456"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-base tracking-widest font-mono text-center text-amber-400 placeholder-slate-600 focus:outline-none focus:border-amber-500 font-black"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-300 block mb-1">
+                    Kata Sandi / PIN Baru:
+                  </label>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                    <input
+                      type="password"
+                      value={newPassword}
+                      onChange={e => setNewPassword(e.target.value)}
+                      placeholder="Minimal 4 karakter..."
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-300 block mb-1">
+                    Ulangi Kata Sandi Baru:
+                  </label>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                    <input
+                      type="password"
+                      value={confirmPassword}
+                      onChange={e => setConfirmPassword(e.target.value)}
+                      placeholder="Ulangi kata sandi..."
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <button
+                    type="button"
+                    onClick={handleResendOtp}
+                    disabled={countdown > 0 || otpLoading}
+                    className="text-xs font-bold text-amber-400 hover:text-amber-300 transition-colors disabled:text-slate-600 cursor-pointer flex items-center gap-1"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>{countdown > 0 ? `Kirim Ulang OTP (${countdown}s)` : 'Kirim Ulang OTP'}</span>
+                  </button>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={otpLoading}
+                  className="w-full py-3 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-amber-950/40 flex items-center justify-center gap-2 cursor-pointer mt-2 disabled:opacity-50"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>{otpLoading ? 'MENYIMPAN KATA SANDI...' : 'VERIFIKASI & SIMPAN KATA SANDI'}</span>
+                </button>
+              </form>
+            )}
+
+            {/* STEP 3: RESET SUCCESS */}
+            {resetStep === 'RESET_SUCCESS' && (
+              <div className="text-center space-y-4 py-2">
+                <div className="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto border border-emerald-500/40">
+                  <CheckCircle2 className="w-6 h-6" />
+                </div>
+
+                <div>
+                  <h2 className="text-base font-black text-white">
+                    Kata Sandi Berhasil Disimpan
+                  </h2>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('LOGIN');
+                    setErrorMessage(null);
+                  }}
+                  className="w-full py-3 bg-[#F26522] hover:bg-[#d95416] text-white font-bold rounded-xl text-xs transition-all cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <span>MASUK DENGAN KATA SANDI BARU</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

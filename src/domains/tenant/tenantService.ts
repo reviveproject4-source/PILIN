@@ -23,6 +23,15 @@ export class TenantService {
     }
   }
 
+  static setOnboardingData(record: TenantOnboardingData): void {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(record));
+    } catch (e) {
+      console.error('Failed to store onboarding data', e);
+    }
+  }
+
   static isOnboarded(): boolean {
     const data = this.getOnboardingData();
     return !!(data && data.isOnboarded);
@@ -34,11 +43,12 @@ export class TenantService {
     contactNumber: string;
     email: string;
     employeeCount: string;
+    businessId?: string;
   }): TenantOnboardingData {
     const now = new Date();
     const endDate = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
 
-    const businessId = `tenant-${Date.now()}`;
+    const businessId = data.businessId || `tenant-${Date.now()}`;
     const onboardingRecord: TenantOnboardingData = {
       businessId,
       ownerName: data.ownerName ? data.ownerName.trim() : '',
