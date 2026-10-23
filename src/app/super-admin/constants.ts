@@ -9,12 +9,12 @@ export interface TenantFeatureFlagItem {
 export const PILIN_STANDARD_FEATURES: Omit<TenantFeatureFlagItem, 'enabled'>[] = [
   // 1. Operasional & POS
   { feature_code: 'nota_transaksi', name: 'Kasir & Cetak Nota POS', category: 'Operasional', description: 'Transaksi kasir cepat, barcode scan, diskon, dan cetak struk nota.' },
-  { feature_code: 'spk', name: 'SPK & Tracking Pekerjaan', category: 'Operasional', description: 'Surat Perintah Kerja pencucian, antrean proses, dan serah terima.' },
+  { feature_code: 'spk', name: 'SPK & Tracking Pekerjaan', category: 'Operasional', description: 'Surat Perintah Kerja pengerjaan pesanan, antrean proses layanan/reparasi, dan serah terima.' },
   { feature_code: 'service_catalog', name: 'Katalog Layanan & Harga Cabang', category: 'Operasional', description: 'Katalog jasa, varian layanan, dan penyesuaian tarif per cabang.' },
   
   // 2. CRM WhatsApp
   { feature_code: 'sapaan', name: 'WhatsApp Sapaan Otomatis', category: 'CRM WhatsApp', description: 'Kirim sapaan selamat datang dan ucapan otomatis ke nomor pelanggan.' },
-  { feature_code: 'reminder', name: 'Pengingat Retensi & Cucian Jadi', category: 'CRM WhatsApp', description: 'Notifikasi otomatis cucian selesai diambil dan ajakan cuci kembali.' },
+  { feature_code: 'reminder', name: 'Pengingat Retensi & Status Pesanan', category: 'CRM WhatsApp', description: 'Notifikasi status pesanan siap diambil dan pengingat kunjungan kembali konsumen.' },
   { feature_code: 'broadcast', name: 'Broadcast Promo WhatsApp Massal', category: 'CRM WhatsApp', description: 'Kirim penawaran promo dan diskon massal ke segmen pelanggan.' },
   
   // 3. Keuangan

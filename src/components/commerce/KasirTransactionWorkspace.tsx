@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { 
   ShoppingCart, DollarSign, CreditCard, Clock, CheckCircle2, 
-  AlertCircle, Send, FileText, UserCheck, Users, MessageSquare, 
+  AlertCircle, AlertTriangle, Send, FileText, UserCheck, Users, MessageSquare, 
   Sparkles, Camera, Image as ImageIcon, Search, Phone, Printer, X, Filter,
   Home, Settings, Edit3, Bookmark, LogOut, HelpCircle, Info, User, Save, PhoneCall, ChevronRight, Sun, Moon,
   PlusCircle, Wrench, BarChart3, UserPlus, ArrowRight
@@ -183,6 +183,19 @@ export function KasirTransactionWorkspace({
 
   // SPK Orders State
   const [spkOrders] = useState<WorkOrderQueueItem[]>(() => WorkQueueService.getOrders(branchId, isDemo));
+
+  // Kumulatif Notifikasi Operasional Nota Kasir
+  const dueTodayOrders = useMemo(() => {
+    return spkOrders.filter(o => (o.status as any) !== 'CLOSED' && (o.status as any) !== 'DELIVERED');
+  }, [spkOrders]);
+
+  const overdueOrders = useMemo(() => {
+    return spkOrders.filter(o => (o.status as any) !== 'CLOSED' && (o.status as any) !== 'DELIVERED' && o.elapsed_minutes > o.target_minutes);
+  }, [spkOrders]);
+
+  const readyPickupOrders = useMemo(() => {
+    return spkOrders.filter(o => (o.status as any) === 'READY_FOR_PICKUP' || (o.status as any) === 'READY_FOR_DELIVERY');
+  }, [spkOrders]);
 
   // Transactions State
   const [recentTransactions, setRecentTransactions] = useState<TransactionRecord[]>(() => {
@@ -425,6 +438,85 @@ ${profile.terms_and_conditions}`;
               <CheckCircle2 className="w-5 h-5" />
               <span>Pelunasan/Pengambilan</span>
             </button>
+          </div>
+
+          {/* NOTIFIKASI OPERASIONAL NOTA (KUMULATIF) */}
+          <div className="space-y-3">
+            <div className="text-xs font-extrabold text-slate-500 uppercase tracking-wider px-1">
+              Notifikasi Operasional Nota
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* Card 1: Nota Harus Selesai Hari Ini */}
+              <div
+                onClick={() => setShowSpkModal(true)}
+                className="bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900/50 hover:border-amber-500 rounded-2xl p-4 shadow-sm transition-all cursor-pointer flex items-center justify-between group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
+                    <Clock className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                      Nota Harus Selesai
+                    </div>
+                    <div className="text-2xl font-black text-amber-600 dark:text-amber-400">
+                      {dueTodayOrders.length} <span className="text-xs font-normal text-slate-500">Nota</span>
+                    </div>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-amber-500 transition-colors" />
+              </div>
+
+              {/* Card 2: Nota Terlambat (Overdue SLA) */}
+              <div
+                onClick={() => setShowSpkModal(true)}
+                className={`border rounded-2xl p-4 shadow-sm transition-all cursor-pointer flex items-center justify-between group ${
+                  overdueOrders.length > 0
+                    ? 'bg-rose-50/50 dark:bg-rose-950/20 border-rose-300 dark:border-rose-900/60 hover:border-rose-500'
+                    : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-400'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold ${
+                    overdueOrders.length > 0
+                      ? 'bg-rose-100 dark:bg-rose-900/60 text-rose-600 dark:text-rose-400 animate-pulse'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                  }`}>
+                    <AlertTriangle className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                      Nota Terlambat
+                    </div>
+                    <div className={`text-2xl font-black ${overdueOrders.length > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-700 dark:text-slate-300'}`}>
+                      {overdueOrders.length} <span className="text-xs font-normal text-slate-500">Nota</span>
+                    </div>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-rose-500 transition-colors" />
+              </div>
+
+              {/* Card 3: Pesanan Siap Diambil */}
+              <div
+                onClick={() => setShowPickupModal(true)}
+                className="bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-900/50 hover:border-blue-500 rounded-2xl p-4 shadow-sm transition-all cursor-pointer flex items-center justify-between group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold">
+                    <CheckCircle2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                      Siap Diambil
+                    </div>
+                    <div className="text-2xl font-black text-blue-600 dark:text-blue-400">
+                      {readyPickupOrders.length} <span className="text-xs font-normal text-slate-500">Pesanan</span>
+                    </div>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-blue-500 transition-colors" />
+              </div>
+            </div>
           </div>
 
           {/* RINGKASAN TRANSAKSI HARI INI CARD */}
