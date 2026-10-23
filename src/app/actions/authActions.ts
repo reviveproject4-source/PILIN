@@ -6,10 +6,12 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { PendingRegistrationStore, RegistrationRecord } from '@/domains/tenant/pendingRegistrationStore';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { EmailDomainService } from '@/domains/auth/emailService';
 
 interface OtpEntry {
   identifier: string;
   phone: string;
+  email: string;
   code: string;
   expiresAt: number;
   tenantId: string;
@@ -58,16 +60,16 @@ function normalizePhoneDigits(phone: string): string {
   return digits;
 }
 
-function generateHmacOtpToken(phone: string, otpCode: string, expiresAt: number, tenantId: string): string {
-  const norm = normalizePhoneDigits(phone);
+function generateHmacOtpToken(identifier: string, otpCode: string, expiresAt: number, tenantId: string): string {
+  const clean = identifier.trim().toLowerCase();
   return crypto
     .createHmac('sha256', HMAC_SECRET)
-    .update(`${norm}:${otpCode}:${expiresAt}:${tenantId}`)
+    .update(`${clean}:${otpCode}:${expiresAt}:${tenantId}`)
     .digest('hex');
 }
 
 function verifyHmacOtpToken(
-  phone: string,
+  identifier: string,
   otpCode: string,
   expiresAt: number,
   tenantId: string,
@@ -75,7 +77,7 @@ function verifyHmacOtpToken(
 ): boolean {
   if (Date.now() > expiresAt) return false;
   try {
-    const expected = generateHmacOtpToken(phone, otpCode, expiresAt, tenantId);
+    const expected = generateHmacOtpToken(identifier, otpCode, expiresAt, tenantId);
     return crypto.timingSafeEqual(Buffer.from(token, 'hex'), Buffer.from(expected, 'hex'));
   } catch {
     return false;
@@ -85,14 +87,15 @@ function verifyHmacOtpToken(
 export interface RequestOtpResult {
   success: boolean;
   message: string;
+  email?: string;
   phone?: string;
   businessName?: string;
   ownerName?: string;
-  waUrl?: string;
   otpPreview?: string;
   signedToken?: string;
   expiresAt?: number;
   tenantId?: string;
+  senderEmail?: string;
 }
 
 export interface VerifyOtpResult {
@@ -122,7 +125,8 @@ export interface TenantLoginResult {
 }
 
 /**
- * Request OTP for Password Reset via WhatsApp
+ * Request OTP for Password Reset via EMAIL (admin@pilin.id -> tenant email)
+ * Uses crypto.randomInt for 900,000 distinct uniform variations (100,000 - 999,999)
  */
 export async function requestPasswordResetOtpAction(
   identifier: string,
@@ -130,7 +134,7 @@ export async function requestPasswordResetOtpAction(
 ): Promise<RequestOtpResult> {
   const cleanId = (identifier || '').trim();
   if (!cleanId) {
-    return { success: false, message: 'Nomor WhatsApp atau Email wajib diisi.' };
+    return { success: false, message: 'Email atau Nomor WhatsApp wajib diisi.' };
   }
 
   const normInput = normalizePhoneDigits(cleanId);
@@ -154,7 +158,7 @@ export async function requestPasswordResetOtpAction(
         name: foundClient.name || foundClient.businessName || 'Usaha Anda',
         ownerName: foundClient.ownerName || 'Owner',
         whatsapp: foundClient.whatsapp || cleanId,
-        email: foundClient.email || `${cleanId}@pilin.id`,
+        email: foundClient.email || (cleanId.includes('@') ? cleanId : `${normInput || 'tenant'}@pilin.id`),
         employeeCount: foundClient.employeeCount || '1 Cabang',
         createdAt: foundClient.createdAt || new Date().toISOString(),
         status: 'CLOSED_WON',
@@ -188,7 +192,7 @@ export async function requestPasswordResetOtpAction(
           name: dbCust.name || 'Usaha Anda',
           ownerName: dbCust.contact_name || 'Owner',
           whatsapp: dbCust.phone || cleanId,
-          email: dbCust.email || `${cleanId}@pilin.id`,
+          email: dbCust.email || `${normInput || 'owner'}@pilin.id`,
           employeeCount: '1 Cabang',
           createdAt: dbCust.created_at || new Date().toISOString(),
           status: 'CLOSED_WON',
@@ -200,14 +204,14 @@ export async function requestPasswordResetOtpAction(
     }
   }
 
-  // 4. Fallback if not found: create a tenant entry based on the phone so the user is never blocked
+  // 4. Fallback if not found: create a tenant entry based on email/phone
   if (!record) {
     record = {
       id: `reg-${Date.now()}`,
       name: 'Usaha Anda',
       ownerName: 'Owner',
       whatsapp: cleanId,
-      email: `${normInput || 'owner'}@pilin.id`,
+      email: cleanId.includes('@') ? cleanId : `${normInput || 'tenant'}@pilin.id`,
       employeeCount: '1 Cabang',
       createdAt: new Date().toISOString(),
       status: 'CLOSED_WON',
@@ -221,18 +225,20 @@ export async function requestPasswordResetOtpAction(
     });
   }
 
-  // Generate 6-digit OTP
-  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+  // Generate 6-digit OTP with cryptographic randomness (900,000 distinct variations from 100000 to 999999)
+  const otpCode = crypto.randomInt(100000, 1000000).toString();
   const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
   const tenantId = record.id;
-  const signedToken = generateHmacOtpToken(record.whatsapp, otpCode, expiresAt, tenantId);
+  const targetEmail = record.email || cleanId;
+  const signedToken = generateHmacOtpToken(targetEmail, otpCode, expiresAt, tenantId);
 
   // Save to local cache as secondary fallback
   const cache = loadOtpCache();
-  const normKey = normalizePhoneDigits(record.whatsapp) || record.email.toLowerCase();
+  const normKey = targetEmail.toLowerCase();
   cache[normKey] = {
     identifier: cleanId,
     phone: record.whatsapp,
+    email: targetEmail,
     code: otpCode,
     expiresAt,
     tenantId,
@@ -241,21 +247,26 @@ export async function requestPasswordResetOtpAction(
   };
   saveOtpCache(cache);
 
-  const cleanPhone = record.whatsapp.replace(/[^0-9]/g, '').replace(/^0/, '62');
-  const messageText = `*KODE OTP RESET KATA SANDI PILIN ERP*\n\nHalo ${record.ownerName},\nBerikut kode OTP untuk mengatur ulang kata sandi akun usaha "${record.name}":\n\n🔑 Kode OTP: *${otpCode}*\n\n(Berlaku selama 10 menit. Demi keamanan akun Anda, jangan bagikan kode ini kepada siapa pun).`;
-  const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(messageText)}`;
+  // Send Email from admin@pilin.id to Tenant Email
+  await EmailDomainService.sendOtpEmail({
+    recipientEmail: targetEmail,
+    ownerName: record.ownerName,
+    businessName: record.name,
+    otpCode,
+  });
 
   return {
     success: true,
-    message: `Kode OTP berhasil disiapkan untuk nomor WhatsApp ${record.whatsapp}.`,
+    message: `Kode OTP 6-digit berhasil dikirimkan dari admin@pilin.id ke email ${targetEmail}.`,
+    email: targetEmail,
     phone: record.whatsapp,
     businessName: record.name,
     ownerName: record.ownerName,
-    waUrl,
     otpPreview: otpCode,
     signedToken,
     expiresAt,
     tenantId,
+    senderEmail: 'admin@pilin.id',
   };
 }
 
@@ -270,6 +281,7 @@ export async function verifyOtpAndSetPasswordAction(params: {
   signedToken?: string;
   expiresAt?: number;
   tenantId?: string;
+  targetEmail?: string;
   knownTenant?: {
     businessId?: string;
     businessName?: string;
@@ -281,10 +293,10 @@ export async function verifyOtpAndSetPasswordAction(params: {
   const cleanId = (params.identifier || '').trim();
   const cleanOtp = (params.otpCode || '').trim();
   const cleanPass = (params.newPassword || '').trim();
-  const normInput = normalizePhoneDigits(cleanId);
+  const targetEmail = (params.targetEmail || cleanId).trim().toLowerCase();
 
-  if (!cleanId) {
-    return { success: false, message: 'Nomor WhatsApp atau Email wajib diisi.' };
+  if (!cleanId && !targetEmail) {
+    return { success: false, message: 'Email atau Nomor WhatsApp wajib diisi.' };
   }
   if (!cleanOtp) {
     return { success: false, message: 'Kode OTP 6-digit wajib diisi.' };
@@ -305,22 +317,25 @@ export async function verifyOtpAndSetPasswordAction(params: {
     }
 
     const tenantId = params.tenantId || '';
-    if (verifyHmacOtpToken(cleanId, cleanOtp, params.expiresAt, tenantId, params.signedToken)) {
+    if (
+      verifyHmacOtpToken(targetEmail, cleanOtp, params.expiresAt, tenantId, params.signedToken) ||
+      verifyHmacOtpToken(cleanId, cleanOtp, params.expiresAt, tenantId, params.signedToken)
+    ) {
       verified = true;
     }
   }
 
-  // B. Fallback: Verify with Server Cache (in case signedToken was omitted or fallback)
+  // B. Fallback: Verify with Server Cache
   if (!verified) {
     const cache = loadOtpCache();
-    const normKey = normInput || cleanId.toLowerCase();
+    const normKey = targetEmail.toLowerCase();
 
     let matchedEntry: OtpEntry | null = cache[normKey] || null;
     if (!matchedEntry) {
       for (const key of Object.keys(cache)) {
         const entry = cache[key];
         if (
-          normalizePhoneDigits(entry.phone) === normKey ||
+          entry.email.toLowerCase() === targetEmail ||
           entry.identifier.toLowerCase() === cleanId.toLowerCase()
         ) {
           matchedEntry = entry;
@@ -339,14 +354,15 @@ export async function verifyOtpAndSetPasswordAction(params: {
   if (!verified) {
     return {
       success: false,
-      message: 'Kode OTP yang Anda masukkan salah atau sudah kedaluwarsa. Silakan periksa kembali pesan WhatsApp Anda.',
+      message: 'Kode OTP yang Anda masukkan salah atau sudah kedaluwarsa. Silakan periksa kembali email Anda.',
     };
   }
 
   // Update password in memory/file store
   PendingRegistrationStore.setPassword(cleanId, cleanPass);
+  PendingRegistrationStore.setPassword(targetEmail, cleanPass);
 
-  const updatedRecord = PendingRegistrationStore.findByPhoneOrEmail(cleanId);
+  const updatedRecord = PendingRegistrationStore.findByPhoneOrEmail(cleanId) || PendingRegistrationStore.findByPhoneOrEmail(targetEmail);
 
   const finalBusinessId =
     updatedRecord ? `tenant-${updatedRecord.id.slice(0, 8)}` :
@@ -362,7 +378,7 @@ export async function verifyOtpAndSetPasswordAction(params: {
     updatedRecord?.whatsapp || params.knownTenant?.whatsapp || cleanId;
 
   const finalEmail =
-    updatedRecord?.email || params.knownTenant?.email || cleanId;
+    updatedRecord?.email || params.knownTenant?.email || targetEmail;
 
   return {
     success: true,
@@ -412,7 +428,7 @@ export async function verifyTenantLoginAction(
         businessName: 'Usaha Anda',
         ownerName: 'Owner',
         whatsapp: cleanId,
-        email: '',
+        email: cleanId.includes('@') ? cleanId : '',
       },
     };
   }

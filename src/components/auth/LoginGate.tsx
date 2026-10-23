@@ -12,7 +12,6 @@ import {
   Mail,
   CheckCircle2,
   KeyRound,
-  MessageSquare,
   RotateCcw,
 } from 'lucide-react';
 import { DashboardRole } from '@/components/layout/DashboardTopBar';
@@ -67,7 +66,7 @@ export function LoginGate({
   const [otpExpiresAt, setOtpExpiresAt] = useState<number>(0);
   const [otpTenantId, setOtpTenantId] = useState<string>('');
   const [verifiedTenant, setVerifiedTenant] = useState<any>(null);
-  const [otpInfo, setOtpInfo] = useState<{ phone?: string; waUrl?: string; otpPreview?: string; businessName?: string } | null>(null);
+  const [otpInfo, setOtpInfo] = useState<{ email?: string; phone?: string; otpPreview?: string; businessName?: string; senderEmail?: string } | null>(null);
 
   // OTP Countdown timer
   useEffect(() => {
@@ -96,6 +95,9 @@ export function LoginGate({
           const digits = username.trim().replace(/[^0-9]/g, '');
           if (digits) {
             clientKnownPassword = localStorage.getItem('pilin_saved_pwd_' + digits) || '';
+          }
+          if (!clientKnownPassword && username.includes('@')) {
+            clientKnownPassword = localStorage.getItem('pilin_saved_pwd_' + username.trim().toLowerCase()) || '';
           }
         }
 
@@ -213,11 +215,11 @@ export function LoginGate({
     }
   };
 
-  // Handle Request OTP
+  // Handle Request OTP via EMAIL
   const handleRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!resetIdentifier.trim()) {
-      setErrorMessage('Nomor WhatsApp atau Email wajib diisi.');
+      setErrorMessage('Email atau Nomor WhatsApp terdaftar wajib diisi.');
       return;
     }
     setErrorMessage(null);
@@ -237,10 +239,11 @@ export function LoginGate({
       setOtpExpiresAt(res.expiresAt || 0);
       setOtpTenantId(res.tenantId || '');
       setOtpInfo({
+        email: res.email,
         phone: res.phone,
-        waUrl: res.waUrl,
         otpPreview: res.otpPreview,
         businessName: res.businessName,
+        senderEmail: res.senderEmail || 'admin@pilin.id',
       });
       setResetStep('VERIFY_OTP');
       setCountdown(60);
@@ -251,7 +254,7 @@ export function LoginGate({
     }
   };
 
-  // Handle Resend OTP
+  // Handle Resend OTP via EMAIL
   const handleResendOtp = async () => {
     if (countdown > 0) return;
     setErrorMessage(null);
@@ -269,13 +272,14 @@ export function LoginGate({
       setOtpExpiresAt(res.expiresAt || 0);
       setOtpTenantId(res.tenantId || '');
       setOtpInfo({
+        email: res.email,
         phone: res.phone,
-        waUrl: res.waUrl,
         otpPreview: res.otpPreview,
         businessName: res.businessName,
+        senderEmail: res.senderEmail || 'admin@pilin.id',
       });
       setCountdown(60);
-      setSuccessMessage('Kode OTP baru telah disiapkan ke WhatsApp.');
+      setSuccessMessage(`Kode OTP baru telah dikirimkan dari admin@pilin.id ke ${res.email}.`);
     } catch (err: any) {
       setOtpLoading(false);
       setErrorMessage(err.message || 'Gagal mengirim ulang kode OTP.');
@@ -309,12 +313,13 @@ export function LoginGate({
     try {
       const clientTenants = getClientTenants();
       const matchedClient = clientTenants.find((t: any) =>
-        (t.whatsapp && t.whatsapp.includes(resetIdentifier.trim())) ||
-        (t.email && t.email.toLowerCase() === resetIdentifier.trim().toLowerCase())
+        (t.email && t.email.toLowerCase() === resetIdentifier.trim().toLowerCase()) ||
+        (t.whatsapp && t.whatsapp.includes(resetIdentifier.trim()))
       );
 
       const res = await verifyOtpAndSetPasswordAction({
         identifier: resetIdentifier.trim(),
+        targetEmail: otpInfo?.email,
         otpCode: resetOtpCode.trim(),
         newPassword: newPassword.trim(),
         signedToken: otpSignedToken,
@@ -346,9 +351,12 @@ export function LoginGate({
         if (digits) {
           localStorage.setItem('pilin_saved_pwd_' + digits, newPassword.trim());
         }
+        if (otpInfo?.email) {
+          localStorage.setItem('pilin_saved_pwd_' + otpInfo.email.toLowerCase(), newPassword.trim());
+        }
       }
 
-      setUsername(res.tenant?.whatsapp || res.tenant?.email || resetIdentifier.trim());
+      setUsername(res.tenant?.email || res.tenant?.whatsapp || resetIdentifier.trim());
       setPassword(newPassword.trim());
       setSuccessMessage('Kata sandi baru berhasil disimpan!');
       setResetStep('RESET_SUCCESS');
@@ -464,7 +472,7 @@ export function LoginGate({
                   type="text"
                   value={username}
                   onChange={e => setUsername(e.target.value)}
-                  placeholder="Masukkan nomor WhatsApp atau email..."
+                  placeholder="Masukkan email usaha atau nomor WhatsApp..."
                   className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#F26522]"
                 />
               </div>
@@ -486,7 +494,7 @@ export function LoginGate({
                   }}
                   className="text-[11px] font-bold text-amber-400 hover:text-amber-300 transition-colors cursor-pointer"
                 >
-                  Lupa Password? Reset via WhatsApp
+                  Lupa Password? Reset via Email
                 </button>
               </div>
               <div className="relative">
@@ -677,13 +685,13 @@ export function LoginGate({
           </div>
         )}
 
-        {/* TAB 4: RESET PASSWORD VIA WHATSAPP OTP */}
+        {/* TAB 4: RESET PASSWORD VIA EMAIL OTP */}
         {activeTab === 'RESET_PASSWORD' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h2 className="text-sm font-extrabold text-white flex items-center gap-2">
-                <KeyRound className="w-4 h-4 text-amber-400" />
-                <span>Reset Kata Sandi via WhatsApp OTP</span>
+                <Mail className="w-4 h-4 text-amber-400" />
+                <span>Reset Kata Sandi via Email</span>
               </h2>
               <button
                 type="button"
@@ -694,20 +702,20 @@ export function LoginGate({
               </button>
             </div>
 
-            {/* STEP 1: REQUEST OTP */}
+            {/* STEP 1: REQUEST OTP VIA EMAIL */}
             {resetStep === 'REQUEST_OTP' && (
               <form onSubmit={handleRequestOtp} className="space-y-4">
                 <div>
                   <label className="text-xs font-bold text-slate-300 block mb-1">
-                    Nomor WhatsApp atau Email Terdaftar:
+                    Email Usaha atau Nomor WhatsApp Terdaftar:
                   </label>
                   <div className="relative">
-                    <Phone className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                    <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
                     <input
                       type="text"
                       value={resetIdentifier}
                       onChange={e => setResetIdentifier(e.target.value)}
-                      placeholder="081234567890 / email@usaha.com"
+                      placeholder="email@usaha.com atau nomor WhatsApp..."
                       className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
                       required
                     />
@@ -719,8 +727,8 @@ export function LoginGate({
                   disabled={otpLoading}
                   className="w-full py-3 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-amber-950/40 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
-                  <MessageSquare className="w-4 h-4" />
-                  <span>{otpLoading ? 'MENYIAPKAN OTP...' : 'KIRIM KODE OTP KE WHATSAPP'}</span>
+                  <Mail className="w-4 h-4" />
+                  <span>{otpLoading ? 'MENGIRIM OTP...' : 'KIRIM KODE OTP KE EMAIL'}</span>
                 </button>
 
                 <div className="text-center pt-1">
@@ -738,22 +746,18 @@ export function LoginGate({
             {/* STEP 2: VERIFY OTP & SET NEW PASSWORD */}
             {resetStep === 'VERIFY_OTP' && (
               <form onSubmit={handleVerifyOtpAndSave} className="space-y-3.5">
-                <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl text-xs space-y-2">
+                <div className="p-3.5 bg-slate-900 border border-slate-800 rounded-xl text-xs space-y-2">
                   <div className="flex justify-between items-center">
-                    <span className="text-slate-400 font-semibold">Tujuan WhatsApp:</span>
-                    <span className="text-emerald-400 font-bold">{otpInfo?.phone || resetIdentifier}</span>
+                    <span className="text-slate-400 font-semibold">Pengirim Resmi:</span>
+                    <span className="text-amber-400 font-mono font-bold">admin@pilin.id</span>
                   </div>
-
-                  {otpInfo?.waUrl && (
-                    <a
-                      href={otpInfo.waUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block text-center py-2 px-3 bg-emerald-600/20 border border-emerald-500/40 hover:bg-emerald-600/30 text-emerald-300 font-bold rounded-lg text-xs transition-all"
-                    >
-                      Buka Pesan WhatsApp untuk Kode OTP →
-                    </a>
-                  )}
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400 font-semibold">Email Penerima:</span>
+                    <span className="text-emerald-400 font-bold">{otpInfo?.email || resetIdentifier}</span>
+                  </div>
+                  <div className="pt-1 text-[11px] text-slate-400 border-t border-slate-800">
+                    Silakan buka Inbox atau folder Spam email Anda untuk melihat kode OTP 6-digit.
+                  </div>
                 </div>
 
                 <div>
@@ -848,6 +852,10 @@ export function LoginGate({
                   <div className="flex justify-between">
                     <span className="text-slate-400 font-semibold">Nama Usaha:</span>
                     <span className="text-white font-bold">{verifiedTenant?.businessName || 'Usaha Anda'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 font-semibold">Email:</span>
+                    <span className="text-slate-200 font-mono">{verifiedTenant?.email || otpInfo?.email}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-400 font-semibold">Role Akses:</span>
