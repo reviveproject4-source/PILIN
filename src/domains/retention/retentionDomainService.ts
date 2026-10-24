@@ -165,8 +165,10 @@ export class RetentionDomainService {
     custom_message?: string;
   }): SapaanLogRecord {
     const logs = this.getSapaanLogs();
+    const cleanCustomerName = data.customer_name.replace(/^(bapak|bpk\.?|pak\.?|ibu\.?|bu\.?|kakak\.?|kak\.?|ka\.?)\s+/i, '');
+    const salutationPrefix = /^(bapak|bpk|pak)/i.test(data.customer_name) ? 'Bapak' : (/^(ibu|bu)/i.test(data.customer_name) ? 'Ibu' : 'Kak');
     const defaultMsg = data.custom_message ||
-      `Halo Kak ${data.customer_name}, pengingat perawatan rutin H+${data.h_plus_days} dari cabang kami untuk nota ${data.nota_number}. Waktunya perawatan berkala barang kesayangan Anda!`;
+      `Halo ${salutationPrefix} ${cleanCustomerName}, pengingat perawatan rutin H+${data.h_plus_days} dari cabang kami untuk nota ${data.nota_number}. Waktunya perawatan berkala barang kesayangan Anda!`;
 
     const waUrl = this.generateWaMeLink(data.customer_phone, defaultMsg);
 

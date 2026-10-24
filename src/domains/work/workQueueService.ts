@@ -29,7 +29,7 @@ export class WorkQueueService {
     {
       id: 'so-2026-001',
       order_number: 'SO-2026-001',
-      customer_name: 'Pelanggan 01',
+      customer_name: 'Bapak Budi Santoso',
       service_name: 'Cuci & Detailing Sepatu Premium',
       worker_name: 'Tim Produksi',
       branch_id: 'branch-001',
@@ -48,7 +48,7 @@ export class WorkQueueService {
     {
       id: 'so-2026-002',
       order_number: 'SO-2026-002',
-      customer_name: 'Pelanggan 02',
+      customer_name: 'Ibu Siti Rahma',
       service_name: 'Reparasasi & Deep Cleaning Tas',
       worker_name: 'Teknisi 01',
       branch_id: 'branch-001',

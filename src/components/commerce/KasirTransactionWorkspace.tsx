@@ -16,6 +16,7 @@ import { WorkQueueService, WorkOrderQueueItem } from '@/domains/work/workQueueSe
 import { RetentionDomainService, SapaanLogRecord } from '@/domains/retention/retentionDomainService';
 import { BusinessProfileService } from '@/domains/business/businessProfileService';
 import { ServiceOrderStatus } from '@/lib/types';
+import { Salutation, extractSalutation, formatCustomerName } from '@/lib/salutationHelper';
 
 import { IndustryTemplateService, IndustryCategory, IndustryTemplate } from '@/domains/retention/industryTemplateService';
 
@@ -97,7 +98,7 @@ export function KasirTransactionWorkspace({
   // Modal State
   const [showBroadcastModal, setShowBroadcastModal] = useState<boolean>(false);
   const [broadcastTargetPhone, setBroadcastTargetPhone] = useState<string>(isDemo ? '08123456789' : '');
-  const [broadcastTargetName, setBroadcastTargetName] = useState<string>(isDemo ? 'Budi Santoso' : '');
+  const [broadcastTargetName, setBroadcastTargetName] = useState<string>(isDemo ? 'Bapak Budi Santoso' : '');
 
   // Thermal Receipt Modal State
   const [activeReceiptTrx, setActiveReceiptTrx] = useState<TransactionRecord | null>(null);
@@ -106,10 +107,10 @@ export function KasirTransactionWorkspace({
   const [customerList, setCustomerList] = useState(() => {
     if (isDemo) {
       return [
-        { id: 'cust-101', name: 'Budi Santoso', phone: '08123456789', status: 'REPEAT', totalTrx: 12, lastVisit: '2026-08-14' },
-        { id: 'cust-102', name: 'Siti Rahma', phone: '08198765432', status: 'LOYAL', totalTrx: 28, lastVisit: '2026-08-15' },
-        { id: 'cust-103', name: 'Ahmad Fauzi', phone: '08567890123', status: 'NEW', totalTrx: 1, lastVisit: '2026-08-15' },
-        { id: 'cust-104', name: 'Dewi Lestari', phone: '08212345678', status: 'AT_RISK', totalTrx: 5, lastVisit: '2026-06-10' },
+        { id: 'cust-101', name: 'Bapak Budi Santoso', phone: '08123456789', status: 'REPEAT', totalTrx: 12, lastVisit: '2026-08-14' },
+        { id: 'cust-102', name: 'Ibu Siti Rahma', phone: '08198765432', status: 'LOYAL', totalTrx: 28, lastVisit: '2026-08-15' },
+        { id: 'cust-103', name: 'Bapak Ahmad Fauzi', phone: '08567890123', status: 'NEW', totalTrx: 1, lastVisit: '2026-08-15' },
+        { id: 'cust-104', name: 'Ibu Dewi Lestari', phone: '08212345678', status: 'AT_RISK', totalTrx: 5, lastVisit: '2026-06-10' },
       ];
     }
     return [];
@@ -117,6 +118,7 @@ export function KasirTransactionWorkspace({
 
   // POS Form State
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>(isDemo ? 'cust-101' : '');
+  const [selectedSalutation, setSelectedSalutation] = useState<Salutation>(isDemo ? 'Bapak' : 'Kak');
   const [customerName, setCustomerName] = useState<string>(isDemo ? 'Budi Santoso' : '');
   const [customerPhone, setCustomerPhone] = useState<string>(isDemo ? '08123456789' : '');
   const [selectedService, setSelectedService] = useState<string>('Layanan Cuci Express');
@@ -135,16 +137,17 @@ export function KasirTransactionWorkspace({
   const [cancelReason, setCancelReason] = useState<string>('Pelanggan membatalkan pesanan');
 
   // Customer DB Form
+  const [newCustSalutation, setNewCustSalutation] = useState<Salutation>('Kak');
   const [newCustName, setNewCustName] = useState<string>('');
   const [newCustPhone, setNewCustPhone] = useState<string>('');
 
   // WA Engine / CRM State
   const [waSelectedCustomerId, setWaSelectedCustomerId] = useState<string>(isDemo ? 'cust-101' : '');
-  const [waTargetName, setWaTargetName] = useState<string>(isDemo ? 'Budi Santoso' : '');
+  const [waTargetName, setWaTargetName] = useState<string>(isDemo ? 'Bapak Budi Santoso' : '');
   const [waTargetPhone, setWaTargetPhone] = useState<string>(isDemo ? '08123456789' : '');
   const [waCategory, setWaCategory] = useState<'KABAR_BERKALA' | 'QUOTE' | 'REMINDER' | 'MANUAL'>('KABAR_BERKALA');
   const [waTemplateText, setWaTemplateText] = useState<string>(
-    isDemo ? 'Halo Budi Santoso, ini kabar berkala dari PILIN ERP. Terima kasih telah setia menggunakan layanan kami! Salam hangat.' : ''
+    isDemo ? 'Halo Bapak Budi Santoso, ini kabar berkala dari PILIN ERP. Terima kasih telah setia menggunakan layanan kami! Salam hangat.' : ''
   );
 
   // WA Retention Logs & Mandate Execution State
@@ -152,7 +155,7 @@ export function KasirTransactionWorkspace({
 
   // Reminder H+X Per Nota State
   const [reminderNotaNumber, setReminderNotaNumber] = useState<string>(isDemo ? 'NOT-2026-0891' : '');
-  const [reminderCustomerName, setReminderCustomerName] = useState<string>(isDemo ? 'Dewi Lestari' : '');
+  const [reminderCustomerName, setReminderCustomerName] = useState<string>(isDemo ? 'Ibu Dewi Lestari' : '');
   const [reminderCustomerPhone, setReminderCustomerPhone] = useState<string>(isDemo ? '08212345678' : '');
   const [reminderHPlusDays, setReminderHPlusDays] = useState<number>(30);
 
@@ -201,9 +204,9 @@ export function KasirTransactionWorkspace({
   const [recentTransactions, setRecentTransactions] = useState<TransactionRecord[]>(() => {
     if (isDemo) {
       return [
-        { id: 'NOT-2026-0892', customer: 'Budi Santoso', phone: '08123456789', service: 'Layanan Cuci Express', qty: 2, price: 35000, total: 70000, method: 'CASH', status: 'COMPLETED', time: '11:05 WIB' },
-        { id: 'NOT-2026-0891', customer: 'Siti Rahma', phone: '08198765432', service: 'Layanan Premium Treatment', qty: 7, price: 50000, total: 350000, method: 'QRIS_TRANSFER', status: 'COMPLETED', time: '10:45 WIB' },
-        { id: 'NOT-2026-0890', customer: 'Ahmad Fauzi', phone: '08567890123', service: 'Layanan Cuci Regular', qty: 6, price: 20000, total: 120000, method: 'CASH', status: 'COMPLETED', time: '09:30 WIB' },
+        { id: 'NOT-2026-0892', customer: 'Bapak Budi Santoso', phone: '08123456789', service: 'Layanan Cuci Express', qty: 2, price: 35000, total: 70000, method: 'CASH', status: 'COMPLETED', time: '11:05 WIB' },
+        { id: 'NOT-2026-0891', customer: 'Ibu Siti Rahma', phone: '08198765432', service: 'Layanan Premium Treatment', qty: 7, price: 50000, total: 350000, method: 'QRIS_TRANSFER', status: 'COMPLETED', time: '10:45 WIB' },
+        { id: 'NOT-2026-0890', customer: 'Bapak Ahmad Fauzi', phone: '08567890123', service: 'Layanan Cuci Regular', qty: 6, price: 20000, total: 120000, method: 'CASH', status: 'COMPLETED', time: '09:30 WIB' },
       ];
     }
     return [];
@@ -226,10 +229,17 @@ export function KasirTransactionWorkspace({
     if (customerId === 'NEW_CUSTOMER') {
       setCustomerName('');
       setCustomerPhone('');
+      setSelectedSalutation('Kak');
     } else {
       const found = customerList.find(c => c.id === customerId);
       if (found) {
-        setCustomerName(found.name);
+        const { salutation, cleanName } = extractSalutation(found.name);
+        if (salutation) {
+          setSelectedSalutation(salutation);
+          setCustomerName(cleanName);
+        } else {
+          setCustomerName(found.name);
+        }
         setCustomerPhone(found.phone);
       }
     }
@@ -257,10 +267,11 @@ export function KasirTransactionWorkspace({
       return;
     }
 
+    const finalCustomerName = formatCustomerName(customerName, selectedSalutation);
     const total = servicePrice * qty;
     const newTrx: TransactionRecord = {
       id: `NOT-2026-0${recentTransactions.length + 893}`,
-      customer: customerName,
+      customer: finalCustomerName,
       phone: customerPhone,
       service: selectedService,
       qty: qty,
@@ -275,7 +286,22 @@ export function KasirTransactionWorkspace({
     setRecentTransactions([newTrx, ...recentTransactions]);
     setActiveReceiptTrx(newTrx); // Open Thermal Receipt Modal
     setItemPhotoUrl(null); // Reset photo input for next transaction
-    setFeedback({ type: 'success', text: `Transaksi '${newTrx.id}' sebesar Rp ${total.toLocaleString('id-ID')} berhasil diproses LUNAS.` });
+
+    // If new customer, register into customerList automatically with formal salutation
+    if (selectedCustomerId === 'NEW_CUSTOMER' || !customerList.some(c => c.phone === customerPhone)) {
+      const newC = {
+        id: `cust-${Date.now()}`,
+        name: finalCustomerName,
+        phone: customerPhone.trim(),
+        status: 'NEW',
+        totalTrx: 1,
+        lastVisit: new Date().toISOString().substring(0, 10),
+      };
+      setCustomerList(prev => [newC, ...prev]);
+      setSelectedCustomerId(newC.id);
+    }
+
+    setFeedback({ type: 'success', text: `Transaksi '${newTrx.id}' untuk ${finalCustomerName} sebesar Rp ${total.toLocaleString('id-ID')} berhasil diproses LUNAS.` });
   };
 
   const handleAddCustomer = (e: React.FormEvent) => {
@@ -284,9 +310,10 @@ export function KasirTransactionWorkspace({
       setFeedback({ type: 'error', text: 'Nama dan Nomor HP Pelanggan wajib diisi.' });
       return;
     }
+    const finalFormattedName = formatCustomerName(newCustName, newCustSalutation);
     const newC = {
       id: `cust-${Date.now()}`,
-      name: newCustName.trim(),
+      name: finalFormattedName,
       phone: newCustPhone.trim(),
       status: 'NEW',
       totalTrx: 1,
@@ -294,10 +321,12 @@ export function KasirTransactionWorkspace({
     };
     setCustomerList([newC, ...customerList]);
     setSelectedCustomerId(newC.id);
-    setCustomerName(newC.name);
+    setCustomerName(newCustName.trim());
+    setSelectedSalutation(newCustSalutation);
     setCustomerPhone(newC.phone);
     setNewCustName('');
     setNewCustPhone('');
+    setNewCustSalutation('Kak');
     setFeedback({ type: 'success', text: `Pelanggan baru '${newC.name}' berhasil ditambahkan ke Database Pelanggan.` });
   };
 
@@ -322,15 +351,16 @@ export function KasirTransactionWorkspace({
     indCategory: IndustryCategory = selectedIndustry
   ) => {
     const tmpl = IndustryTemplateService.getTemplate(indCategory);
+    const politeName = formatCustomerName(custName);
     if (category === 'KABAR_BERKALA') {
       const text = tmpl.template_sapaan || tmpl.template_hypnoselling;
-      setWaTemplateText(IndustryTemplateService.renderMessage(text, { nama: custName, item: 'Layanan Usaha' }));
+      setWaTemplateText(IndustryTemplateService.renderMessage(text, { nama: politeName, item: 'Layanan Usaha' }));
     } else if (category === 'REMINDER') {
-      setWaTemplateText(IndustryTemplateService.renderMessage(tmpl.template_reminder, { nama: custName, item: 'Layanan Usaha' }));
+      setWaTemplateText(IndustryTemplateService.renderMessage(tmpl.template_reminder, { nama: politeName, item: 'Layanan Usaha' }));
     } else if (category === 'QUOTE') {
-      setWaTemplateText(IndustryTemplateService.renderMessage(tmpl.template_sapaan, { nama: custName, item: 'Layanan Usaha' }));
+      setWaTemplateText(IndustryTemplateService.renderMessage(tmpl.template_sapaan, { nama: politeName, item: 'Layanan Usaha' }));
     } else if (category === 'MANUAL') {
-      setWaTemplateText(`Halo Kak ${custName}, `);
+      setWaTemplateText(`Halo ${politeName}, `);
     }
   };
 
@@ -645,15 +675,47 @@ ${profile.terms_and_conditions}`;
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">Nama Pelanggan:</label>
-                <input
-                  type="text"
-                  required
-                  value={customerName}
-                  onChange={e => setCustomerName(e.target.value)}
-                  placeholder="Nama Pelanggan"
-                  className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
-                />
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-400">Nama Pelanggan:</label>
+                  <div className="inline-flex rounded-lg p-0.5 bg-slate-200 dark:bg-slate-800">
+                    {(['Bapak', 'Ibu', 'Kak'] as const).map(sal => (
+                      <button
+                        key={sal}
+                        type="button"
+                        onClick={() => setSelectedSalutation(sal)}
+                        className={`px-2 py-0.5 text-[11px] font-bold rounded-md transition-all ${
+                          selectedSalutation === sal
+                            ? 'bg-emerald-600 text-white shadow-sm'
+                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                      >
+                        {sal}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="relative flex items-center">
+                  <span className="absolute left-3 text-xs font-bold text-emerald-600 dark:text-emerald-400 select-none">
+                    {selectedSalutation}
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    value={customerName}
+                    onChange={e => {
+                      const val = e.target.value;
+                      const { salutation, cleanName } = extractSalutation(val);
+                      if (salutation) {
+                        setSelectedSalutation(salutation);
+                        setCustomerName(cleanName);
+                      } else {
+                        setCustomerName(val);
+                      }
+                    }}
+                    placeholder="Nama Pelanggan"
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg py-2.5 pr-2.5 pl-14 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 font-medium"
+                  />
+                </div>
               </div>
 
               <div>
@@ -916,15 +978,47 @@ ${profile.terms_and_conditions}`;
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">Nama Lengkap Pelanggan:</label>
-                <input
-                  type="text"
-                  required
-                  value={newCustName}
-                  onChange={e => setNewCustName(e.target.value)}
-                  placeholder="Nama lengkap pelanggan..."
-                  className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white"
-                />
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-400">Nama Lengkap Pelanggan:</label>
+                  <div className="inline-flex rounded-lg p-0.5 bg-slate-200 dark:bg-slate-800">
+                    {(['Bapak', 'Ibu', 'Kak'] as const).map(sal => (
+                      <button
+                        key={sal}
+                        type="button"
+                        onClick={() => setNewCustSalutation(sal)}
+                        className={`px-2 py-0.5 text-[11px] font-bold rounded-md transition-all ${
+                          newCustSalutation === sal
+                            ? 'bg-[#F26522] text-white shadow-sm'
+                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                      >
+                        {sal}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="relative flex items-center">
+                  <span className="absolute left-3 text-xs font-bold text-[#F26522] select-none">
+                    {newCustSalutation}
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    value={newCustName}
+                    onChange={e => {
+                      const val = e.target.value;
+                      const { salutation, cleanName } = extractSalutation(val);
+                      if (salutation) {
+                        setNewCustSalutation(salutation);
+                        setNewCustName(cleanName);
+                      } else {
+                        setNewCustName(val);
+                      }
+                    }}
+                    placeholder="Nama pelanggan..."
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg py-2.5 pr-2.5 pl-14 text-xs text-slate-900 dark:text-white font-medium"
+                  />
+                </div>
               </div>
 
               <div>
@@ -1775,14 +1869,46 @@ ${profile.terms_and_conditions}`;
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">Nama Pelanggan:</label>
-                  <input
-                    type="text"
-                    required
-                    value={customerName}
-                    onChange={e => setCustomerName(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white"
-                  />
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-medium text-slate-700 dark:text-slate-400">Nama Pelanggan:</label>
+                    <div className="inline-flex rounded-lg p-0.5 bg-slate-200 dark:bg-slate-800">
+                      {(['Bapak', 'Ibu', 'Kak'] as const).map(sal => (
+                        <button
+                          key={sal}
+                          type="button"
+                          onClick={() => setSelectedSalutation(sal)}
+                          className={`px-2 py-0.5 text-[11px] font-bold rounded-md transition-all ${
+                            selectedSalutation === sal
+                              ? 'bg-emerald-600 text-white shadow-sm'
+                              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                          }`}
+                        >
+                          {sal}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="relative flex items-center">
+                    <span className="absolute left-3 text-xs font-bold text-emerald-600 dark:text-emerald-400 select-none">
+                      {selectedSalutation}
+                    </span>
+                    <input
+                      type="text"
+                      required
+                      value={customerName}
+                      onChange={e => {
+                        const val = e.target.value;
+                        const { salutation, cleanName } = extractSalutation(val);
+                        if (salutation) {
+                          setSelectedSalutation(salutation);
+                          setCustomerName(cleanName);
+                        } else {
+                          setCustomerName(val);
+                        }
+                      }}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg py-2.5 pr-2.5 pl-14 text-xs text-slate-900 dark:text-white font-medium"
+                    />
+                  </div>
                 </div>
                 <div>
                   <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">No. WhatsApp:</label>
@@ -2031,15 +2157,47 @@ ${profile.terms_and_conditions}`;
             </div>
             <form onSubmit={(e) => { handleAddCustomer(e); setShowMemberModal(false); }} className="space-y-4">
               <div>
-                <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">Nama Lengkap Pelanggan:</label>
-                <input
-                  type="text"
-                  required
-                  value={newCustName}
-                  onChange={e => setNewCustName(e.target.value)}
-                  placeholder="Nama lengkap..."
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white font-bold"
-                />
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-400">Nama Lengkap Pelanggan:</label>
+                  <div className="inline-flex rounded-lg p-0.5 bg-slate-200 dark:bg-slate-800">
+                    {(['Bapak', 'Ibu', 'Kak'] as const).map(sal => (
+                      <button
+                        key={sal}
+                        type="button"
+                        onClick={() => setNewCustSalutation(sal)}
+                        className={`px-2 py-0.5 text-[11px] font-bold rounded-md transition-all ${
+                          newCustSalutation === sal
+                            ? 'bg-blue-600 text-white shadow-sm'
+                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                      >
+                        {sal}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="relative flex items-center">
+                  <span className="absolute left-3 text-xs font-bold text-blue-600 dark:text-blue-400 select-none">
+                    {newCustSalutation}
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    value={newCustName}
+                    onChange={e => {
+                      const val = e.target.value;
+                      const { salutation, cleanName } = extractSalutation(val);
+                      if (salutation) {
+                        setNewCustSalutation(salutation);
+                        setNewCustName(cleanName);
+                      } else {
+                        setNewCustName(val);
+                      }
+                    }}
+                    placeholder="Nama lengkap..."
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg py-2.5 pr-2.5 pl-14 text-xs text-slate-900 dark:text-white font-bold"
+                  />
+                </div>
               </div>
               <div>
                 <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">Nomor WhatsApp HP:</label>
