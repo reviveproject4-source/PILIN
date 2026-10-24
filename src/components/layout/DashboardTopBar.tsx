@@ -87,7 +87,8 @@ export function DashboardTopBar({
     if (onRoleChange) {
       onRoleChange(newRole);
     } else if (typeof window !== 'undefined') {
-      window.location.href = `/?mode=demo&role=${newRole}&direct=true`;
+      const modeParam = isDemo ? "demo" : "live";
+      window.location.href = `/?mode=${modeParam}&role=${newRole}&direct=true`;
     }
   };
 
@@ -95,6 +96,7 @@ export function DashboardTopBar({
     <header className="bg-[#0F2547] text-white px-3 sm:px-6 py-2.5 sm:py-3 border-b border-slate-800 flex items-center justify-between shadow-sm w-full shrink-0 select-none font-sans">
       {/* LEFT: [icon/avatar] Sedang Login: ROLE */}
       <div className="flex items-center space-x-2.5 sm:space-x-3 min-w-0">
+        <img src="/logo.png" alt="PILIN ERP" className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover border border-white/20 shrink-0 shadow-sm" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
         <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full ${meta.color} flex items-center justify-center font-black text-xs sm:text-sm text-white shadow-sm shrink-0 border border-white/20`}>
           <RoleIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
         </div>

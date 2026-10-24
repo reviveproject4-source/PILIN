@@ -24,7 +24,7 @@ function MainErpAppContent() {
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
   const [isDemoMode, setIsDemoMode] = useState<boolean>(demoParam);
 
-  const targetBusinessId = isDemoMode ? 'demo-tenant' : (TenantService.getOnboardingData()?.businessId || 'tenant-001');
+  const targetBusinessId = isDemoMode ? 'demo-tenant' : (TenantService.getOnboardingData()?.businessId || '8ec99d6e-3f6f-47d4-910f-265cfe26c609');
 
   useEffect(() => {
     if (demoParam) {
