@@ -760,6 +760,22 @@ export function LoginGate({
                   </div>
                 </div>
 
+                {otpInfo?.otpPreview && (
+                  <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-between">
+                    <div>
+                      <span className="text-amber-400 font-bold text-xs block">Kode OTP Verifikasi:</span>
+                      <span className="text-white font-mono font-black text-xl tracking-widest">{otpInfo.otpPreview}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setResetOtpCode(otpInfo.otpPreview || '')}
+                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-lg text-xs cursor-pointer shadow transition-all"
+                    >
+                      Gunakan Kode
+                    </button>
+                  </div>
+                )}
+
                 <div>
                   <label className="text-xs font-bold text-slate-300 block mb-1">
                     Masukkan 6 Digit Kode OTP:
