@@ -168,8 +168,11 @@ export function KasirTransactionWorkspace({
     const executed = RetentionDomainService.executeWaByKasir(logRecord.id);
     if (executed) {
       refreshWaLogs();
-      setFeedback({ type: 'success', text: `Pesan WA (${executed.category}) untuk ${executed.customer_name} telah dieksekusi. Membuka WhatsApp...` });
-      window.open(executed.wa_me_url, '_blank');
+      RetentionDomainService.openDirectWhatsApp(executed.customer_phone, executed.message_text);
+      setFeedback({ 
+        type: 'success', 
+        text: `Membuka WhatsApp langsung (WA Cepat) ke nomor tujuan ${executed.customer_name} (${executed.customer_phone}). Pesan siap dikirim.` 
+      });
     }
   };
 
@@ -404,15 +407,17 @@ export function KasirTransactionWorkspace({
   const handleSendWaMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (!waTemplateText.trim()) return;
-    const link = RetentionDomainService.generateWaMeLink(waTargetPhone, waTemplateText);
+    RetentionDomainService.openDirectWhatsApp(waTargetPhone, waTemplateText);
     RetentionDomainService.scheduleSapaan({
       customer_name: waTargetName,
       customer_phone: waTargetPhone,
       category: waCategory === 'MANUAL' || waCategory === 'REMINDER' ? 'SAPAAN' : (waCategory === 'KABAR_BERKALA' ? 'SAPAAN' : waCategory),
       message_text: waTemplateText,
     });
-    setFeedback({ type: 'success', text: `Pesan WA Engine telah disiapkan. Membuka WhatsApp...` });
-    setTimeout(() => window.open(link, '_blank'), 400);
+    setFeedback({ 
+      type: 'success', 
+      text: `Membuka WhatsApp langsung (WA Cepat) ke nomor tujuan ${waTargetName} (${waTargetPhone}). Pesan siap dikirim.` 
+    });
   };
 
   const handleRequestDiscount = (e: React.FormEvent) => {
@@ -443,12 +448,12 @@ export function KasirTransactionWorkspace({
     setFeedback({ type: 'success', text: `Permintaan Pembatalan Nota ${cancelNotaNumber} telah dikirim ke Kepala Cabang.` });
   };
 
-  // Generate WA Nota Link
-  const generateWaReceiptLink = (trx: TransactionRecord) => {
+  // Generate WA Nota Text with official business sender sign-off
+  const generateWaReceiptText = (trx: TransactionRecord) => {
     const profile = BusinessProfileService.getProfile(businessId);
-    const text = `*${profile.business_name.toUpperCase()}*
+    return `*${profile.business_name.toUpperCase()}*
 ${profile.business_address}
-No. WA Toko: ${profile.business_phone}
+No. WA Bisnis Resmi: ${profile.business_phone}
 --------------------------------
 No. Nota : ${trx.id}
 Waktu    : ${trx.time}
@@ -460,8 +465,24 @@ Total: Rp ${trx.total.toLocaleString('id-ID')}
 Pembayaran: ${trx.method} (LUNAS)
 --------------------------------
 Syarat & Ketentuan:
-${profile.terms_and_conditions}`;
-    return RetentionDomainService.generateWaMeLink(trx.phone, text);
+${profile.terms_and_conditions}
+
+--------------------------------
+Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
+  };
+
+  const handleSendDirectWaReceipt = (trx: TransactionRecord) => {
+    const text = generateWaReceiptText(trx);
+    RetentionDomainService.openDirectWhatsApp(trx.phone, text);
+    setFeedback({
+      type: 'success',
+      text: `Membuka WhatsApp langsung (WA Cepat) ke nomor tujuan ${trx.customer} (${trx.phone}). Silakan langsung tekan kirim di WhatsApp.`,
+    });
+  };
+
+  const generateWaReceiptLink = (trx: TransactionRecord) => {
+    const text = generateWaReceiptText(trx);
+    return RetentionDomainService.generateDirectWaLink(trx.phone, text);
   };
 
   return (
@@ -896,7 +917,7 @@ ${profile.terms_and_conditions}`;
                         <span>Nota</span>
                       </button>
                       <button
-                        onClick={() => window.open(generateWaReceiptLink(t), '_blank')}
+                        onClick={() => handleSendDirectWaReceipt(t)}
                         className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded text-[11px] flex items-center gap-1"
                       >
                         <Send className="w-3.5 h-3.5" />
@@ -1865,7 +1886,7 @@ ${profile.terms_and_conditions}`;
 
               <button
                 type="button"
-                onClick={() => window.open(generateWaReceiptLink(activeReceiptTrx), '_blank')}
+                onClick={() => handleSendDirectWaReceipt(activeReceiptTrx)}
                 className="py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow"
               >
                 <Send className="w-4 h-4" />
@@ -2125,7 +2146,7 @@ ${profile.terms_and_conditions}`;
                       <span>Cetak Nota</span>
                     </button>
                     <button
-                      onClick={() => window.open(generateWaReceiptLink(t), '_blank')}
+                      onClick={() => handleSendDirectWaReceipt(t)}
                       className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded text-[11px] flex items-center gap-1 cursor-pointer"
                     >
                       <Send className="w-3.5 h-3.5" />

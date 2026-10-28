@@ -21,6 +21,8 @@ export interface SapaanLogRecord {
 
 export class RetentionDomainService {
   private static STORAGE_KEY = 'pilin_wa_retention_logs_v2';
+  private static DEFAULT_OWNER_BUSINESS_PHONE = '081280320505';
+  private static DEFAULT_BUSINESS_NAME = 'Bengkel Tas Sepatu';
 
   private static defaultLogs: SapaanLogRecord[] = [
     {
@@ -34,12 +36,12 @@ export class RetentionDomainService {
       scheduled_h_plus_days: 60,
       category: 'REMINDER',
       reminder_type: 'JASA_PERAWATAN_BERKALA',
-      message_text: 'Selamat siang Ibu Marlina, pengingat ramah dari Bengkel Tas Sepatu. Tas kulit yang dirawat 60 hari lalu sudah memasuki jadwal perawatan pelembab berkala agar kulit tetap lentur dan terhindar dari jamur. Silakan mampir ke outlet kami minggu ini!',
+      message_text: 'Selamat siang Ibu Marlina, pengingat ramah dari Bengkel Tas Sepatu. Tas kulit yang dirawat 60 hari lalu sudah memasuki jadwal perawatan pelembab berkala agar kulit tetap lentur dan terhindar dari jamur. Silakan mampir ke outlet kami minggu ini ya Bu!\n\nSalam hangat,\nBengkel Tas Sepatu\nNo. WA Bisnis Resmi: 081280320505',
       scheduled_at: new Date(Date.now() + 5 * 86400000).toISOString(),
       status: 'ACTIVE',
       mandated_by: 'Kepala Cabang',
       created_at: new Date(Date.now() - 2 * 86400000).toISOString(),
-      wa_me_url: 'https://wa.me/6281280320505?text=Selamat%20siang%20Ibu%20Marlina',
+      wa_me_url: 'whatsapp://send?phone=6281280320505&text=Selamat%20siang%20Ibu%20Marlina',
     },
     {
       id: 'rem-102',
@@ -52,12 +54,12 @@ export class RetentionDomainService {
       scheduled_h_plus_days: 30,
       category: 'REMINDER',
       reminder_type: 'RETAIL_REFILL_BELANJA',
-      message_text: 'Selamat pagi Bapak Hendra, sabun pembersih sepatu yang Bapak beli 30 hari lalu diperkirakan sudah mulai habis. Apakah ingin kami siapkan botol refill baru untuk Bapak? Balas pesan ini untuk pemesanan langsung ya Pak.',
+      message_text: 'Selamat pagi Bapak Hendra, sabun pembersih sepatu yang Bapak beli 30 hari lalu diperkirakan sudah mulai habis. Apakah ingin kami siapkan botol refill baru untuk Bapak? Balas pesan ini untuk pemesanan langsung ya Pak.\n\nSalam hangat,\nBengkel Tas Sepatu\nNo. WA Bisnis Resmi: 081280320505',
       scheduled_at: new Date(Date.now() + 2 * 86400000).toISOString(),
       status: 'ACTIVE',
       mandated_by: 'Kepala Cabang',
       created_at: new Date(Date.now() - 1 * 86400000).toISOString(),
-      wa_me_url: 'https://wa.me/628134567890?text=Selamat%20pagi%20Bapak%20Hendra',
+      wa_me_url: 'whatsapp://send?phone=628134567890&text=Selamat%20pagi%20Bapak%20Hendra',
     },
     {
       id: 'sap-103',
@@ -70,11 +72,11 @@ export class RetentionDomainService {
       scheduled_h_plus_days: 14,
       category: 'SAPAAN',
       reminder_type: 'UMUM',
-      message_text: 'Halo Ka Dewi, terima kasih telah mempercayakan pengerjaan sepatu di Bengkel Tas Sepatu. Bagaimana hasil pengerjaan tim kami? Semoga puas dan hari Ka Dewi menyenangkan selalu!',
+      message_text: 'Halo Ka Dewi, terima kasih telah mempercayakan pengerjaan sepatu di Bengkel Tas Sepatu. Bagaimana hasil pengerjaan tim kami? Semoga puas dan hari Ka Dewi menyenangkan selalu!\n\nSalam hangat,\nBengkel Tas Sepatu\nNo. WA Bisnis Resmi: 081280320505',
       scheduled_at: new Date(Date.now() - 5 * 86400000).toISOString(),
       status: 'SENT',
       created_at: new Date(Date.now() - 5 * 86400000).toISOString(),
-      wa_me_url: 'https://wa.me/628571234567?text=Halo%20Ka%20Dewi',
+      wa_me_url: 'whatsapp://send?phone=628571234567&text=Halo%20Ka%20Dewi',
     },
   ];
 
@@ -102,10 +104,66 @@ export class RetentionDomainService {
     }
   }
 
+  /**
+   * Normalize phone number to international format (628...)
+   */
+  static normalizePhoneNumber(phone: string): string {
+    const clean = phone.replace(/[^0-9]/g, '');
+    if (clean.startsWith('0')) {
+      return `62${clean.slice(1)}`;
+    }
+    if (clean.startsWith('62')) {
+      return clean;
+    }
+    return `62${clean}`;
+  }
+
+  /**
+   * Direct Deep Link generator (bypasses wa.me intermediate landing page)
+   * Similar to "WA Cepat" direct chat applications.
+   */
+  static generateDirectWaLink(phone: string, text: string): string {
+    const targetPhone = this.normalizePhoneNumber(phone);
+    return `whatsapp://send?phone=${targetPhone}&text=${encodeURIComponent(text)}`;
+  }
+
+  /**
+   * Backward-compatible link generator
+   */
   static generateWaMeLink(phone: string, text: string): string {
-    const cleanPhone = phone.replace(/[^0-9]/g, '');
-    const targetPhone = cleanPhone.startsWith('0') ? `62${cleanPhone.slice(1)}` : cleanPhone;
-    return `https://wa.me/${targetPhone}?text=${encodeURIComponent(text)}`;
+    return this.generateDirectWaLink(phone, text);
+  }
+
+  /**
+   * INSTANT DIRECT WHATSAPP DISPATCH ("WA Cepat" Architecture)
+   * Enters directly into the destination chat room with message pre-filled.
+   * Eliminates the intermediate wa.me landing page ("Chat on WhatsApp with...")
+   */
+  static openDirectWhatsApp(phone: string, text: string): void {
+    if (typeof window === 'undefined') return;
+    const targetPhone = this.normalizePhoneNumber(phone);
+    const encodedText = encodeURIComponent(text);
+    const deepLink = `whatsapp://send?phone=${targetPhone}&text=${encodedText}`;
+
+    const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+    if (isMobile) {
+      // Mobile Device: WhatsApp app opens immediately into conversation with message ready
+      window.location.href = deepLink;
+    } else {
+      // Desktop PC: Try launching WhatsApp Desktop app directly
+      const a = document.createElement('a');
+      a.href = deepLink;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      // Fallback: If desktop app is not installed, open web.whatsapp.com directly (bypassing wa.me landing page)
+      setTimeout(() => {
+        const webDirectUrl = `https://web.whatsapp.com/send?phone=${targetPhone}&text=${encodedText}`;
+        window.open(webDirectUrl, '_blank');
+      }, 1000);
+    }
   }
 
   static generatePreview(
@@ -137,15 +195,19 @@ export class RetentionDomainService {
     item_name: string;
     due_days: number; // 30, 45, 60, 90, or custom
     custom_message?: string;
+    business_phone?: string;
+    business_name?: string;
   }): SapaanLogRecord {
     const logs = this.getSapaanLogs();
     const salutationPrefix = /^(bapak|bpk|pak)/i.test(data.customer_name) ? 'Bapak' : (/^(ibu|bu)/i.test(data.customer_name) ? 'Ibu' : 'Ka');
     const cleanCustomerName = data.customer_name.replace(/^(bapak|bpk\.?|pak\.?|ibu\.?|bu\.?|kakak\.?|kak\.?|ka\.?)\s+/i, '');
-    
-    const message = data.custom_message ||
-      `Selamat siang ${salutationPrefix} ${cleanCustomerName}, pengingat ramah dari cabang kami untuk nota ${data.nota_number}. Barang kesayangan Anda (${data.item_name}) yang dirawat ${data.due_days} hari lalu sudah memasuki jadwal perawatan berkala agar kualitas tetap prima. Silakan mampir ke outlet kami untuk perawatan rutin!`;
+    const bName = data.business_name || this.DEFAULT_BUSINESS_NAME;
+    const bPhone = data.business_phone || this.DEFAULT_OWNER_BUSINESS_PHONE;
 
-    const waUrl = this.generateWaMeLink(data.customer_phone, message);
+    const message = data.custom_message ||
+      `Selamat siang ${salutationPrefix} ${cleanCustomerName}, pengingat ramah dari ${bName} untuk nota ${data.nota_number}. Barang kesayangan Anda (${data.item_name}) yang dirawat ${data.due_days} hari lalu sudah memasuki jadwal perawatan berkala agar kualitas tetap prima. Silakan mampir ke outlet kami untuk perawatan rutin ya!\n\nSalam hangat,\n${bName}\nNo. WA Bisnis Resmi: ${bPhone}`;
+
+    const waUrl = this.generateDirectWaLink(data.customer_phone, message);
 
     const newLog: SapaanLogRecord = {
       id: `rem-jasa-${Date.now()}`,
@@ -178,15 +240,19 @@ export class RetentionDomainService {
     item_name: string;
     due_days: number; // 30, 45, 60, 90, or custom
     custom_message?: string;
+    business_phone?: string;
+    business_name?: string;
   }): SapaanLogRecord {
     const logs = this.getSapaanLogs();
     const salutationPrefix = /^(bapak|bpk|pak)/i.test(data.customer_name) ? 'Bapak' : (/^(ibu|bu)/i.test(data.customer_name) ? 'Ibu' : 'Ka');
     const cleanCustomerName = data.customer_name.replace(/^(bapak|bpk\.?|pak\.?|ibu\.?|bu\.?|kakak\.?|kak\.?|ka\.?)\s+/i, '');
-    
-    const message = data.custom_message ||
-      `Selamat pagi ${salutationPrefix} ${cleanCustomerName}, produk ${data.item_name} yang Anda beli ${data.due_days} hari lalu pada nota ${data.nota_number} diperkirakan sudah mulai habis. Apakah ingin kami siapkan botol refill baru untuk Anda? Balas pesan ini untuk pemesanan langsung ya!`;
+    const bName = data.business_name || this.DEFAULT_BUSINESS_NAME;
+    const bPhone = data.business_phone || this.DEFAULT_OWNER_BUSINESS_PHONE;
 
-    const waUrl = this.generateWaMeLink(data.customer_phone, message);
+    const message = data.custom_message ||
+      `Selamat pagi ${salutationPrefix} ${cleanCustomerName}, produk ${data.item_name} yang Anda beli ${data.due_days} hari lalu pada nota ${data.nota_number} diperkirakan sudah mulai habis. Apakah ingin kami siapkan botol refill baru untuk Anda? Balas pesan ini untuk pemesanan langsung ya!\n\nSalam hangat,\n${bName}\nNo. WA Bisnis Resmi: ${bPhone}`;
+
+    const waUrl = this.generateDirectWaLink(data.customer_phone, message);
 
     const newLog: SapaanLogRecord = {
       id: `rem-ret-${Date.now()}`,
@@ -222,7 +288,7 @@ export class RetentionDomainService {
     due_days?: number;
   }): SapaanLogRecord {
     const logs = this.getSapaanLogs();
-    const waUrl = this.generateWaMeLink(data.customer_phone, data.message_text);
+    const waUrl = this.generateDirectWaLink(data.customer_phone, data.message_text);
 
     const newLog: SapaanLogRecord = {
       id: `mand-${Date.now()}`,
@@ -287,7 +353,7 @@ export class RetentionDomainService {
     nota_number?: string;
   }): SapaanLogRecord {
     const logs = this.getSapaanLogs();
-    const waUrl = this.generateWaMeLink(data.customer_phone, data.message_text);
+    const waUrl = this.generateDirectWaLink(data.customer_phone, data.message_text);
 
     const newLog: SapaanLogRecord = {
       id: `sap-${Date.now()}`,

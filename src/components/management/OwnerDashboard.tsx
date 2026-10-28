@@ -388,6 +388,9 @@ export function OwnerDashboard({
                     <h2 className="text-base font-extrabold text-[#0F2547] dark:text-white">
                       Mesin CRM Aktif: Pengingat Perawatan Berkala & Refill Konsumen
                     </h2>
+                    <span className="text-[10px] font-mono font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-800 px-2.5 py-1 rounded-md">
+                      Pengirim Resmi: 081280320505 (Bengkel Tas Sepatu)
+                    </span>
                   </div>
 
                   <div className="flex items-center space-x-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-bold">
@@ -462,15 +465,18 @@ export function OwnerDashboard({
                           </div>
 
                           <div className="flex items-center space-x-2 shrink-0">
-                            <a
-                              href={log.wa_me_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                            <button
+                              type="button"
+                              onClick={() => {
+                                RetentionDomainService.openDirectWhatsApp(log.customer_phone, log.message_text);
+                                RetentionDomainService.executeWaByKasir(log.id);
+                                setCrmLogs(RetentionDomainService.getSapaanLogs(isDemo));
+                              }}
                               className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center space-x-1.5 cursor-pointer"
                             >
                               <MessageSquare className="w-3.5 h-3.5" />
-                              <span>Kirim via WhatsApp →</span>
-                            </a>
+                              <span>Kirim Cepat WA Langsung →</span>
+                            </button>
                           </div>
                         </div>
                       );
