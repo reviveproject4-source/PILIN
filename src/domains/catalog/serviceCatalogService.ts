@@ -9,63 +9,84 @@ export interface ServiceCatalogItem {
   hpp_percent?: number;
   item_type?: 'PRODUCT' | 'SERVICE';
   bahan_baku?: string;
+  reminder_days?: number; // Customizable cycle days: 30, 45, 60, 90, or custom days
+  stock_alert_threshold?: number; // Min threshold for low stock alert to owner
+  stock_qty?: number; // Current on-hand quantity
 }
 
 const DEFAULT_CATALOG: ServiceCatalogItem[] = [
   {
     id: 'srv-00000000-0000-0000-0000-000000000001',
-    business_id: '00000000-0000-0000-0000-000000000001',
-    nama: 'Grooming / Service Standar 01',
-    sku: 'SKU-SRV-001',
+    business_id: '8ec99d6e-3f6f-47d4-910f-265cfe26c609',
+    nama: 'Cuci & Perawatan Standar Sepatu',
+    sku: 'SKU-JASA-001',
     base_harga: 75000,
-    hpp: 30000,
-    hpp_mode: 'PERCENTAGE',
-    hpp_percent: 40,
+    hpp: 25000,
+    hpp_mode: 'ACTUAL_COST',
+    hpp_percent: 0,
     item_type: 'SERVICE',
-    bahan_baku: 'Sabun Khusus 50ml, Kain Lap Microfiber 1 pcs'
+    bahan_baku: 'Sabun Khusus Sepatu 50ml, Microfiber 1 pcs',
+    reminder_days: 30,
   },
   {
     id: 'srv-00000000-0000-0000-0000-000000000002',
-    business_id: '00000000-0000-0000-0000-000000000001',
-    nama: 'Deep Clean & Repaint Premium 02',
-    sku: 'SKU-SRV-002',
-    base_harga: 120000,
+    business_id: '8ec99d6e-3f6f-47d4-910f-265cfe26c609',
+    nama: 'Deep Clean & Repaint Tas Kulit Premium',
+    sku: 'SKU-JASA-002',
+    base_harga: 150000,
     hpp: 45000,
     hpp_mode: 'ACTUAL_COST',
     hpp_percent: 0,
     item_type: 'SERVICE',
-    bahan_baku: 'Cat Khusus Leather 30ml, Liquid Cleaner 100ml'
+    bahan_baku: 'Cat Khusus Leather 30ml, Liquid Cleaner 100ml',
+    reminder_days: 60,
   },
   {
     id: 'srv-00000000-0000-0000-0000-000000000003',
-    business_id: '00000000-0000-0000-0000-000000000001',
-    nama: 'Treatment SPA & Restoration Full 03',
-    sku: 'SKU-SRV-003',
+    business_id: '8ec99d6e-3f6f-47d4-910f-265cfe26c609',
+    nama: 'Treatment SPA & Restoration Full Tas/Sepatu',
+    sku: 'SKU-JASA-003',
     base_harga: 250000,
-    hpp: 100000,
-    hpp_mode: 'PERCENTAGE',
-    hpp_percent: 40,
-    item_type: 'SERVICE',
-    bahan_baku: 'Minyak Pelembab Leather 50ml, Nano Coating Spray 10ml'
-  },
-  {
-    id: 'srv-00000000-0000-0000-0000-000000000004',
-    business_id: '00000000-0000-0000-0000-000000000001',
-    nama: 'Fast Wash & Express Care 04',
-    sku: 'SKU-SRV-004',
-    base_harga: 95000,
-    hpp: 35000,
+    hpp: 80000,
     hpp_mode: 'ACTUAL_COST',
     hpp_percent: 0,
     item_type: 'SERVICE',
-    bahan_baku: 'Shampoo Spray 30ml, Microfiber Fast Dry 1 pcs'
+    bahan_baku: 'Minyak Pelembab Leather 50ml, Nano Coating Spray 10ml',
+    reminder_days: 90,
+  },
+  {
+    id: 'prod-00000000-0000-0000-0000-000000000004',
+    business_id: '8ec99d6e-3f6f-47d4-910f-265cfe26c609',
+    nama: 'Sabun Pembersih Sepatu & Tas 250ml (Retail)',
+    sku: 'SKU-RETAIL-001',
+    base_harga: 65000,
+    hpp: 32500,
+    hpp_mode: 'PERCENTAGE',
+    hpp_percent: 50,
+    item_type: 'PRODUCT',
+    bahan_baku: 'Kemasan Botol 250ml + Formula Sabun Organik',
+    reminder_days: 30, // Estimasi habis dalam 30 hari
+    stock_qty: 3, // Low stock sample!
+    stock_alert_threshold: 5,
+  },
+  {
+    id: 'prod-00000000-0000-0000-0000-000000000005',
+    business_id: '8ec99d6e-3f6f-47d4-910f-265cfe26c609',
+    nama: 'Nano Waterproofing Spray 150ml (Retail)',
+    sku: 'SKU-RETAIL-002',
+    base_harga: 85000,
+    hpp: 42500,
+    hpp_mode: 'PERCENTAGE',
+    hpp_percent: 50,
+    item_type: 'PRODUCT',
+    bahan_baku: 'Kaleng Aerosol 150ml Anti Air',
+    reminder_days: 45, // Estimasi habis dalam 45 hari
+    stock_qty: 14,
+    stock_alert_threshold: 5,
   },
 ];
 
 export class ServiceCatalogService {
-  /**
-   * Master Service Catalog matching PostgreSQL Migration 00007_services_and_branch_catalog.sql & 00049_add_hpp_mode_to_services.sql
-   */
   private static masterCatalog: ServiceCatalogItem[] = [];
 
   static resetDefaultCatalogForTest() {
@@ -78,7 +99,7 @@ export class ServiceCatalogService {
         const saved = localStorage.getItem('pilin_master_catalog');
         if (saved) {
           const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed)) {
+          if (Array.isArray(parsed) && parsed.length > 0) {
             this.masterCatalog = parsed;
             return [...this.masterCatalog];
           }
@@ -87,6 +108,7 @@ export class ServiceCatalogService {
         console.error('ServiceCatalogService load error:', err);
       }
     }
+    this.masterCatalog = [...DEFAULT_CATALOG];
     return [...this.masterCatalog];
   }
 
@@ -100,66 +122,49 @@ export class ServiceCatalogService {
     }
   }
 
-  static setMasterCatalog(items: ServiceCatalogItem[]): void {
-    this.masterCatalog = [...items];
-    this.saveToStorage();
-  }
-
-  static getMasterCatalog(isDemo: boolean = false): ServiceCatalogItem[] {
-    if (isDemo) {
-      return [...DEFAULT_CATALOG];
-    }
-    if (typeof window !== 'undefined') {
-      this.loadFromStorage();
+  static getMasterCatalog(): ServiceCatalogItem[] {
+    if (this.masterCatalog.length === 0) {
+      return this.loadFromStorage();
     }
     return [...this.masterCatalog];
   }
 
   static getServiceById(id: string): ServiceCatalogItem | undefined {
-    return this.masterCatalog.find((item) => item.id === id);
+    return this.getMasterCatalog().find((s) => s.id === id);
   }
 
-  static addMasterService(item: {
-    nama: string;
-    base_harga: number;
-    hpp?: number;
-    hpp_mode?: 'PERCENTAGE' | 'ACTUAL_COST';
-    hpp_percent?: number;
-    item_type?: 'PRODUCT' | 'SERVICE';
-    bahan_baku?: string;
-  }): ServiceCatalogItem {
-    const mode = item.hpp_mode || 'ACTUAL_COST';
-    const percent = item.hpp_percent ?? 0;
-    const itemType = item.item_type || 'PRODUCT';
-    let computedHpp = item.hpp || 0;
-
-    if (mode === 'PERCENTAGE' && percent > 0) {
-      computedHpp = Math.round((item.base_harga * percent) / 100);
+  static addMasterService(
+    service: Omit<ServiceCatalogItem, 'id' | 'sku' | 'business_id' | 'hpp'> & {
+      hpp?: number;
+      business_id?: string;
+    }
+  ): ServiceCatalogItem {
+    const catalog = this.getMasterCatalog();
+    const prefix = service.item_type === 'PRODUCT' ? 'SKU-RETAIL' : 'SKU-JASA';
+    const nextNum = (catalog.length + 1).toString().padStart(3, '0');
+    
+    let computedHpp = service.hpp ?? 0;
+    if (service.hpp === undefined && service.hpp_mode === 'PERCENTAGE' && service.hpp_percent) {
+      computedHpp = Math.round((service.base_harga * service.hpp_percent) / 100);
     }
 
-    const newItem: ServiceCatalogItem = {
-      id: `srv-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`,
-      business_id: '00000000-0000-0000-0000-000000000001',
-      nama: item.nama,
-      sku: `SKU-SRV-${String(this.masterCatalog.length + 1).padStart(3, '0')}`,
-      base_harga: item.base_harga,
+    const newService: ServiceCatalogItem = {
+      ...service,
+      id: `srv-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      business_id: service.business_id || '8ec99d6e-3f6f-47d4-910f-265cfe26c609',
+      sku: `${prefix}-${nextNum}`,
       hpp: computedHpp,
-      hpp_mode: mode,
-      hpp_percent: percent,
-      item_type: itemType,
-      bahan_baku: item.bahan_baku || (itemType === 'SERVICE' ? 'Jasa Operasional' : 'Bahan Baku Standar')
+      item_type: service.item_type || 'SERVICE',
+      reminder_days: service.reminder_days || 30,
+      stock_qty: service.stock_qty !== undefined ? service.stock_qty : 0,
+      stock_alert_threshold: service.stock_alert_threshold !== undefined ? service.stock_alert_threshold : 5,
     };
-
-    this.masterCatalog.push(newItem);
+    catalog.push(newService);
+    this.masterCatalog = catalog;
     this.saveToStorage();
-    return newItem;
+    return newService;
   }
 
-  /**
-   * GD-07 / OD-02: POS Price Override Authority
-   * Authorized roles: Tier 3 MANAGER and Tier 2 OWNER. CASHIER and unauthorized roles prohibited.
-   * Master catalog base_harga remains untouched and protected.
-   */
   static overrideServicePrice(
     serviceId: string,
     overridePrice: number,
@@ -170,12 +175,11 @@ export class ServiceCatalogService {
       throw new Error('Unauthorized price override: Tier 3 Manager or Tier 2 Owner authority required (GD-07 / OD-02)');
     }
 
-    const service = this.masterCatalog.find(s => s.id === serviceId);
+    const service = this.getMasterCatalog().find((s) => s.id === serviceId);
     if (!service) {
       throw new Error('Service item not found in master catalog');
     }
 
-    // Protected master catalog base_harga is preserved without silent mutation
     return {
       serviceId: service.id,
       overridePrice: overridePrice,
@@ -183,54 +187,42 @@ export class ServiceCatalogService {
     };
   }
 
-  static deleteMasterService(serviceId: string): boolean {
-    const initialLen = this.masterCatalog.length;
-    this.masterCatalog = this.masterCatalog.filter(s => s.id !== serviceId);
-    const deleted = this.masterCatalog.length < initialLen;
-    if (deleted) {
-      this.saveToStorage();
-    }
-    return deleted;
+  static updateMasterService(
+    id: string,
+    updates: Partial<Omit<ServiceCatalogItem, 'id' | 'sku' | 'business_id'>>
+  ): ServiceCatalogItem | null {
+    const catalog = this.getMasterCatalog();
+    const idx = catalog.findIndex((s) => s.id === id);
+    if (idx === -1) return null;
+    const updated = {
+      ...catalog[idx],
+      ...updates,
+    };
+    catalog[idx] = updated;
+    this.masterCatalog = catalog;
+    this.saveToStorage();
+    return updated;
   }
 
-  static updateMasterService(id: string, item: {
-    nama?: string;
-    base_harga?: number;
-    hpp?: number;
-    hpp_mode?: 'PERCENTAGE' | 'ACTUAL_COST';
-    hpp_percent?: number;
-    item_type?: 'PRODUCT' | 'SERVICE';
-    bahan_baku?: string;
-  }): ServiceCatalogItem | undefined {
-    const existing = this.masterCatalog.find((s) => s.id === id);
-    if (!existing) return undefined;
-
-    const mode = item.hpp_mode !== undefined ? item.hpp_mode : (existing.hpp_mode || 'ACTUAL_COST');
-    const percent = item.hpp_percent !== undefined ? item.hpp_percent : (existing.hpp_percent ?? 0);
-    const hargaJual = item.base_harga !== undefined ? item.base_harga : existing.base_harga;
-    let computedHpp = item.hpp !== undefined ? item.hpp : existing.hpp;
-
-    if (mode === 'PERCENTAGE' && percent > 0) {
-      computedHpp = Math.round((hargaJual * percent) / 100);
-    }
-
-    const updatedItem: ServiceCatalogItem = {
-      ...existing,
-      nama: item.nama !== undefined ? item.nama : existing.nama,
-      base_harga: hargaJual,
-      hpp: computedHpp,
-      hpp_mode: mode,
-      hpp_percent: percent,
-      item_type: item.item_type !== undefined ? item.item_type : existing.item_type,
-      bahan_baku: item.bahan_baku !== undefined ? item.bahan_baku : existing.bahan_baku,
-    };
-
-    const idx = this.masterCatalog.findIndex((s) => s.id === id);
-    if (idx >= 0) {
-      this.masterCatalog[idx] = updatedItem;
+  static deleteMasterService(id: string): boolean {
+    const catalog = this.getMasterCatalog();
+    const filtered = catalog.filter((s) => s.id !== id);
+    if (filtered.length !== catalog.length) {
+      this.masterCatalog = filtered;
       this.saveToStorage();
+      return true;
     }
+    return false;
+  }
 
-    return updatedItem;
+  static getStockAlertItems(): ServiceCatalogItem[] {
+    const catalog = this.getMasterCatalog();
+    return catalog.filter(
+      (item) =>
+        item.item_type === 'PRODUCT' &&
+        item.stock_alert_threshold !== undefined &&
+        item.stock_alert_threshold > 0 &&
+        (item.stock_qty ?? 0) <= item.stock_alert_threshold
+    );
   }
 }

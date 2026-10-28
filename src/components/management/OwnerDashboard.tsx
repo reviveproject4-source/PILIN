@@ -19,6 +19,9 @@ import { PeopleRepository, BranchItem } from '@/domains/people/peopleRepository'
 import { TenantService } from '@/domains/tenant/tenantService';
 import { TenantOnboardingModal } from '../tenant/TenantOnboardingModal';
 import { Employee } from '@/domains/people/people.types';
+import { ServiceCatalogService, ServiceCatalogItem } from '@/domains/catalog/serviceCatalogService';
+import { RetentionDomainService, SapaanLogRecord } from '@/domains/retention/retentionDomainService';
+import { AlertTriangle, Clock, MessageSquare, Send, BellRing, PackageCheck, ExternalLink } from 'lucide-react';
 
 interface OwnerDashboardProps {
   businessId?: string;
@@ -48,6 +51,9 @@ export function OwnerDashboard({
   const [trialInfo, setTrialInfo] = useState<{ isActive: boolean; daysRemaining: number; endDateFormatted: string; businessName: string } | null>(null);
 
   const [branches, setBranches] = useState<BranchItem[]>([]);
+  const [stockAlerts, setStockAlerts] = useState<ServiceCatalogItem[]>([]);
+  const [crmLogs, setCrmLogs] = useState<SapaanLogRecord[]>([]);
+  const [crmFilter, setCrmFilter] = useState<'ALL' | 'JASA' | 'RETAIL'>('ALL');
   const [employees, setEmployees] = useState<Employee[]>([]);
 
   useEffect(() => {
@@ -61,6 +67,8 @@ export function OwnerDashboard({
   useEffect(() => {
     PeopleRepository.listBranches(businessId, isDemo).then(setBranches);
     PeopleRepository.listEmployees(businessId).then(setEmployees);
+    setStockAlerts(ServiceCatalogService.getStockAlertItems());
+    setCrmLogs(RetentionDomainService.getSapaanLogs(isDemo));
   }, [businessId, isDemo]);
 
   if (!isDemo && !isOnboarded) {
@@ -322,6 +330,151 @@ export function OwnerDashboard({
                     </div>
                   </div>
                   <div className="h-4 w-full"></div>
+                </div>
+              </div>
+
+              {/* PERINGATAN STOK MENIPIS UNTUK OWNER (RETAIL & BAHAN BAKU) */}
+              {stockAlerts.length > 0 && (
+                <div className="bg-rose-50 dark:bg-rose-950/40 border-2 border-rose-400 dark:border-rose-800 p-5 rounded-2xl shadow-sm space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rose-200 dark:border-rose-800 pb-3">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-rose-600 text-white flex items-center justify-center font-bold">
+                        <AlertTriangle className="w-4 h-4 animate-bounce" />
+                      </div>
+                      <h2 className="text-sm font-black text-rose-900 dark:text-rose-200 uppercase tracking-wider">
+                        Peringatan Stok Menipis & Jadwal Reorder ke Vendor
+                      </h2>
+                    </div>
+                    <span className="bg-rose-600 text-white text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wide">
+                      {stockAlerts.length} Item Perlu Restock
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {stockAlerts.map((item) => (
+                      <div key={item.id} className="bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-rose-200 dark:border-rose-900/60 shadow-sm space-y-2">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <span className="text-[10px] font-mono text-slate-400">{item.sku}</span>
+                            <div className="font-bold text-xs text-slate-900 dark:text-white mt-0.5">{item.nama}</div>
+                          </div>
+                          <span className="bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 font-black text-[10px] px-2 py-0.5 rounded-md">
+                            Sisa: {item.stock_qty ?? 0} Pcs
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-100 dark:border-slate-800">
+                          <span className="text-slate-500">Batas Minimum: <strong>{item.stock_alert_threshold ?? 5} Pcs</strong></span>
+                          <button
+                            type="button"
+                            onClick={() => setActiveSidebarMenu('MASTER_DATA')}
+                            className="text-[#F26522] hover:underline font-bold text-[11px] cursor-pointer"
+                          >
+                            Kelola Stok →
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* MESIN CRM AKTIF: PENGINGAT PERAWATAN BERKALA (JASA) & REFILL (RETAIL) */}
+              <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-emerald-600 dark:text-emerald-400 font-bold">
+                      <BellRing className="w-4 h-4" />
+                    </div>
+                    <h2 className="text-base font-extrabold text-[#0F2547] dark:text-white">
+                      Mesin CRM Aktif: Pengingat Perawatan Berkala & Refill Konsumen
+                    </h2>
+                  </div>
+
+                  <div className="flex items-center space-x-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setCrmFilter('ALL')}
+                      className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                        crmFilter === 'ALL'
+                          ? 'bg-[#F26522] text-white shadow-sm'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      Semua ({crmLogs.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCrmFilter('JASA')}
+                      className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                        crmFilter === 'JASA'
+                          ? 'bg-[#F26522] text-white shadow-sm'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      Jasa: Perawatan Berkala
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCrmFilter('RETAIL')}
+                      className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                        crmFilter === 'RETAIL'
+                          ? 'bg-[#F26522] text-white shadow-sm'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      Retail: Refill Belanja
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {crmLogs
+                    .filter((log) => {
+                      if (crmFilter === 'JASA') return log.reminder_type === 'JASA_PERAWATAN_BERKALA' || log.item_type === 'SERVICE';
+                      if (crmFilter === 'RETAIL') return log.reminder_type === 'RETAIL_REFILL_BELANJA' || log.item_type === 'PRODUCT';
+                      return true;
+                    })
+                    .map((log) => {
+                      const isJasa = log.reminder_type === 'JASA_PERAWATAN_BERKALA' || log.item_type === 'SERVICE';
+                      return (
+                        <div
+                          key={log.id}
+                          className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/60 flex flex-wrap items-center justify-between gap-4 transition-all hover:border-slate-300 dark:hover:border-slate-700"
+                        >
+                          <div className="space-y-1.5 flex-1 min-w-[280px]">
+                            <div className="flex items-center gap-2">
+                              <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase ${
+                                isJasa
+                                  ? 'bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800'
+                                  : 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
+                              }`}>
+                                {isJasa ? 'JASA: PERAWATAN BERKALA' : 'RETAIL: REFILL BELANJA'}
+                              </span>
+                              <span className="text-xs font-black text-slate-900 dark:text-white">{log.customer_name}</span>
+                              <span className="text-[11px] font-mono text-slate-500">({log.customer_phone})</span>
+                              <span className="text-[10px] bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded font-mono font-bold">
+                                Siklus: H+{log.due_days || 30} Hari
+                              </span>
+                            </div>
+                            <div className="text-xs text-slate-700 dark:text-slate-300 font-medium bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800">
+                              "{log.message_text}"
+                            </div>
+                          </div>
+
+                          <div className="flex items-center space-x-2 shrink-0">
+                            <a
+                              href={log.wa_me_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center space-x-1.5 cursor-pointer"
+                            >
+                              <MessageSquare className="w-3.5 h-3.5" />
+                              <span>Kirim via WhatsApp →</span>
+                            </a>
+                          </div>
+                        </div>
+                      );
+                    })}
                 </div>
               </div>
 

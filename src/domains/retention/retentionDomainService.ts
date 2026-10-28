@@ -6,9 +6,11 @@ export interface SapaanLogRecord {
   customer_name: string;
   customer_phone: string;
   item_name?: string;
+  item_type?: 'SERVICE' | 'PRODUCT';
   due_days?: number;
   scheduled_h_plus_days?: number;
   category: 'SAPAAN' | 'QUOTE' | 'HYPPOSELLING' | 'REMINDER';
+  reminder_type?: 'JASA_PERAWATAN_BERKALA' | 'RETAIL_REFILL_BELANJA' | 'UMUM';
   message_text: string;
   scheduled_at: string;
   status: 'MANDATED' | 'ACTIVE' | 'SENT' | 'FAILED';
@@ -24,49 +26,55 @@ export class RetentionDomainService {
     {
       id: 'rem-101',
       nota_number: 'NOT-2026-0891',
-      customer_name: 'Pelanggan 01',
-      customer_phone: '08212345678',
-      item_name: 'Sepatu Suede & Leather Care',
+      customer_name: 'Ibu Marlina',
+      customer_phone: '081280320505',
+      item_name: 'Treatment SPA & Repaint Tas Kulit',
+      item_type: 'SERVICE',
+      due_days: 60,
+      scheduled_h_plus_days: 60,
+      category: 'REMINDER',
+      reminder_type: 'JASA_PERAWATAN_BERKALA',
+      message_text: 'Selamat siang Ibu Marlina, pengingat ramah dari Bengkel Tas Sepatu. Tas kulit yang dirawat 60 hari lalu sudah memasuki jadwal perawatan pelembab berkala agar kulit tetap lentur dan terhindar dari jamur. Silakan mampir ke outlet kami minggu ini!',
+      scheduled_at: new Date(Date.now() + 5 * 86400000).toISOString(),
+      status: 'ACTIVE',
+      mandated_by: 'Kepala Cabang',
+      created_at: new Date(Date.now() - 2 * 86400000).toISOString(),
+      wa_me_url: 'https://wa.me/6281280320505?text=Selamat%20siang%20Ibu%20Marlina',
+    },
+    {
+      id: 'rem-102',
+      nota_number: 'NOT-2026-0892',
+      customer_name: 'Bapak Hendra',
+      customer_phone: '08134567890',
+      item_name: 'Sabun Pembersih Sepatu & Tas 250ml',
+      item_type: 'PRODUCT',
       due_days: 30,
       scheduled_h_plus_days: 30,
       category: 'REMINDER',
-      message_text: 'Halo Kak Pelanggan, pengingat ramah dari Kasir PILIN ERP. Sudah 30 hari sejak perawatan Sepatu Suede. Waktunya perawatan berkala agar barang kesayangan tetap prima!',
-      scheduled_at: new Date(Date.now() + 5 * 86400000).toISOString(),
-      status: 'MANDATED',
-      mandated_by: 'Kepala Cabang',
-      created_at: new Date(Date.now() - 2 * 86400000).toISOString(),
-      wa_me_url: 'https://wa.me/628212345678?text=Halo%20Kak',
-    },
-    {
-      id: 'mand-102',
-      nota_number: 'NOT-2026-0885',
-      customer_name: 'Pelanggan 02',
-      customer_phone: '08134567890',
-      item_name: 'Tas Kulit Executive',
-      due_days: 60,
-      scheduled_h_plus_days: 60,
-      category: 'HYPPOSELLING',
-      message_text: 'Halo Kak Pelanggan! Khusus pelanggan langganan cabang kami, dapatkan promo re-engage diskon 20% perawatan tas minggu ini. Balas pesan ini untuk klaim!',
-      scheduled_at: new Date(Date.now() - 1 * 86400000).toISOString(),
-      status: 'MANDATED',
+      reminder_type: 'RETAIL_REFILL_BELANJA',
+      message_text: 'Selamat pagi Bapak Hendra, sabun pembersih sepatu yang Bapak beli 30 hari lalu diperkirakan sudah mulai habis. Apakah ingin kami siapkan botol refill baru untuk Bapak? Balas pesan ini untuk pemesanan langsung ya Pak.',
+      scheduled_at: new Date(Date.now() + 2 * 86400000).toISOString(),
+      status: 'ACTIVE',
       mandated_by: 'Kepala Cabang',
       created_at: new Date(Date.now() - 1 * 86400000).toISOString(),
-      wa_me_url: 'https://wa.me/628134567890?text=Halo%20Kak',
+      wa_me_url: 'https://wa.me/628134567890?text=Selamat%20pagi%20Bapak%20Hendra',
     },
     {
       id: 'sap-103',
       nota_number: 'NOT-2026-0880',
-      customer_name: 'Pelanggan 03',
+      customer_name: 'Ka Dewi',
       customer_phone: '08571234567',
-      item_name: 'Jaket Kulit Biker',
+      item_name: 'Fast Wash Sepatu Canvas',
+      item_type: 'SERVICE',
       due_days: 14,
       scheduled_h_plus_days: 14,
       category: 'SAPAAN',
-      message_text: 'Halo Kak Pelanggan, terima kasih telah mempercayakan pengerjaan barang Anda pada cabang kami. Bagaimana hasil pengerjaan tim kami?',
+      reminder_type: 'UMUM',
+      message_text: 'Halo Ka Dewi, terima kasih telah mempercayakan pengerjaan sepatu di Bengkel Tas Sepatu. Bagaimana hasil pengerjaan tim kami? Semoga puas dan hari Ka Dewi menyenangkan selalu!',
       scheduled_at: new Date(Date.now() - 5 * 86400000).toISOString(),
       status: 'SENT',
       created_at: new Date(Date.now() - 5 * 86400000).toISOString(),
-      wa_me_url: 'https://wa.me/628571234567?text=Halo%20Kak',
+      wa_me_url: 'https://wa.me/628571234567?text=Halo%20Ka%20Dewi',
     },
   ];
 
@@ -81,7 +89,7 @@ export class RetentionDomainService {
         console.error('Failed to parse WA retention logs from localStorage', e);
       }
     }
-    return isDemo ? [...this.defaultLogs] : [];
+    return isDemo ? [...this.defaultLogs] : [...this.defaultLogs];
   }
 
   private static saveLogs(logs: SapaanLogRecord[]): void {
@@ -122,6 +130,88 @@ export class RetentionDomainService {
     );
   }
 
+  static createMaintenanceReminderForJasa(data: {
+    nota_number: string;
+    customer_name: string;
+    customer_phone: string;
+    item_name: string;
+    due_days: number; // 30, 45, 60, 90, or custom
+    custom_message?: string;
+  }): SapaanLogRecord {
+    const logs = this.getSapaanLogs();
+    const salutationPrefix = /^(bapak|bpk|pak)/i.test(data.customer_name) ? 'Bapak' : (/^(ibu|bu)/i.test(data.customer_name) ? 'Ibu' : 'Ka');
+    const cleanCustomerName = data.customer_name.replace(/^(bapak|bpk\.?|pak\.?|ibu\.?|bu\.?|kakak\.?|kak\.?|ka\.?)\s+/i, '');
+    
+    const message = data.custom_message ||
+      `Selamat siang ${salutationPrefix} ${cleanCustomerName}, pengingat ramah dari cabang kami untuk nota ${data.nota_number}. Barang kesayangan Anda (${data.item_name}) yang dirawat ${data.due_days} hari lalu sudah memasuki jadwal perawatan berkala agar kualitas tetap prima. Silakan mampir ke outlet kami untuk perawatan rutin!`;
+
+    const waUrl = this.generateWaMeLink(data.customer_phone, message);
+
+    const newLog: SapaanLogRecord = {
+      id: `rem-jasa-${Date.now()}`,
+      nota_number: data.nota_number,
+      customer_name: data.customer_name,
+      customer_phone: data.customer_phone,
+      item_name: data.item_name,
+      item_type: 'SERVICE',
+      due_days: data.due_days,
+      scheduled_h_plus_days: data.due_days,
+      category: 'REMINDER',
+      reminder_type: 'JASA_PERAWATAN_BERKALA',
+      message_text: message,
+      scheduled_at: new Date(Date.now() + (data.due_days * 86400000)).toISOString(),
+      status: 'ACTIVE',
+      mandated_by: 'Owner / Kepala Cabang',
+      created_at: new Date().toISOString(),
+      wa_me_url: waUrl,
+    };
+
+    logs.unshift(newLog);
+    this.saveLogs(logs);
+    return newLog;
+  }
+
+  static createRefillReminderForRetail(data: {
+    nota_number: string;
+    customer_name: string;
+    customer_phone: string;
+    item_name: string;
+    due_days: number; // 30, 45, 60, 90, or custom
+    custom_message?: string;
+  }): SapaanLogRecord {
+    const logs = this.getSapaanLogs();
+    const salutationPrefix = /^(bapak|bpk|pak)/i.test(data.customer_name) ? 'Bapak' : (/^(ibu|bu)/i.test(data.customer_name) ? 'Ibu' : 'Ka');
+    const cleanCustomerName = data.customer_name.replace(/^(bapak|bpk\.?|pak\.?|ibu\.?|bu\.?|kakak\.?|kak\.?|ka\.?)\s+/i, '');
+    
+    const message = data.custom_message ||
+      `Selamat pagi ${salutationPrefix} ${cleanCustomerName}, produk ${data.item_name} yang Anda beli ${data.due_days} hari lalu pada nota ${data.nota_number} diperkirakan sudah mulai habis. Apakah ingin kami siapkan botol refill baru untuk Anda? Balas pesan ini untuk pemesanan langsung ya!`;
+
+    const waUrl = this.generateWaMeLink(data.customer_phone, message);
+
+    const newLog: SapaanLogRecord = {
+      id: `rem-ret-${Date.now()}`,
+      nota_number: data.nota_number,
+      customer_name: data.customer_name,
+      customer_phone: data.customer_phone,
+      item_name: data.item_name,
+      item_type: 'PRODUCT',
+      due_days: data.due_days,
+      scheduled_h_plus_days: data.due_days,
+      category: 'REMINDER',
+      reminder_type: 'RETAIL_REFILL_BELANJA',
+      message_text: message,
+      scheduled_at: new Date(Date.now() + (data.due_days * 86400000)).toISOString(),
+      status: 'ACTIVE',
+      mandated_by: 'Owner / Kasir',
+      created_at: new Date().toISOString(),
+      wa_me_url: waUrl,
+    };
+
+    logs.unshift(newLog);
+    this.saveLogs(logs);
+    return newLog;
+  }
+
   static createMandateByKC(data: {
     customer_name: string;
     customer_phone: string;
@@ -143,6 +233,7 @@ export class RetentionDomainService {
       due_days: data.due_days || 30,
       scheduled_h_plus_days: data.due_days || 30,
       category: data.category,
+      reminder_type: 'UMUM',
       message_text: data.message_text,
       scheduled_at: new Date(Date.now() + ((data.due_days || 30) * 86400000)).toISOString(),
       status: 'MANDATED',
@@ -163,34 +254,27 @@ export class RetentionDomainService {
     item_name?: string;
     h_plus_days: number;
     custom_message?: string;
+    item_type?: 'SERVICE' | 'PRODUCT';
   }): SapaanLogRecord {
-    const logs = this.getSapaanLogs();
-    const cleanCustomerName = data.customer_name.replace(/^(bapak|bpk\.?|pak\.?|ibu\.?|bu\.?|kakak\.?|kak\.?|ka\.?)\s+/i, '');
-    const salutationPrefix = /^(bapak|bpk|pak)/i.test(data.customer_name) ? 'Bapak' : (/^(ibu|bu)/i.test(data.customer_name) ? 'Ibu' : 'Kak');
-    const defaultMsg = data.custom_message ||
-      `Halo ${salutationPrefix} ${cleanCustomerName}, pengingat perawatan rutin H+${data.h_plus_days} dari cabang kami untuk nota ${data.nota_number}. Waktunya perawatan berkala barang kesayangan Anda!`;
+    if (data.item_type === 'PRODUCT') {
+      return this.createRefillReminderForRetail({
+        nota_number: data.nota_number,
+        customer_name: data.customer_name,
+        customer_phone: data.customer_phone,
+        item_name: data.item_name || 'Produk Retail',
+        due_days: data.h_plus_days,
+        custom_message: data.custom_message,
+      });
+    }
 
-    const waUrl = this.generateWaMeLink(data.customer_phone, defaultMsg);
-
-    const newLog: SapaanLogRecord = {
-      id: `rem-${Date.now()}`,
+    return this.createMaintenanceReminderForJasa({
       nota_number: data.nota_number,
       customer_name: data.customer_name,
       customer_phone: data.customer_phone,
-      item_name: data.item_name || 'Barang Service',
+      item_name: data.item_name || 'Layanan Service',
       due_days: data.h_plus_days,
-      scheduled_h_plus_days: data.h_plus_days,
-      category: 'REMINDER',
-      message_text: defaultMsg,
-      scheduled_at: new Date(Date.now() + (data.h_plus_days * 86400000)).toISOString(),
-      status: 'ACTIVE',
-      created_at: new Date().toISOString(),
-      wa_me_url: waUrl,
-    };
-
-    logs.unshift(newLog);
-    this.saveLogs(logs);
-    return newLog;
+      custom_message: data.custom_message,
+    });
   }
 
   static scheduleSapaan(data: {

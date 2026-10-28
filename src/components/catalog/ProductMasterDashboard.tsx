@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { ServiceCatalogService, ServiceCatalogItem } from '@/domains/catalog/serviceCatalogService';
-import { Plus, Trash2, Edit3, Tag, Percent, DollarSign, Package, Wrench } from 'lucide-react';
+import { Plus, Trash2, Edit3, Tag, Percent, DollarSign, Package, Wrench, Clock, AlertTriangle, CheckCircle } from 'lucide-react';
 
 export function ProductMasterDashboard() {
   const [catalog, setCatalog] = useState<ServiceCatalogItem[]>([]);
@@ -17,6 +17,11 @@ export function ProductMasterDashboard() {
   const [hppPercent, setHppPercent] = useState<number | ''>(50);
   const [hppActual, setHppActual] = useState<number | ''>('');
   const [bahanBaku, setBahanBaku] = useState('');
+  
+  // Customizable CRM cycle duration & stock alerts
+  const [reminderDays, setReminderDays] = useState<number | ''>(30);
+  const [stockQty, setStockQty] = useState<number | ''>(10);
+  const [stockAlertThreshold, setStockAlertThreshold] = useState<number | ''>(5);
 
   const loadCatalog = () => {
     const items = ServiceCatalogService.getMasterCatalog();
@@ -36,6 +41,9 @@ export function ProductMasterDashboard() {
     setHppPercent(50);
     setHppActual('');
     setBahanBaku('');
+    setReminderDays(30);
+    setStockQty(10);
+    setStockAlertThreshold(5);
     setShowAddForm(true);
   };
 
@@ -48,6 +56,9 @@ export function ProductMasterDashboard() {
     setHppPercent(item.hpp_percent ?? 50);
     setHppActual(item.hpp || '');
     setBahanBaku(item.bahan_baku || '');
+    setReminderDays(item.reminder_days ?? 30);
+    setStockQty(item.stock_qty ?? 0);
+    setStockAlertThreshold(item.stock_alert_threshold ?? 5);
     setShowAddForm(true);
   };
 
@@ -70,6 +81,10 @@ export function ProductMasterDashboard() {
       computedHpp = Number(hppActual) || 0;
     }
 
+    const finalReminderDays = Number(reminderDays) || 30;
+    const finalStockQty = itemType === 'PRODUCT' ? (Number(stockQty) || 0) : 0;
+    const finalStockThreshold = itemType === 'PRODUCT' ? (Number(stockAlertThreshold) || 5) : 0;
+
     if (editingItem) {
       ServiceCatalogService.updateMasterService(editingItem.id, {
         nama,
@@ -79,6 +94,9 @@ export function ProductMasterDashboard() {
         hpp_percent: pct,
         item_type: itemType,
         bahan_baku: bahanBaku || (itemType === 'SERVICE' ? 'Jasa Operasional' : 'Bahan Baku Standar'),
+        reminder_days: finalReminderDays,
+        stock_qty: finalStockQty,
+        stock_alert_threshold: finalStockThreshold,
       });
     } else {
       ServiceCatalogService.addMasterService({
@@ -89,6 +107,9 @@ export function ProductMasterDashboard() {
         hpp_percent: pct,
         item_type: itemType,
         bahan_baku: bahanBaku || (itemType === 'SERVICE' ? 'Jasa Operasional' : 'Bahan Baku Standar'),
+        reminder_days: finalReminderDays,
+        stock_qty: finalStockQty,
+        stock_alert_threshold: finalStockThreshold,
       });
     }
 
@@ -99,12 +120,15 @@ export function ProductMasterDashboard() {
     setHppPercent(50);
     setHppActual('');
     setBahanBaku('');
+    setReminderDays(30);
+    setStockQty(10);
+    setStockAlertThreshold(5);
     setShowAddForm(false);
     loadCatalog();
   };
 
   const handleDelete = (id: string) => {
-    if (confirm('Hapus item ini dari Master Catalog?')) {
+    if (confirm('Apakah Anda yakin ingin menghapus catalog item ini?')) {
       ServiceCatalogService.deleteMasterService(id);
       loadCatalog();
     }
@@ -112,45 +136,56 @@ export function ProductMasterDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Header Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-4 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+      {/* Top Header Card */}
+      <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
-            Master Katalog (Product & Service & BOM)
-          </h2>
+          <h1 className="text-xl font-black text-[#0F2547] dark:text-white tracking-tight flex items-center gap-2">
+            <Tag className="w-5 h-5 text-[#F26522]" />
+            <span>Master Katalog Layanan & Produk Retail</span>
+          </h1>
         </div>
+
         <button
-          onClick={() => {
-            if (showAddForm) {
-              setShowAddForm(false);
-            } else {
-              handleOpenAdd();
-            }
-          }}
-          className="px-4 py-2 bg-[#F26522] hover:bg-[#d85416] text-white rounded-xl text-xs font-bold transition-all shadow flex items-center space-x-2"
+          onClick={handleOpenAdd}
+          className="px-4 py-2.5 bg-[#F26522] hover:bg-[#d95416] text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center space-x-2 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
-          <span>{showAddForm ? 'Tutup Form' : 'Tambah Product / Service'}</span>
+          <span>Tambah Item Baru</span>
         </button>
       </div>
 
-      {/* Add / Edit Form */}
+      {/* Add / Edit Form Modal Card */}
       {showAddForm && (
-        <form onSubmit={handleSaveService} className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
-          <h3 className="text-base font-bold text-slate-900 dark:text-white">
-            {editingItem ? `Form Edit Catalog Item (${editingItem.sku})` : 'Form Tambah Catalog Item'}
-          </h3>
+        <form
+          onSubmit={handleSaveService}
+          className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-lg space-y-5"
+        >
+          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+            <h2 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
+              {editingItem ? 'Edit Katalog Item' : 'Tambah Katalog Item Baru'}
+            </h2>
+            <button
+              type="button"
+              onClick={() => {
+                setShowAddForm(false);
+                setEditingItem(null);
+              }}
+              className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold cursor-pointer"
+            >
+              ✕ Batal
+            </button>
+          </div>
 
-          {/* Jenis Item Selector */}
+          {/* Type Selector: PRODUCT vs SERVICE */}
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-              Jenis Catalog Item
+              Pilih Tipe Item
             </label>
             <div className="flex space-x-3">
               <button
                 type="button"
                 onClick={() => setItemType('PRODUCT')}
-                className={`flex-1 py-2.5 px-4 rounded-xl border text-xs font-bold transition-all flex items-center justify-center space-x-2 ${
+                className={`flex-1 py-2.5 px-4 rounded-xl border text-xs font-bold transition-all flex items-center justify-center space-x-2 cursor-pointer ${
                   itemType === 'PRODUCT'
                     ? 'border-[#F26522] bg-[#F26522]/10 text-[#F26522]'
                     : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
@@ -163,14 +198,14 @@ export function ProductMasterDashboard() {
               <button
                 type="button"
                 onClick={() => setItemType('SERVICE')}
-                className={`flex-1 py-2.5 px-4 rounded-xl border text-xs font-bold transition-all flex items-center justify-center space-x-2 ${
+                className={`flex-1 py-2.5 px-4 rounded-xl border text-xs font-bold transition-all flex items-center justify-center space-x-2 cursor-pointer ${
                   itemType === 'SERVICE'
                     ? 'border-purple-600 bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-300'
                     : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
                 }`}
               >
                 <Wrench className="w-4 h-4" />
-                <span>SERVICE (Jasa / Pekerjaan)</span>
+                <span>SERVICE (Jasa / Pengerjaan)</span>
               </button>
             </div>
           </div>
@@ -185,7 +220,7 @@ export function ProductMasterDashboard() {
                 required
                 value={nama}
                 onChange={(e) => setNama(e.target.value)}
-                placeholder={itemType === 'PRODUCT' ? 'Nama produk...' : 'Nama layanan...'}
+                placeholder={itemType === 'PRODUCT' ? 'Contoh: Sabun Pembersih Sepatu 250ml' : 'Contoh: Cuci & Treatment Tas Kulit'}
                 className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#F26522]"
               />
             </div>
@@ -200,13 +235,115 @@ export function ProductMasterDashboard() {
                 min="1"
                 value={baseHarga}
                 onChange={(e) => setBaseHarga(e.target.value === '' ? '' : Number(e.target.value))}
-                placeholder="Harga jual..."
+                placeholder="Contoh: 75000"
                 className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#F26522]"
               />
             </div>
           </div>
 
-          {/* Mode HPP for Product */}
+          {/* CRM DURASI PENGINGAT (TIDAK TERKUNCI / BISA DIEDIT OWNER) */}
+          <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Clock className="w-4 h-4 text-[#F26522]" />
+                <span>
+                  {itemType === 'SERVICE'
+                    ? 'Siklus Pengingat Perawatan Berkala Konsumen (Hari)'
+                    : 'Siklus Pengingat Refill / Belanja Kembali Konsumen (Hari)'}
+                </span>
+              </label>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] text-slate-500 font-bold">Pilihan Cepat:</span>
+              {[30, 45, 60, 90].map((days) => (
+                <button
+                  type="button"
+                  key={days}
+                  onClick={() => setReminderDays(days)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                    reminderDays === days
+                      ? 'bg-[#F26522] text-white border-[#F26522] shadow-sm'
+                      : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-[#F26522]'
+                  }`}
+                >
+                  {days} Hari
+                </button>
+              ))}
+              <div className="flex items-center gap-2 ml-auto">
+                <span className="text-[11px] text-slate-500 font-bold">Atau Ketik Kustom:</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="365"
+                  value={reminderDays}
+                  onChange={(e) => setReminderDays(e.target.value === '' ? '' : Number(e.target.value))}
+                  placeholder="Hari..."
+                  className="w-20 px-2 py-1.5 text-xs text-center font-bold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#F26522]"
+                />
+                <span className="text-xs text-slate-500 font-bold">Hari</span>
+              </div>
+            </div>
+          </div>
+
+          {/* RETAIL ONLY: STOK & PERINGATAN REORDER OWNER */}
+          {itemType === 'PRODUCT' && (
+            <div className="bg-amber-500/10 border border-amber-500/30 p-4 rounded-xl space-y-4">
+              <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-bold text-xs">
+                <AlertTriangle className="w-4 h-4" />
+                <span>Pengaturan Stok & Pengingat Reorder ke Vendor (Khusus Retail)</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Jumlah Stok Tersedia Saat Ini (Pcs)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={stockQty}
+                    onChange={(e) => setStockQty(e.target.value === '' ? '' : Number(e.target.value))}
+                    placeholder="Contoh: 15"
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#F26522]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Batas Minimum Stok untuk Peringatan Owner (Pcs)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    {[2, 5, 10].map((t) => (
+                      <button
+                        type="button"
+                        key={t}
+                        onClick={() => setStockAlertThreshold(t)}
+                        className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                          stockAlertThreshold === t
+                            ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                            : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                        }`}
+                      >
+                        {t} Pcs
+                      </button>
+                    ))}
+                    <input
+                      type="number"
+                      min="1"
+                      value={stockAlertThreshold}
+                      onChange={(e) => setStockAlertThreshold(e.target.value === '' ? '' : Number(e.target.value))}
+                      placeholder="Batas..."
+                      className="w-20 px-2 py-1.5 text-xs text-center font-bold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#F26522] ml-auto"
+                    />
+                    <span className="text-xs text-slate-500 font-bold">Pcs</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Mode HPP */}
           {itemType === 'PRODUCT' ? (
             <>
               <div>
@@ -217,7 +354,7 @@ export function ProductMasterDashboard() {
                   <button
                     type="button"
                     onClick={() => setHppMode('PERCENTAGE')}
-                    className={`flex-1 py-2.5 px-4 rounded-xl border text-xs font-bold transition-all flex items-center justify-center space-x-2 ${
+                    className={`flex-1 py-2.5 px-4 rounded-xl border text-xs font-bold transition-all flex items-center justify-center space-x-2 cursor-pointer ${
                       hppMode === 'PERCENTAGE'
                         ? 'border-[#F26522] bg-[#F26522]/10 text-[#F26522]'
                         : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
@@ -230,7 +367,7 @@ export function ProductMasterDashboard() {
                   <button
                     type="button"
                     onClick={() => setHppMode('ACTUAL_COST')}
-                    className={`flex-1 py-2.5 px-4 rounded-xl border text-xs font-bold transition-all flex items-center justify-center space-x-2 ${
+                    className={`flex-1 py-2.5 px-4 rounded-xl border text-xs font-bold transition-all flex items-center justify-center space-x-2 cursor-pointer ${
                       hppMode === 'ACTUAL_COST'
                         ? 'border-[#F26522] bg-[#F26522]/10 text-[#F26522]'
                         : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
@@ -251,22 +388,22 @@ export function ProductMasterDashboard() {
                     <input
                       type="number"
                       required
-                      min="0"
+                      min="1"
                       max="100"
                       value={hppPercent}
                       onChange={(e) => setHppPercent(e.target.value === '' ? '' : Number(e.target.value))}
-                      placeholder="50"
+                      placeholder="Contoh: 50"
                       className="w-32 px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#F26522]"
                     />
-                    <span className="text-xs font-bold text-slate-600 dark:text-slate-400">
-                      Calculated HPP: Rp {baseHarga !== '' ? Math.round((Number(baseHarga) * (Number(hppPercent) || 0)) / 100).toLocaleString('id-ID') : 0}
+                    <span className="text-xs text-slate-500 font-bold">
+                      Est. HPP: Rp {Math.round((Number(baseHarga || 0) * Number(hppPercent || 0)) / 100).toLocaleString('id-ID')}
                     </span>
                   </div>
                 </div>
               ) : (
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                    Harga Beli / Cost HPP (Rp)
+                    Nominal Harga Beli Satuan (Rp)
                   </label>
                   <input
                     type="number"
@@ -274,7 +411,7 @@ export function ProductMasterDashboard() {
                     min="0"
                     value={hppActual}
                     onChange={(e) => setHppActual(e.target.value === '' ? '' : Number(e.target.value))}
-                    placeholder="Nominal HPP..."
+                    placeholder="Contoh: 35000"
                     className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#F26522]"
                   />
                 </div>
@@ -283,14 +420,15 @@ export function ProductMasterDashboard() {
           ) : (
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                Service Cost / HPP Opsional (Rp)
+                Estimasi Biaya Operasional / Modal Jasa (Rp)
               </label>
               <input
                 type="number"
+                required
                 min="0"
                 value={hppActual}
                 onChange={(e) => setHppActual(e.target.value === '' ? '' : Number(e.target.value))}
-                placeholder="Biaya material service jika ada (default Rp 0)"
+                placeholder="Contoh: 25000"
                 className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#F26522]"
               />
             </div>
@@ -316,15 +454,15 @@ export function ProductMasterDashboard() {
                 setShowAddForm(false);
                 setEditingItem(null);
               }}
-              className="px-4 py-2 rounded-xl text-xs font-bold border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+              className="px-4 py-2 rounded-xl text-xs font-bold border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
             >
               Batal
             </button>
             <button
               type="submit"
-              className="px-5 py-2 rounded-xl text-xs font-bold bg-[#0F2547] dark:bg-[#F26522] text-white hover:opacity-90 shadow"
+              className="px-5 py-2 rounded-xl text-xs font-bold bg-[#0F2547] dark:bg-[#F26522] text-white hover:opacity-90 shadow cursor-pointer"
             >
-              {editingItem ? 'Simpan Perubahan' : 'Simpan Catalog Item'}
+              {editingItem ? 'Simpan Perubahan' : 'Simpan Katalog Item'}
             </button>
           </div>
         </form>
@@ -339,10 +477,10 @@ export function ProductMasterDashboard() {
                 <th className="px-5 py-3.5">Jenis</th>
                 <th className="px-5 py-3.5">SKU & Item</th>
                 <th className="px-5 py-3.5">Harga Jual</th>
-                <th className="px-5 py-3.5">Mode HPP</th>
+                <th className="px-5 py-3.5">Siklus Pengingat CRM</th>
+                <th className="px-5 py-3.5">Stok & Peringatan</th>
                 <th className="px-5 py-3.5">Nominal HPP</th>
                 <th className="px-5 py-3.5">Est. Gross Profit</th>
-                <th className="px-5 py-3.5">BOM Material / Deskripsi</th>
                 <th className="px-5 py-3.5 text-right">Aksi</th>
               </tr>
             </thead>
@@ -350,6 +488,8 @@ export function ProductMasterDashboard() {
               {catalog.map((item) => {
                 const gp = item.base_harga - item.hpp;
                 const type = item.item_type || 'SERVICE';
+                const isLowStock = type === 'PRODUCT' && item.stock_alert_threshold && (item.stock_qty ?? 0) <= item.stock_alert_threshold;
+
                 return (
                   <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
                     <td className="px-5 py-3.5">
@@ -369,13 +509,39 @@ export function ProductMasterDashboard() {
                       Rp {item.base_harga.toLocaleString('id-ID')}
                     </td>
                     <td className="px-5 py-3.5">
-                      <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                        item.hpp_mode === 'PERCENTAGE'
-                          ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300'
-                          : 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold ${
+                        type === 'SERVICE'
+                          ? 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800'
+                          : 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
                       }`}>
-                        {type === 'SERVICE' ? 'SERVICE REVENUE' : item.hpp_mode === 'PERCENTAGE' ? `Persentase (${item.hpp_percent || 0}%)` : 'Harga Beli'}
+                        <Clock className="w-3 h-3" />
+                        <span>
+                          {type === 'SERVICE'
+                            ? `Perawatan H+${item.reminder_days || 30}`
+                            : `Refill H+${item.reminder_days || 30}`}
+                        </span>
                       </span>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      {type === 'PRODUCT' ? (
+                        <div className="space-y-0.5">
+                          <div className={`font-bold text-xs flex items-center gap-1.5 ${
+                            isLowStock ? 'text-rose-600 dark:text-rose-400 font-black' : 'text-slate-900 dark:text-white'
+                          }`}>
+                            <span>{item.stock_qty ?? 0} Pcs</span>
+                            {isLowStock && (
+                              <span className="px-1.5 py-0.2 bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 rounded text-[9px] font-extrabold uppercase">
+                                Menipis ⚠️
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-slate-500">
+                            Min: {item.stock_alert_threshold ?? 5} Pcs
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-[11px] text-slate-400 font-mono">- (Jasa)</span>
+                      )}
                     </td>
                     <td className="px-5 py-3.5 font-semibold text-slate-700 dark:text-slate-300">
                       Rp {item.hpp.toLocaleString('id-ID')}
@@ -383,21 +549,18 @@ export function ProductMasterDashboard() {
                     <td className="px-5 py-3.5 font-bold text-emerald-600 dark:text-emerald-400">
                       Rp {gp.toLocaleString('id-ID')}
                     </td>
-                    <td className="px-5 py-3.5 text-slate-600 dark:text-slate-400 max-w-xs truncate">
-                      {item.bahan_baku || '-'}
-                    </td>
                     <td className="px-5 py-3.5 text-right">
                       <div className="flex items-center justify-end space-x-1">
                         <button
                           onClick={() => handleOpenEdit(item)}
-                          className="p-1.5 text-slate-400 hover:text-blue-500 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors"
+                          className="p-1.5 text-slate-400 hover:text-blue-500 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors cursor-pointer"
                           title="Edit Item"
                         >
                           <Edit3 className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleDelete(item.id)}
-                          className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
+                          className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
                           title="Hapus Item"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -414,4 +577,3 @@ export function ProductMasterDashboard() {
     </div>
   );
 }
-

@@ -15,6 +15,7 @@ import { BroadcastCameraModal } from '../broadcast/BroadcastCameraModal';
 import { WorkQueueService, WorkOrderQueueItem } from '@/domains/work/workQueueService';
 import { RetentionDomainService, SapaanLogRecord } from '@/domains/retention/retentionDomainService';
 import { BusinessProfileService } from '@/domains/business/businessProfileService';
+import { ServiceCatalogService } from '@/domains/catalog/serviceCatalogService';
 import { ServiceOrderStatus } from '@/lib/types';
 import { Salutation, extractSalutation, formatCustomerName } from '@/lib/salutationHelper';
 
@@ -299,6 +300,42 @@ export function KasirTransactionWorkspace({
       };
       setCustomerList(prev => [newC, ...prev]);
       setSelectedCustomerId(newC.id);
+    }
+
+    // Auto-schedule sharp CRM reminder based on item type and owner-configured cycle days (30, 45, 60, 90, or custom)
+    try {
+      const catalog = ServiceCatalogService.getMasterCatalog();
+      const matched = catalog.find(c => c.nama.toLowerCase() === selectedService.toLowerCase());
+      const itemType = matched?.item_type || 'SERVICE';
+      const reminderDays = matched?.reminder_days || 30;
+
+      if (itemType === 'SERVICE') {
+        RetentionDomainService.createMaintenanceReminderForJasa({
+          nota_number: newTrx.id,
+          customer_name: finalCustomerName,
+          customer_phone: customerPhone,
+          item_name: selectedService,
+          due_days: reminderDays,
+        });
+      } else {
+        RetentionDomainService.createRefillReminderForRetail({
+          nota_number: newTrx.id,
+          customer_name: finalCustomerName,
+          customer_phone: customerPhone,
+          item_name: selectedService,
+          due_days: reminderDays,
+        });
+
+        // Decrement stock for retail product
+        if (matched) {
+          const currentStock = matched.stock_qty ?? 10;
+          const newStock = Math.max(0, currentStock - qty);
+          ServiceCatalogService.updateMasterService(matched.id, { stock_qty: newStock });
+        }
+      }
+      setWaLogs(RetentionDomainService.getSapaanLogs(isDemo));
+    } catch (err) {
+      console.error('Failed to auto-schedule CRM reminder:', err);
     }
 
     setFeedback({ type: 'success', text: `Transaksi '${newTrx.id}' untuk ${finalCustomerName} sebesar Rp ${total.toLocaleString('id-ID')} berhasil diproses LUNAS.` });
