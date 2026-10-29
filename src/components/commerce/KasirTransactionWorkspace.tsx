@@ -6,7 +6,7 @@ import {
   AlertCircle, AlertTriangle, Send, FileText, UserCheck, Users, MessageSquare, 
   Sparkles, Camera, Image as ImageIcon, Search, Phone, Printer, X, Filter,
   Home, Settings, Edit3, Bookmark, LogOut, HelpCircle, Info, User, Save, PhoneCall, ChevronRight, Sun, Moon,
-  PlusCircle, Wrench, BarChart3, UserPlus, ArrowRight
+  PlusCircle, Wrench, BarChart3, UserPlus, ArrowRight, Trash2, Plus
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useTheme } from '@/components/ThemeProvider';
@@ -30,6 +30,20 @@ interface KasirTransactionWorkspaceProps {
   onLogout?: () => void;
 }
 
+export interface PosOrderItem {
+  id: string;
+  catalog_id?: string;
+  service: string;
+  qty: number;
+  price: number;
+  pricing_unit: string;
+  item_type: 'PRODUCT' | 'SERVICE';
+  duration_val?: number;
+  duration_unit?: 'JAM' | 'HARI' | 'MINGGU';
+  estimatedCompletion?: string;
+  subtotal: number;
+}
+
 interface TransactionRecord {
   id: string;
   customer: string;
@@ -39,11 +53,15 @@ interface TransactionRecord {
   pricing_unit?: string;
   price: number;
   total: number;
+  payment_type?: 'LUNAS' | 'DP';
+  dp_amount?: number;
+  remaining_amount?: number;
   method: 'CASH' | 'QRIS_TRANSFER';
   status: string;
   time: string;
   estimatedCompletion?: string;
   itemPhotoUrl?: string | null;
+  items?: PosOrderItem[];
 }
 
 export function KasirTransactionWorkspace({
@@ -144,10 +162,26 @@ export function KasirTransactionWorkspace({
   const [catalog, setCatalog] = useState<ServiceCatalogItem[]>(() => {
     return isDemo ? ServiceCatalogService.getDefaultCatalogForDemo() : ServiceCatalogService.getMasterCatalog();
   });
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>(isDemo ? 'cust-101' : '');
+  const [isNewCustomerMode, setIsNewCustomerMode] = useState<boolean>(() => {
+    return !isDemo;
+  });
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>(isDemo ? 'cust-101' : 'NEW_CUSTOMER');
   const [selectedSalutation, setSelectedSalutation] = useState<Salutation>(isDemo ? 'Bapak' : 'Kak');
   const [customerName, setCustomerName] = useState<string>(isDemo ? 'Budi Santoso' : '');
   const [customerPhone, setCustomerPhone] = useState<string>(isDemo ? '08123456789' : '');
+
+  // Auto-switch to new customer mode if database is empty
+  React.useEffect(() => {
+    if (customerList.length === 0) {
+      setIsNewCustomerMode(true);
+      setSelectedCustomerId('NEW_CUSTOMER');
+    }
+  }, [customerList.length]);
+
+  // Multi-Item Order State (Bisa Tambah Lebih dari 1 Layanan)
+  const [orderItems, setOrderItems] = useState<PosOrderItem[]>([]);
+
+  // Item Picker State (Untuk Menambahkan Item ke Nota)
   const [selectedService, setSelectedService] = useState<string>(() => {
     const items = isDemo ? ServiceCatalogService.getDefaultCatalogForDemo() : ServiceCatalogService.getMasterCatalog();
     return items[0]?.nama || '';
@@ -165,7 +199,74 @@ export function KasirTransactionWorkspace({
     return '';
   });
   const [qty, setQty] = useState<number>(1);
+
+  // Photo Evidence State (Kamera atau Galeri)
+  const [itemPhotoUrl, setItemPhotoUrl] = useState<string | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+
+  // Payment & DP State
+  const [paymentType, setPaymentType] = useState<'LUNAS' | 'DP'>('LUNAS');
+  const [dpAmount, setDpAmount] = useState<number | ''>('');
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'QRIS_TRANSFER'>('CASH');
+
+  const handlePhotoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setItemPhotoUrl(event.target.result as string);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleAddOrderItem = () => {
+    if (!selectedService) return;
+    const found = catalog.find(c => c.nama === selectedService);
+    if (!found) return;
+
+    const finalPrice = found.base_harga;
+    const finalQty = Math.max(1, qty);
+    const itemSubtotal = finalPrice * finalQty;
+    const isService = found.item_type !== 'PRODUCT';
+
+    const newItem: PosOrderItem = {
+      id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      catalog_id: found.id,
+      service: found.nama,
+      qty: finalQty,
+      price: finalPrice,
+      pricing_unit: (found.pricing_unit || (isService ? 'sepasang' : 'pc')) as string,
+      item_type: found.item_type || 'SERVICE',
+      duration_val: isService ? (found.duration_val || 1) : undefined,
+      duration_unit: isService ? (found.duration_unit || 'HARI') : undefined,
+      estimatedCompletion: isService ? (estimatedCompletion || calculateDefaultCompletion(found.duration_val, found.duration_unit, found.duration_hours)) : undefined,
+      subtotal: itemSubtotal,
+    };
+
+    setOrderItems(prev => [...prev, newItem]);
+    setQty(1);
+    setFeedback({ type: 'success', text: `Layanan '${newItem.service}' (${newItem.qty} ${newItem.pricing_unit}) berhasil ditambahkan ke daftar nota.` });
+  };
+
+  const handleRemoveOrderItem = (itemId: string) => {
+    setOrderItems(prev => prev.filter(it => it.id !== itemId));
+  };
+
+  const totalBill = useMemo(() => {
+    if (orderItems.length > 0) {
+      return orderItems.reduce((acc, it) => acc + it.subtotal, 0);
+    }
+    return (servicePrice || 0) * (qty || 1);
+  }, [orderItems, servicePrice, qty]);
+
+  const finalDpAmount = paymentType === 'LUNAS'
+    ? totalBill
+    : (dpAmount === '' ? 0 : Number(dpAmount));
+  const remainingAmount = Math.max(0, totalBill - finalDpAmount);
 
   React.useEffect(() => {
     const refreshCatalog = () => {
@@ -296,10 +397,12 @@ export function KasirTransactionWorkspace({
   const handlePOSCustomerSelect = (customerId: string) => {
     setSelectedCustomerId(customerId);
     if (customerId === 'NEW_CUSTOMER') {
+      setIsNewCustomerMode(true);
       setCustomerName('');
       setCustomerPhone('');
       setSelectedSalutation('Kak');
     } else {
+      setIsNewCustomerMode(false);
       const found = customerList.find(c => c.id === customerId);
       if (found) {
         const { salutation, cleanName } = extractSalutation(found.name);
@@ -314,46 +417,91 @@ export function KasirTransactionWorkspace({
     }
   };
 
-  // Create Transaction Handler
-  const handleCreateTransaction = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (catalog.length === 0 || !selectedService) {
-      setFeedback({ type: 'error', text: 'Tidak dapat memproses transaksi karena belum ada layanan/produk yang dipilih. Owner belum menambahkan data di Master Produk/Layanan.' });
-      return;
-    }
+  // Create Transaction Handler (Mendukung Multi-Layanan, Foto Kamera/Galeri, dan Lunas/DP)
+  const handleCreateTransaction = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+
     if (!customerName.trim() || !customerPhone.trim()) {
       setFeedback({ type: 'error', text: 'Nama dan Nomor WhatsApp Pelanggan wajib diisi.' });
       return;
     }
 
+    // Determine final items to include in this nota
+    let finalItems: PosOrderItem[] = [...orderItems];
+    if (finalItems.length === 0) {
+      if (catalog.length === 0 || !selectedService) {
+        setFeedback({ type: 'error', text: 'Silakan pilih layanan atau produk terlebih dahulu.' });
+        return;
+      }
+      const found = catalog.find(c => c.nama === selectedService);
+      if (found) {
+        const isService = found.item_type !== 'PRODUCT';
+        const finalQty = Math.max(1, qty);
+        finalItems = [{
+          id: `item-${Date.now()}`,
+          catalog_id: found.id,
+          service: found.nama,
+          qty: finalQty,
+          price: found.base_harga,
+          pricing_unit: (found.pricing_unit || (isService ? 'sepasang' : 'pc')) as string,
+          item_type: found.item_type || 'SERVICE',
+          duration_val: isService ? (found.duration_val || 1) : undefined,
+          duration_unit: isService ? (found.duration_unit || 'HARI') : undefined,
+          estimatedCompletion: isService ? (estimatedCompletion || calculateDefaultCompletion(found.duration_val, found.duration_unit, found.duration_hours)) : undefined,
+          subtotal: found.base_harga * finalQty,
+        }];
+      }
+    }
+
+    if (finalItems.length === 0) {
+      setFeedback({ type: 'error', text: 'Nota harus memiliki minimal satu layanan atau produk.' });
+      return;
+    }
+
+    const currentTotal = finalItems.reduce((acc, it) => acc + it.subtotal, 0);
+    const computedDp = paymentType === 'LUNAS' ? currentTotal : (Number(dpAmount) || 0);
+    const computedRemaining = Math.max(0, currentTotal - computedDp);
+
+    if (paymentType === 'DP' && computedDp <= 0) {
+      setFeedback({ type: 'error', text: 'Silakan masukkan nominal DP (Uang Muka) lebih besar dari 0.' });
+      return;
+    }
+
     const finalCustomerName = formatCustomerName(customerName, selectedSalutation);
-    const total = servicePrice * qty;
-    const catalogItem = catalog.find(c => c.nama.toLowerCase() === selectedService.toLowerCase());
-    const isServiceItem = catalogItem?.item_type !== 'PRODUCT';
-    const finalEstimatedCompletion = isServiceItem
-      ? (estimatedCompletion || calculateDefaultCompletion(catalogItem?.duration_val, catalogItem?.duration_unit, catalogItem?.duration_hours))
-      : undefined;
+    const serviceSummary = finalItems.length === 1 
+      ? finalItems[0].service 
+      : `${finalItems[0].service} + ${finalItems.length - 1} layanan lain`;
+    
+    // Find earliest or longest estimated completion if services exist
+    const serviceWithSla = finalItems.find(it => it.estimatedCompletion);
+    const finalEstimatedCompletion = serviceWithSla ? serviceWithSla.estimatedCompletion : undefined;
 
     const newTrx: TransactionRecord = {
       id: `NOT-2026-0${recentTransactions.length + 893}`,
       customer: finalCustomerName,
-      phone: customerPhone,
-      service: selectedService,
-      qty: qty,
-      pricing_unit: catalogItem?.pricing_unit || (catalogItem?.item_type === 'PRODUCT' ? 'unit' : 'sepasang'),
-      price: servicePrice,
-      total: total,
+      phone: customerPhone.trim(),
+      service: serviceSummary,
+      qty: finalItems.reduce((sum, it) => sum + it.qty, 0),
+      pricing_unit: finalItems[0]?.pricing_unit || 'unit',
+      price: finalItems[0]?.price || 0,
+      total: currentTotal,
+      payment_type: paymentType,
+      dp_amount: computedDp,
+      remaining_amount: computedRemaining,
       method: paymentMethod,
-      status: 'COMPLETED',
+      status: paymentType === 'LUNAS' ? 'COMPLETED' : 'DP_PAID',
       time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
       estimatedCompletion: finalEstimatedCompletion,
+      itemPhotoUrl: itemPhotoUrl,
+      items: finalItems,
     };
 
     setRecentTransactions([newTrx, ...recentTransactions]);
-    setActiveReceiptTrx(newTrx); // Open Thermal Receipt Modal
+    setActiveReceiptTrx(newTrx); // Buka Thermal Receipt Modal
+    setShowPosModal(false); // Tutup Form Buat Nota Pop-up
 
-    // If new customer, register into customerList automatically with formal salutation
-    if (selectedCustomerId === 'NEW_CUSTOMER' || !customerList.some(c => c.phone === customerPhone)) {
+    // Auto-save new customer to customerList if unregistered
+    if (isNewCustomerMode || !customerList.some(c => c.phone === customerPhone.trim())) {
       const newC = {
         id: `cust-${Date.now()}`,
         name: finalCustomerName,
@@ -366,43 +514,60 @@ export function KasirTransactionWorkspace({
       setSelectedCustomerId(newC.id);
     }
 
-    // Auto-schedule sharp CRM reminder based on item type and owner-configured cycle days (30, 45, 60, 90, or custom)
+    // Auto-schedule sharp CRM reminder & decrement retail stock for each item in nota
     try {
-      const catalog = ServiceCatalogService.getMasterCatalog();
-      const matched = catalog.find(c => c.nama.toLowerCase() === selectedService.toLowerCase());
-      const itemType = matched?.item_type || 'SERVICE';
-      const reminderDays = matched?.reminder_days || 30;
+      const masterCatalog = ServiceCatalogService.getMasterCatalog();
+      finalItems.forEach(it => {
+        const matched = masterCatalog.find(c => c.nama.toLowerCase() === it.service.toLowerCase());
+        const itemType = it.item_type || matched?.item_type || 'SERVICE';
+        const reminderDays = matched?.reminder_days || 30;
 
-      if (itemType === 'SERVICE') {
-        RetentionDomainService.createMaintenanceReminderForJasa({
-          nota_number: newTrx.id,
-          customer_name: finalCustomerName,
-          customer_phone: customerPhone,
-          item_name: selectedService,
-          due_days: reminderDays,
-        });
-      } else {
-        RetentionDomainService.createRefillReminderForRetail({
-          nota_number: newTrx.id,
-          customer_name: finalCustomerName,
-          customer_phone: customerPhone,
-          item_name: selectedService,
-          due_days: reminderDays,
-        });
+        if (itemType === 'SERVICE') {
+          RetentionDomainService.createMaintenanceReminderForJasa({
+            nota_number: newTrx.id,
+            customer_name: finalCustomerName,
+            customer_phone: customerPhone.trim(),
+            item_name: it.service,
+            due_days: reminderDays,
+          });
+        } else {
+          RetentionDomainService.createRefillReminderForRetail({
+            nota_number: newTrx.id,
+            customer_name: finalCustomerName,
+            customer_phone: customerPhone.trim(),
+            item_name: it.service,
+            due_days: reminderDays,
+          });
 
-        // Decrement stock for retail product
-        if (matched) {
-          const currentStock = matched.stock_qty ?? 10;
-          const newStock = Math.max(0, currentStock - qty);
-          ServiceCatalogService.updateMasterService(matched.id, { stock_qty: newStock });
+          // Decrement stock for retail product
+          if (matched) {
+            const currentStock = matched.stock_qty ?? 10;
+            const newStock = Math.max(0, currentStock - it.qty);
+            ServiceCatalogService.updateMasterService(matched.id, { stock_qty: newStock });
+          }
         }
-      }
+      });
+
       setWaLogs(RetentionDomainService.getSapaanLogs(isDemo));
     } catch (err) {
-      console.error('Failed to auto-schedule CRM reminder:', err);
+      console.error('Failed to process item CRM reminders:', err);
     }
 
-    setFeedback({ type: 'success', text: `Transaksi '${newTrx.id}' untuk ${finalCustomerName} sebesar Rp ${total.toLocaleString('id-ID')} berhasil diproses LUNAS.` });
+    // Reset Form for next transaction
+    setOrderItems([]);
+    setItemPhotoUrl(null);
+    setPaymentType('LUNAS');
+    setDpAmount('');
+    setQty(1);
+
+    const paymentFeedback = paymentType === 'LUNAS'
+      ? `LUNAS (Rp ${currentTotal.toLocaleString('id-ID')})`
+      : `DP Rp ${computedDp.toLocaleString('id-ID')} (Sisa: Rp ${computedRemaining.toLocaleString('id-ID')})`;
+
+    setFeedback({
+      type: 'success',
+      text: `Nota '${newTrx.id}' untuk ${finalCustomerName} berhasil dibuat (${paymentFeedback}). Struk siap dicetak atau dikirim via WA.`,
+    });
   };
 
   const handleAddCustomer = (e: React.FormEvent) => {
@@ -499,6 +664,18 @@ export function KasirTransactionWorkspace({
   const generateWaReceiptText = (trx: TransactionRecord) => {
     const profile = BusinessProfileService.getProfile(businessId);
     const completionLine = trx.estimatedCompletion ? `\nEstimasi Selesai : ${trx.estimatedCompletion}` : '';
+
+    const itemsLines = trx.items && trx.items.length > 0
+      ? trx.items.map(it => `• ${it.service} (${it.qty} ${it.pricing_unit || 'x'}) : Rp ${it.subtotal.toLocaleString('id-ID')}`).join('\n')
+      : `• ${trx.service} (${trx.qty} ${trx.pricing_unit || 'x'}) : Rp ${trx.total.toLocaleString('id-ID')}`;
+
+    const paymentLines = trx.payment_type === 'DP'
+      ? `Total Tagihan : Rp ${trx.total.toLocaleString('id-ID')}
+DP Diterima   : Rp ${(trx.dp_amount || 0).toLocaleString('id-ID')} (${trx.method})
+SISA TAGIHAN  : Rp ${(trx.remaining_amount || 0).toLocaleString('id-ID')} (Pelunasan saat pengambilan)`
+      : `Total Tagihan : Rp ${trx.total.toLocaleString('id-ID')}
+Pembayaran    : ${trx.method} (LUNAS)`;
+
     return `*${profile.business_name.toUpperCase()}*
 ${profile.business_address}
 No. WA Bisnis Resmi: ${profile.business_phone}
@@ -508,9 +685,11 @@ Waktu    : ${trx.time}
 Kasir    : ${actorName}
 Pelanggan: ${trx.customer} (${trx.phone})${completionLine}
 --------------------------------
-Item: ${trx.qty} ${trx.pricing_unit || 'x'} ${trx.service}
-Total: Rp ${trx.total.toLocaleString('id-ID')}
-Pembayaran: ${trx.method} (LUNAS)
+RINCIAN PESANAN:
+${itemsLines}
+--------------------------------
+STATUS PEMBAYARAN:
+${paymentLines}
 --------------------------------
 Syarat & Ketentuan:
 ${profile.terms_and_conditions}
@@ -1905,22 +2084,54 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
                       )}
                     </div>
 
+                    {/* Rincian Pesanan / Layanan */}
                     <div className="border-t border-dashed border-slate-400 pt-2 space-y-1">
-                      <div className="flex justify-between font-bold">
-                        <span>{activeReceiptTrx.qty} {activeReceiptTrx.pricing_unit || 'x'} {activeReceiptTrx.service}</span>
-                        <span>Rp {activeReceiptTrx.total.toLocaleString('id-ID')}</span>
-                      </div>
+                      {activeReceiptTrx.items && activeReceiptTrx.items.length > 0 ? (
+                        activeReceiptTrx.items.map((it, idx) => (
+                          <div key={it.id || idx} className="flex justify-between text-[10px]">
+                            <span>{it.qty} {it.pricing_unit || 'x'} {it.service}</span>
+                            <span>Rp {it.subtotal.toLocaleString('id-ID')}</span>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="flex justify-between font-bold">
+                          <span>{activeReceiptTrx.qty} {activeReceiptTrx.pricing_unit || 'x'} {activeReceiptTrx.service}</span>
+                          <span>Rp {activeReceiptTrx.total.toLocaleString('id-ID')}</span>
+                        </div>
+                      )}
                     </div>
 
-                    <div className="border-t border-dashed border-slate-400 pt-2 text-xs">
+                    {/* Pre-service photo thumbnail if available */}
+                    {activeReceiptTrx.itemPhotoUrl && (
+                      <div className="border-t border-dashed border-slate-400 pt-2 text-center">
+                        <div className="text-[9px] font-bold uppercase text-slate-600 mb-1">Bukti Foto Barang</div>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={activeReceiptTrx.itemPhotoUrl} alt="Foto Barang" className="w-24 h-24 mx-auto object-cover rounded border border-slate-300" />
+                      </div>
+                    )}
+
+                    <div className="border-t border-dashed border-slate-400 pt-2 text-xs space-y-0.5">
                       <div className="flex justify-between font-black">
                         <span>TOTAL:</span>
                         <span>Rp {activeReceiptTrx.total.toLocaleString('id-ID')}</span>
                       </div>
-                      <div className="flex justify-between text-[10px] mt-0.5">
-                        <span>PEMBAYARAN:</span>
-                        <span className="font-bold">{activeReceiptTrx.method} (LUNAS)</span>
-                      </div>
+                      {activeReceiptTrx.payment_type === 'DP' ? (
+                        <>
+                          <div className="flex justify-between text-[10px] text-emerald-800 font-bold">
+                            <span>DP DITERIMA:</span>
+                            <span>Rp {(activeReceiptTrx.dp_amount || 0).toLocaleString('id-ID')} ({activeReceiptTrx.method})</span>
+                          </div>
+                          <div className="flex justify-between text-[10px] text-amber-900 font-bold bg-amber-50 px-1 py-0.5 rounded border border-amber-200">
+                            <span>SISA TAGIHAN:</span>
+                            <span>Rp {(activeReceiptTrx.remaining_amount || 0).toLocaleString('id-ID')}</span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex justify-between text-[10px] mt-0.5">
+                          <span>PEMBAYARAN:</span>
+                          <span className="font-bold">{activeReceiptTrx.method} (LUNAS)</span>
+                        </div>
+                      )}
                     </div>
 
                     <div className="border-t border-dashed border-slate-400 pt-2 text-left text-[9px] text-slate-700 whitespace-pre-wrap leading-tight">
@@ -1958,176 +2169,561 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
 
       {/* MODAL: POS / BUAT NOTA */}
       {showPosModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-xl w-full p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-2xl w-full max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150">
+            {/* Header Modal with prominent X close button */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60 shrink-0">
               <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <PlusCircle className="w-5 h-5 text-emerald-500" />
-                <span>Input Transaksi (Buat Nota POS Kasir)</span>
+                <span>Buat Nota Transaksi Kasir</span>
               </h3>
-              <button onClick={() => setShowPosModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
+              <button
+                type="button"
+                onClick={() => setShowPosModal(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 cursor-pointer transition-colors"
+                title="Tutup Form (✕)"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <form onSubmit={(e) => { handleCreateTransaction(e); setShowPosModal(false); }} className="space-y-4">
-              <div>
-                <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">Pilih Pelanggan dari Database:</label>
-                <select
-                  value={selectedCustomerId}
-                  onChange={e => handlePOSCustomerSelect(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white font-bold"
-                >
-                  {customerList.map(c => (
-                    <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>
-                  ))}
-                  <option value="NEW_CUSTOMER">+ Input Pelanggan Baru / Unregistered</option>
-                </select>
-              </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs font-medium text-slate-700 dark:text-slate-400">Nama Pelanggan:</label>
-                    <div className="inline-flex rounded-lg p-0.5 bg-slate-200 dark:bg-slate-800">
-                      {(['Bapak', 'Ibu', 'Kak'] as const).map(sal => (
-                        <button
-                          key={sal}
-                          type="button"
-                          onClick={() => setSelectedSalutation(sal)}
-                          className={`px-2 py-0.5 text-[11px] font-bold rounded-md transition-all ${
-                            selectedSalutation === sal
-                              ? 'bg-emerald-600 text-white shadow-sm'
-                              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                          }`}
-                        >
-                          {sal}
-                        </button>
-                      ))}
-                    </div>
+            {/* Scrollable Form Body */}
+            <form onSubmit={handleCreateTransaction} className="p-5 overflow-y-auto space-y-5 flex-1">
+              {/* SEKSI 1: DATA KONSUMEN */}
+              <div className="space-y-3 bg-slate-50 dark:bg-slate-950/40 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <User className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    <span>Data Konsumen</span>
                   </div>
-                  <div className="relative flex items-center">
-                    <span className="absolute left-3 text-xs font-bold text-emerald-600 dark:text-emerald-400 select-none">
-                      {selectedSalutation}
-                    </span>
-                    <input
-                      type="text"
-                      required
-                      value={customerName}
-                      onChange={e => {
-                        const val = e.target.value;
-                        const { salutation, cleanName } = extractSalutation(val);
-                        if (salutation) {
-                          setSelectedSalutation(salutation);
-                          setCustomerName(cleanName);
-                        } else {
-                          setCustomerName(val);
-                        }
-                      }}
-                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg py-2.5 pr-2.5 pl-14 text-xs text-slate-900 dark:text-white font-medium"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">No. WhatsApp:</label>
-                  <input
-                    type="text"
-                    required
-                    value={customerPhone}
-                    onChange={e => setCustomerPhone(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white font-mono"
-                  />
-                </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">Layanan Jasa / Produk:</label>
-                  {catalog.length === 0 ? (
-                    <div className="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-500 font-semibold">
-                      (Belum ada layanan/produk)
+                  {customerList.length > 0 ? (
+                    <div className="inline-flex rounded-lg p-0.5 bg-slate-200 dark:bg-slate-800 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsNewCustomerMode(false);
+                          if (customerList[0]) handlePOSCustomerSelect(customerList[0].id);
+                        }}
+                        className={`px-2.5 py-1 font-bold rounded-md transition-all ${
+                          !isNewCustomerMode
+                            ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-300 shadow-sm'
+                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                      >
+                        Pilih dari Database ({customerList.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsNewCustomerMode(true);
+                          setSelectedCustomerId('NEW_CUSTOMER');
+                          setCustomerName('');
+                          setCustomerPhone('');
+                        }}
+                        className={`px-2.5 py-1 font-bold rounded-md transition-all ${
+                          isNewCustomerMode
+                            ? 'bg-emerald-600 text-white shadow-sm'
+                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                      >
+                        + Input Konsumen Baru
+                      </button>
                     </div>
                   ) : (
-                    <select
-                      value={selectedService}
-                      onChange={e => {
-                        const chosen = e.target.value;
-                        setSelectedService(chosen);
-                        const found = catalog.find(c => c.nama === chosen);
-                        setServicePrice(found ? found.base_harga : 0);
-                        if (found && found.item_type !== 'PRODUCT') {
-                          setEstimatedCompletion(calculateDefaultCompletion(found.duration_val, found.duration_unit, found.duration_hours));
-                        } else {
-                          setEstimatedCompletion('');
-                        }
-                      }}
-                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white"
-                    >
-                      <option value="" disabled>-- Pilih Layanan / Produk --</option>
-                      {catalog.map(item => (
-                        <option key={item.id} value={item.nama}>
-                          {item.nama} (Rp {item.base_harga.toLocaleString('id-ID')} / {item.pricing_unit || (item.item_type === 'PRODUCT' ? 'unit' : 'sepasang')}) {item.item_type === 'PRODUCT' ? `[Stok: ${item.stock_qty ?? 0}]` : `[Est. ${formatDurationLabel(item.duration_val, item.duration_unit) || ((item.duration_hours || 24) + ' Jam')}]`}
-                        </option>
-                      ))}
-                    </select>
+                    <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+                      Mode Konsumen Baru (Database Kosong)
+                    </span>
                   )}
                 </div>
+
+                {!isNewCustomerMode && customerList.length > 0 ? (
+                  <div>
+                    <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">
+                      Pilih Pelanggan dari Database:
+                    </label>
+                    <select
+                      value={selectedCustomerId}
+                      onChange={e => handlePOSCustomerSelect(e.target.value)}
+                      className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white font-bold focus:outline-none focus:border-emerald-500 cursor-pointer"
+                    >
+                      {customerList.map(c => (
+                        <option key={c.id} value={c.id}>
+                          👤 {c.name} ({c.phone})
+                        </option>
+                      ))}
+                      <option value="NEW_CUSTOMER">✏️ + Input Konsumen Baru Lainnya</option>
+                    </select>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-medium text-slate-700 dark:text-slate-400">Nama Pelanggan:</label>
+                        <div className="inline-flex rounded-lg p-0.5 bg-slate-200 dark:bg-slate-800">
+                          {(['Bapak', 'Ibu', 'Kak'] as const).map(sal => (
+                            <button
+                              key={sal}
+                              type="button"
+                              onClick={() => setSelectedSalutation(sal)}
+                              className={`px-2 py-0.5 text-[11px] font-bold rounded-md transition-all ${
+                                selectedSalutation === sal
+                                  ? 'bg-emerald-600 text-white shadow-sm'
+                                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                              }`}
+                            >
+                              {sal}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="relative flex items-center">
+                        <span className="absolute left-3 text-xs font-bold text-emerald-600 dark:text-emerald-400 select-none">
+                          {selectedSalutation}
+                        </span>
+                        <input
+                          type="text"
+                          required
+                          placeholder="Nama Konsumen"
+                          value={customerName}
+                          onChange={e => {
+                            const val = e.target.value;
+                            const { salutation, cleanName } = extractSalutation(val);
+                            if (salutation) {
+                              setSelectedSalutation(salutation);
+                              setCustomerName(cleanName);
+                            } else {
+                              setCustomerName(val);
+                            }
+                          }}
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg py-2.5 pr-2.5 pl-14 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">
+                        No. WhatsApp:
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Contoh: 081234567890"
+                        value={customerPhone}
+                        onChange={e => setCustomerPhone(e.target.value)}
+                        className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white font-mono focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* SEKSI 2: MULTI-LAYANAN & PRODUK */}
+              <div className="space-y-3 bg-slate-50 dark:bg-slate-950/40 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <ShoppingCart className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                    <span>Layanan &amp; Produk ({orderItems.length} Dipilih)</span>
+                  </div>
+                  {orderItems.length > 0 && (
+                    <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">
+                      Subtotal: Rp {orderItems.reduce((acc, it) => acc + it.subtotal, 0).toLocaleString('id-ID')}
+                    </span>
+                  )}
+                </div>
+
+                {/* Service Picker Controls */}
+                {catalog.length === 0 ? (
+                  <div className="w-full bg-slate-100 dark:bg-slate-900 border border-dashed border-slate-300 dark:border-slate-800 rounded-lg p-3 text-xs text-slate-500 text-center font-semibold">
+                    Katalog layanan/produk masih kosong. Silakan daftarkan layanan di Pengaturan Layanan.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      <div className="sm:col-span-2">
+                        <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">
+                          Pilih Layanan / Produk:
+                        </label>
+                        <select
+                          value={selectedService}
+                          onChange={e => {
+                            const chosen = e.target.value;
+                            setSelectedService(chosen);
+                            const found = catalog.find(c => c.nama === chosen);
+                            setServicePrice(found ? found.base_harga : 0);
+                            if (found && found.item_type !== 'PRODUCT') {
+                              setEstimatedCompletion(calculateDefaultCompletion(found.duration_val, found.duration_unit, found.duration_hours));
+                            } else {
+                              setEstimatedCompletion('');
+                            }
+                          }}
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white font-bold focus:outline-none focus:border-blue-500 cursor-pointer"
+                        >
+                          {catalog.map(item => (
+                            <option key={item.id} value={item.nama}>
+                              {item.nama} — Rp {item.base_harga.toLocaleString('id-ID')} / {item.pricing_unit || (item.item_type === 'PRODUCT' ? 'unit' : 'sepasang')} {item.item_type === 'PRODUCT' ? `[Stok: ${item.stock_qty ?? 0}]` : `[Est. ${formatDurationLabel(item.duration_val, item.duration_unit) || ((item.duration_hours || 24) + ' Jam')}]`}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">
+                          Jumlah ({catalog.find(c => c.nama === selectedService)?.pricing_unit || 'Qty'}):
+                        </label>
+                        <div className="flex gap-2">
+                          <input
+                            type="number"
+                            min={1}
+                            value={qty}
+                            onChange={e => setQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white font-bold text-center focus:outline-none focus:border-blue-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* SLA Estimate Input for Services */}
+                    {catalog.find(c => c.nama === selectedService)?.item_type !== 'PRODUCT' && selectedService && (
+                      <div className="p-2.5 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 rounded-xl space-y-1">
+                        <label className="text-xs font-bold text-purple-900 dark:text-purple-300 flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                          <span>Target Waktu Selesai Pengerjaan (SLA Jasa):</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={estimatedCompletion}
+                          onChange={e => setEstimatedCompletion(e.target.value)}
+                          placeholder="Contoh: Besok, 30 Okt 2026, 17:00 WIB"
+                          className="w-full bg-white dark:bg-slate-900 border border-purple-300 dark:border-purple-700 rounded-lg p-2 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-purple-500"
+                        />
+                      </div>
+                    )}
+
+                    {/* Button to add item to list */}
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={handleAddOrderItem}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-95"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Tambah Layanan ke Nota</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Daftar Item yang Sudah Dimasukkan */}
+                {orderItems.length > 0 ? (
+                  <div className="space-y-2 border-t border-slate-200 dark:border-slate-800 pt-3">
+                    <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase">
+                      Daftar Layanan Dalam Nota:
+                    </div>
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                      {orderItems.map((it, idx) => (
+                        <div
+                          key={it.id || idx}
+                          className="flex items-center justify-between p-2.5 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 text-xs shadow-sm"
+                        >
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-slate-900 dark:text-white">{it.service}</span>
+                              <span className="text-[10px] px-1.5 py-0.2 rounded font-extrabold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                                {it.qty} {it.pricing_unit}
+                              </span>
+                              {it.item_type === 'PRODUCT' ? (
+                                <span className="text-[9px] px-1.5 py-0.2 rounded font-extrabold bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+                                  RETAIL
+                                </span>
+                              ) : (
+                                <span className="text-[9px] px-1.5 py-0.2 rounded font-extrabold bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300">
+                                  JASA
+                                </span>
+                              )}
+                            </div>
+                            {it.estimatedCompletion && (
+                              <div className="text-[10px] text-purple-700 dark:text-purple-400 flex items-center gap-1">
+                                <Clock className="w-3 h-3 inline" />
+                                <span>Est. Selesai: {it.estimatedCompletion}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <span className="font-black text-slate-900 dark:text-white">
+                              Rp {it.subtotal.toLocaleString('id-ID')}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveOrderItem(it.id)}
+                              className="text-rose-500 hover:text-rose-700 dark:hover:text-rose-400 p-1 rounded hover:bg-rose-50 dark:hover:bg-rose-950 cursor-pointer transition-colors"
+                              title="Hapus Layanan"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  catalog.length > 0 && (
+                    <div className="p-2.5 bg-slate-100 dark:bg-slate-900/60 rounded-lg border border-dashed border-slate-300 dark:border-slate-800 text-[11px] text-slate-500 text-center">
+                      Belum ada layanan yang dimasukkan. Anda dapat klik <b>Tambah Layanan ke Nota</b> di atas untuk menambahkan lebih dari 1 layanan.
+                    </div>
+                  )
+                )}
+              </div>
+
+              {/* SEKSI 3: BUKTI FOTO BARANG (KAMERA / GALERI) */}
+              <div className="space-y-3 bg-slate-50 dark:bg-slate-950/40 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <Camera className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    <span>Bukti Foto Barang / Pakaian (Sebelum Pengerjaan)</span>
+                  </div>
+                  {itemPhotoUrl && (
+                    <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                      ✓ Foto Terlampir
+                    </span>
+                  )}
+                </div>
+
+                {/* Hidden File Inputs for Camera and Gallery */}
+                <input
+                  ref={cameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handlePhotoFileChange}
+                  className="hidden"
+                />
+                <input
+                  ref={galleryInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePhotoFileChange}
+                  className="hidden"
+                />
+
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => cameraInputRef.current?.click()}
+                    className="px-3.5 py-2 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold rounded-xl text-xs flex items-center gap-1.5 border border-slate-300 dark:border-slate-700 shadow-sm cursor-pointer transition-all active:scale-95"
+                  >
+                    <Camera className="w-4 h-4 text-emerald-500" />
+                    <span>Ambil Foto Kamera</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => galleryInputRef.current?.click()}
+                    className="px-3.5 py-2 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold rounded-xl text-xs flex items-center gap-1.5 border border-slate-300 dark:border-slate-700 shadow-sm cursor-pointer transition-all active:scale-95"
+                  >
+                    <ImageIcon className="w-4 h-4 text-blue-500" />
+                    <span>Pilih dari Galeri</span>
+                  </button>
+
+                  {itemPhotoUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setItemPhotoUrl(null)}
+                      className="px-3 py-2 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 font-bold rounded-xl text-xs flex items-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      <span>Hapus Foto</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Photo Preview Thumbnail */}
+                {itemPhotoUrl && (
+                  <div className="pt-1 flex items-center gap-3">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={itemPhotoUrl}
+                      alt="Bukti Foto Barang"
+                      className="w-20 h-20 object-cover rounded-xl border-2 border-emerald-500 shadow-sm"
+                    />
+                    <div className="text-xs space-y-0.5">
+                      <div className="font-bold text-slate-900 dark:text-white">Foto Bukti Barang Siap</div>
+                      <div className="text-[11px] text-slate-500">Foto akan tersimpan pada nota fisik &amp; riwayat SPK.</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* SEKSI 4: PEMBAYARAN & DP (UANG MUKA) */}
+              <div className="space-y-3 bg-slate-50 dark:bg-slate-950/40 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800">
+                <div className="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <DollarSign className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <span>Pembayaran &amp; DP (Uang Muka)</span>
+                </div>
+
+                {/* Toggle Pembayaran: LUNAS vs DP */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPaymentType('LUNAS');
+                      setDpAmount('');
+                    }}
+                    className={`py-2.5 rounded-xl font-bold text-xs transition-all border ${
+                      paymentType === 'LUNAS'
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                        : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    LUNAS (100%)
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPaymentType('DP');
+                      if (dpAmount === '') {
+                        setDpAmount(Math.round(totalBill * 0.5));
+                      }
+                    }}
+                    className={`py-2.5 rounded-xl font-bold text-xs transition-all border ${
+                      paymentType === 'DP'
+                        ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
+                        : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    DP (Uang Muka)
+                  </button>
+                </div>
+
+                {/* DP Input & Quick Percentage Buttons */}
+                {paymentType === 'DP' && (
+                  <div className="space-y-2 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-amber-900 dark:text-amber-300">
+                        Nominal DP Diterima (Rp):
+                      </label>
+                      <div className="flex gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setDpAmount(Math.round(totalBill * 0.3))}
+                          className="px-2 py-0.5 bg-white dark:bg-slate-800 text-[11px] font-bold rounded border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-slate-700 cursor-pointer"
+                        >
+                          30%
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDpAmount(Math.round(totalBill * 0.5))}
+                          className="px-2 py-0.5 bg-white dark:bg-slate-800 text-[11px] font-bold rounded border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-slate-700 cursor-pointer"
+                        >
+                          50%
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDpAmount(Math.round(totalBill * 0.7))}
+                          className="px-2 py-0.5 bg-white dark:bg-slate-800 text-[11px] font-bold rounded border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-slate-700 cursor-pointer"
+                        >
+                          70%
+                        </button>
+                      </div>
+                    </div>
+
+                    <input
+                      type="number"
+                      min={1}
+                      max={totalBill}
+                      value={dpAmount}
+                      onChange={e => {
+                        const v = e.target.value;
+                        setDpAmount(v === '' ? '' : Math.max(0, parseInt(v, 10) || 0));
+                      }}
+                      className="w-full bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white font-bold focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                )}
+
+                {/* Metode Pembayaran: Tunai vs QRIS */}
                 <div>
                   <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">
-                    Jumlah ({catalog.find(c => c.nama === selectedService)?.pricing_unit || 'Qty'}):
+                    Metode Pembayaran ({paymentType === 'DP' ? 'Uang Muka' : 'Pelunasan'}):
                   </label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={qty}
-                    disabled={catalog.length === 0}
-                    onChange={e => setQty(parseInt(e.target.value, 10) || 1)}
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white disabled:opacity-50"
-                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod('CASH')}
+                      className={`py-2 px-3 rounded-lg text-xs font-bold border transition-all ${
+                        paymentMethod === 'CASH'
+                          ? 'bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 border-slate-800 dark:border-slate-200 shadow-sm'
+                          : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700'
+                      }`}
+                    >
+                      Tunai (Cash / Laci Kasir)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod('QRIS_TRANSFER')}
+                      className={`py-2 px-3 rounded-lg text-xs font-bold border transition-all ${
+                        paymentMethod === 'QRIS_TRANSFER'
+                          ? 'bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 border-slate-800 dark:border-slate-200 shadow-sm'
+                          : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700'
+                      }`}
+                    >
+                      Nontunai (QRIS / Transfer)
+                    </button>
+                  </div>
+                </div>
+
+                {/* Ringkasan Biaya & Sisa Tagihan */}
+                <div className="p-3.5 bg-slate-100 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 space-y-1.5">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-bold text-slate-600 dark:text-slate-400">TOTAL TAGIHAN:</span>
+                    <span className="font-black text-slate-900 dark:text-white text-base">
+                      Rp {totalBill.toLocaleString('id-ID')}
+                    </span>
+                  </div>
+
+                  {paymentType === 'DP' ? (
+                    <>
+                      <div className="flex justify-between items-center text-xs text-emerald-600 dark:text-emerald-400 font-bold">
+                        <span>DP DITERIMA ({paymentMethod === 'CASH' ? 'Tunai' : 'QRIS'}):</span>
+                        <span>Rp {finalDpAmount.toLocaleString('id-ID')}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-xs text-amber-800 dark:text-amber-400 font-black pt-1.5 border-t border-slate-200 dark:border-slate-800">
+                        <span>SISA TAGIHAN (PELUNASAN):</span>
+                        <span className="text-base text-amber-700 dark:text-amber-400">
+                          Rp {remainingAmount.toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex justify-between items-center text-[11px] text-emerald-600 dark:text-emerald-400 font-bold">
+                      <span>STATUS PEMBAYARAN:</span>
+                      <span>LUNAS ({paymentMethod === 'CASH' ? 'Tunai' : 'QRIS'})</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* JASA: Target Waktu Selesai Pengerjaan Modal */}
-              {catalog.find(c => c.nama === selectedService)?.item_type !== 'PRODUCT' && selectedService && (
-                <div className="p-3 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 rounded-xl space-y-2">
-                  <label className="text-xs font-bold text-purple-900 dark:text-purple-300 flex items-center gap-1.5">
-                    <Clock className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                    <span>Target Waktu Selesai Pengerjaan (SLA Layanan Jasa)</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={estimatedCompletion}
-                    onChange={e => setEstimatedCompletion(e.target.value)}
-                    placeholder="Contoh: Besok, 30 Okt 2026, 17:00 WIB"
-                    className="w-full bg-white dark:bg-slate-900 border border-purple-300 dark:border-purple-700 rounded-lg p-2 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-purple-500"
-                  />
-                </div>
-              )}
-
-              <div>
-                <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">Metode Pembayaran:</label>
-                <select
-                  value={paymentMethod}
-                  onChange={e => setPaymentMethod(e.target.value as any)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white"
+              {/* Action Buttons in Modal Footer */}
+              <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowPosModal(false)}
+                  className="px-5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-xs text-slate-700 dark:text-slate-300 transition-all cursor-pointer"
                 >
-                  <option value="CASH">Tunai (Cash / Laci Kasir)</option>
-                  <option value="QRIS_TRANSFER">Nontunai (QRIS / Bank Transfer)</option>
-                </select>
-              </div>
+                  ✕ Batal
+                </button>
 
-              <div className="p-4 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 flex justify-between items-center">
-                <span className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase">Total Pembayaran:</span>
-                <span className="text-xl font-black text-emerald-600 dark:text-emerald-400">Rp {(servicePrice * qty).toLocaleString('id-ID')}</span>
+                <button
+                  type="submit"
+                  disabled={catalog.length === 0 && orderItems.length === 0}
+                  className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:cursor-not-allowed text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center gap-2 cursor-pointer active:scale-95"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>{catalog.length === 0 && orderItems.length === 0 ? 'Layanan Belum Tersedia' : 'Simpan Nota & Buka Cetak / Kirim WA'}</span>
+                </button>
               </div>
-
-              <button
-                type="submit"
-                disabled={catalog.length === 0 || !selectedService}
-                className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:cursor-not-allowed text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>{catalog.length === 0 ? 'Layanan Belum Ditambahkan' : 'Simpan Transaksi & Cetak Nota'}</span>
-              </button>
             </form>
           </div>
         </div>
