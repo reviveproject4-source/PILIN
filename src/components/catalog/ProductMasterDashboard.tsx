@@ -16,6 +16,7 @@ const PRICING_UNITS: { value: string; label: string }[] = [
   { value: 'helai', label: 'helai' },
   { value: 'cm', label: 'cm' },
   { value: 'gram', label: 'gram' },
+  { value: 'kg', label: 'kg' },
   { value: 'set', label: 'set' },
 ];
 

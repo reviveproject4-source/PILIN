@@ -10,6 +10,7 @@ export type PricingUnit =
   | 'helai'
   | 'cm'
   | 'gram'
+  | 'kg'
   | 'set';
 
 export type DurationUnit = 'JAM' | 'HARI' | 'MINGGU';
