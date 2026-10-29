@@ -1,3 +1,31 @@
+export type PricingUnit =
+  | 'unit'
+  | 'pc'
+  | 'sepasang'
+  | 'stel'
+  | 'lembar'
+  | 'barang'
+  | 'paket'
+  | 'm2'
+  | 'helai'
+  | 'cm'
+  | 'gram'
+  | 'set';
+
+export type DurationUnit = 'JAM' | 'HARI' | 'MINGGU';
+
+export function durationToHours(val: number = 1, unit: DurationUnit = 'HARI'): number {
+  if (unit === 'JAM') return Math.max(1, Math.round(val));
+  if (unit === 'MINGGU') return Math.max(1, Math.round(val * 24 * 7));
+  return Math.max(1, Math.round(val * 24)); // HARI
+}
+
+export function formatDurationLabel(val?: number, unit?: DurationUnit): string {
+  if (!val) return '-';
+  const u = unit ? unit.toLowerCase() : 'hari';
+  return `${val} ${u.charAt(0).toUpperCase() + u.slice(1)}`;
+}
+
 export interface ServiceCatalogItem {
   id: string;
   business_id: string;
@@ -8,11 +36,14 @@ export interface ServiceCatalogItem {
   hpp_mode?: 'PERCENTAGE' | 'ACTUAL_COST';
   hpp_percent?: number;
   item_type?: 'PRODUCT' | 'SERVICE';
+  pricing_unit?: PricingUnit | string; // unit/pc/sepasang/stel/lembar/barang/paket/m2/helai/cm/gram/set
+  duration_val?: number; // Nilai durasi fleksibel (bebas diatur owner)
+  duration_unit?: DurationUnit; // 'JAM' | 'HARI' | 'MINGGU'
   bahan_baku?: string;
   reminder_days?: number; // Customizable cycle days: 30, 45, 60, 90, or custom days
   stock_alert_threshold?: number; // Min threshold for low stock alert to owner
   stock_qty?: number; // Current on-hand quantity
-  duration_hours?: number; // Estimasi Waktu Selesai Pengerjaan (Khusus Jasa)
+  duration_hours?: number; // Estimasi Waktu Selesai Pengerjaan dalam Jam
 }
 
 const DEFAULT_CATALOG: ServiceCatalogItem[] = [
@@ -26,9 +57,12 @@ const DEFAULT_CATALOG: ServiceCatalogItem[] = [
     hpp_mode: 'ACTUAL_COST',
     hpp_percent: 0,
     item_type: 'SERVICE',
+    pricing_unit: 'sepasang',
+    duration_val: 1,
+    duration_unit: 'HARI',
     bahan_baku: 'Sabun Khusus Sepatu 50ml, Microfiber 1 pcs',
     reminder_days: 30,
-    duration_hours: 24, // 1 Hari
+    duration_hours: 24,
   },
   {
     id: 'srv-00000000-0000-0000-0000-000000000002',
@@ -40,9 +74,12 @@ const DEFAULT_CATALOG: ServiceCatalogItem[] = [
     hpp_mode: 'ACTUAL_COST',
     hpp_percent: 0,
     item_type: 'SERVICE',
+    pricing_unit: 'barang',
+    duration_val: 2,
+    duration_unit: 'HARI',
     bahan_baku: 'Cat Khusus Leather 30ml, Liquid Cleaner 100ml',
     reminder_days: 60,
-    duration_hours: 48, // 2 Hari
+    duration_hours: 48,
   },
   {
     id: 'srv-00000000-0000-0000-0000-000000000003',
@@ -54,9 +91,12 @@ const DEFAULT_CATALOG: ServiceCatalogItem[] = [
     hpp_mode: 'ACTUAL_COST',
     hpp_percent: 0,
     item_type: 'SERVICE',
+    pricing_unit: 'paket',
+    duration_val: 3,
+    duration_unit: 'HARI',
     bahan_baku: 'Minyak Pelembab Leather 50ml, Nano Coating Spray 10ml',
     reminder_days: 90,
-    duration_hours: 72, // 3 Hari
+    duration_hours: 72,
   },
   {
     id: 'prod-00000000-0000-0000-0000-000000000004',
@@ -68,6 +108,7 @@ const DEFAULT_CATALOG: ServiceCatalogItem[] = [
     hpp_mode: 'PERCENTAGE',
     hpp_percent: 50,
     item_type: 'PRODUCT',
+    pricing_unit: 'pc',
     bahan_baku: 'Kemasan Botol 250ml + Formula Sabun Organik',
     reminder_days: 30, // Estimasi habis dalam 30 hari
     stock_qty: 3, // Low stock sample!
@@ -83,6 +124,7 @@ const DEFAULT_CATALOG: ServiceCatalogItem[] = [
     hpp_mode: 'PERCENTAGE',
     hpp_percent: 50,
     item_type: 'PRODUCT',
+    pricing_unit: 'pc',
     bahan_baku: 'Kaleng Aerosol 150ml Anti Air',
     reminder_days: 45, // Estimasi habis dalam 45 hari
     stock_qty: 14,
@@ -180,6 +222,10 @@ export class ServiceCatalogService {
       computedHpp = Math.round((service.base_harga * service.hpp_percent) / 100);
     }
 
+    const durationVal = service.duration_val ?? (service.duration_hours ? Math.max(1, Math.round(service.duration_hours / 24)) : 1);
+    const durationUnit = service.duration_unit ?? (service.duration_hours && service.duration_hours < 24 ? 'JAM' : 'HARI');
+    const computedHours = service.duration_hours ?? (service.item_type === 'PRODUCT' ? undefined : durationToHours(durationVal, durationUnit));
+
     const newService: ServiceCatalogItem = {
       ...service,
       id: `srv-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -187,8 +233,11 @@ export class ServiceCatalogService {
       sku: `${prefix}-${nextNum}`,
       hpp: computedHpp,
       item_type: service.item_type || 'SERVICE',
+      pricing_unit: service.pricing_unit || (service.item_type === 'PRODUCT' ? 'pc' : 'sepasang'),
+      duration_val: service.item_type === 'PRODUCT' ? undefined : durationVal,
+      duration_unit: service.item_type === 'PRODUCT' ? undefined : durationUnit,
+      duration_hours: computedHours,
       reminder_days: service.reminder_days || 30,
-      duration_hours: service.duration_hours !== undefined ? service.duration_hours : (service.item_type === 'PRODUCT' ? undefined : 24),
       stock_qty: service.stock_qty !== undefined ? service.stock_qty : 0,
       stock_alert_threshold: service.stock_alert_threshold !== undefined ? service.stock_alert_threshold : 5,
     };

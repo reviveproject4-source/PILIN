@@ -5,6 +5,7 @@ import { Building2, Phone, Mail, Users, Rocket, ShieldCheck, User, Wrench, Shopp
 import { TenantService } from '@/domains/tenant/tenantService';
 import { BusinessProfileService } from '@/domains/business/businessProfileService';
 import { submitOwnerOnboardingAction } from '@/app/actions/onboardingActions';
+import { durationToHours, DurationUnit } from '@/domains/catalog/serviceCatalogService';
 
 interface TenantOnboardingModalProps {
   onSuccess: () => void;
@@ -17,7 +18,8 @@ export function TenantOnboardingModal({ onSuccess }: TenantOnboardingModalProps)
   const [email, setEmail] = useState('');
   const [employeeCount, setEmployeeCount] = useState('1-5');
   const [businessType, setBusinessType] = useState<'JASA' | 'RETAIL' | 'HYBRID'>('JASA');
-  const [defaultServiceDurationHours, setDefaultServiceDurationHours] = useState<number>(24);
+  const [durationVal, setDurationVal] = useState<number>(1);
+  const [durationUnit, setDurationUnit] = useState<DurationUnit>('HARI');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -48,6 +50,10 @@ export function TenantOnboardingModal({ onSuccess }: TenantOnboardingModalProps)
     setErrorMessage(null);
 
     try {
+      const computedDurationHours = (businessType === 'JASA' || businessType === 'HYBRID')
+        ? durationToHours(durationVal, durationUnit)
+        : undefined;
+
       // 1. Submit to Supabase database (pilin_prospects & platform_customers)
       const res = await submitOwnerOnboardingAction({
         ownerName: ownerName.trim(),
@@ -56,7 +62,7 @@ export function TenantOnboardingModal({ onSuccess }: TenantOnboardingModalProps)
         email: email.trim(),
         employeeCount,
         businessType,
-        defaultServiceDurationHours: (businessType === 'JASA' || businessType === 'HYBRID') ? defaultServiceDurationHours : undefined,
+        defaultServiceDurationHours: computedDurationHours,
       });
 
       if (!res.success) {
@@ -73,14 +79,14 @@ export function TenantOnboardingModal({ onSuccess }: TenantOnboardingModalProps)
         email: email.trim(),
         employeeCount,
         businessType,
-        defaultServiceDurationHours: (businessType === 'JASA' || businessType === 'HYBRID') ? defaultServiceDurationHours : undefined,
+        defaultServiceDurationHours: computedDurationHours,
       });
 
       BusinessProfileService.updateProfile('tenant-001', {
         business_name: created.businessName,
         business_phone: created.contactNumber,
         business_type: businessType,
-        default_service_duration_hours: (businessType === 'JASA' || businessType === 'HYBRID') ? defaultServiceDurationHours : undefined,
+        default_service_duration_hours: computedDurationHours,
       });
 
       onSuccess();
@@ -248,28 +254,33 @@ export function TenantOnboardingModal({ onSuccess }: TenantOnboardingModalProps)
             <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl space-y-2.5">
               <label className="text-xs font-bold text-slate-300 block flex items-center gap-1.5">
                 <Clock className="w-4 h-4 text-[#F26522]" />
-                <span>Estimasi Standar Waktu Selesai Pengerjaan (Target SLA Jasa)</span>
+                <span>Estimasi Standar Waktu Selesai Pengerjaan (Layanan Jasa)</span>
               </label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {[
-                  { label: '1 Jam (Express)', hours: 1 },
-                  { label: '3 Jam (Same Day)', hours: 3 },
-                  { label: '24 Jam (1 Hari)', hours: 24 },
-                  { label: '48 Jam (2 Hari)', hours: 48 },
-                ].map((preset) => (
-                  <button
-                    key={preset.hours}
-                    type="button"
-                    onClick={() => setDefaultServiceDurationHours(preset.hours)}
-                    className={`py-1.5 px-2 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
-                      defaultServiceDurationHours === preset.hours
-                        ? 'bg-[#F26522] text-white border-[#F26522]'
-                        : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'
-                    }`}
-                  >
-                    {preset.label}
-                  </button>
-                ))}
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="1"
+                  max="365"
+                  value={durationVal}
+                  onChange={(e) => setDurationVal(e.target.value === '' ? 1 : Number(e.target.value))}
+                  className="w-20 px-3 py-2 text-xs font-bold text-center rounded-lg border border-slate-700 bg-slate-900 text-white focus:outline-none focus:border-[#F26522]"
+                />
+                <div className="flex items-center space-x-1.5">
+                  {(['JAM', 'HARI', 'MINGGU'] as DurationUnit[]).map((unit) => (
+                    <button
+                      key={unit}
+                      type="button"
+                      onClick={() => setDurationUnit(unit)}
+                      className={`px-3 py-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                        durationUnit === unit
+                          ? 'bg-[#F26522] text-white border-[#F26522]'
+                          : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'
+                      }`}
+                    >
+                      {unit === 'JAM' ? 'Jam' : unit === 'HARI' ? 'Hari' : 'Minggu'}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           )}

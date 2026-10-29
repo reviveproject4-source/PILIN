@@ -1,8 +1,23 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ServiceCatalogService, ServiceCatalogItem } from '@/domains/catalog/serviceCatalogService';
+import { ServiceCatalogService, ServiceCatalogItem, PricingUnit, DurationUnit, durationToHours } from '@/domains/catalog/serviceCatalogService';
 import { Plus, Trash2, Edit3, Tag, Percent, DollarSign, Package, Wrench, Clock, AlertTriangle, CheckCircle } from 'lucide-react';
+
+const PRICING_UNITS: { value: string; label: string }[] = [
+  { value: 'unit', label: 'unit' },
+  { value: 'pc', label: 'pc' },
+  { value: 'sepasang', label: 'sepasang' },
+  { value: 'stel', label: 'stel' },
+  { value: 'lembar', label: 'lembar' },
+  { value: 'barang', label: 'barang' },
+  { value: 'paket', label: 'paket' },
+  { value: 'm2', label: 'm2' },
+  { value: 'helai', label: 'helai' },
+  { value: 'cm', label: 'cm' },
+  { value: 'gram', label: 'gram' },
+  { value: 'set', label: 'set' },
+];
 
 export function ProductMasterDashboard() {
   const [catalog, setCatalog] = useState<ServiceCatalogItem[]>([]);
@@ -12,6 +27,7 @@ export function ProductMasterDashboard() {
   // Form State
   const [nama, setNama] = useState('');
   const [baseHarga, setBaseHarga] = useState<number | ''>('');
+  const [pricingUnit, setPricingUnit] = useState<string>('sepasang');
   const [itemType, setItemType] = useState<'PRODUCT' | 'SERVICE'>('PRODUCT');
   const [hppMode, setHppMode] = useState<'PERCENTAGE' | 'ACTUAL_COST'>('PERCENTAGE');
   const [hppPercent, setHppPercent] = useState<number | ''>(50);
@@ -20,7 +36,8 @@ export function ProductMasterDashboard() {
   
   // Customizable CRM cycle duration, SLA duration & stock alerts
   const [reminderDays, setReminderDays] = useState<number | ''>(30);
-  const [durationHours, setDurationHours] = useState<number | ''>(24);
+  const [durationVal, setDurationVal] = useState<number | ''>(1);
+  const [durationUnit, setDurationUnit] = useState<'JAM' | 'HARI' | 'MINGGU'>('HARI');
   const [stockQty, setStockQty] = useState<number | ''>(10);
   const [stockAlertThreshold, setStockAlertThreshold] = useState<number | ''>(5);
 
@@ -37,13 +54,15 @@ export function ProductMasterDashboard() {
     setEditingItem(null);
     setNama('');
     setBaseHarga('');
+    setPricingUnit('sepasang');
     setItemType('PRODUCT');
     setHppMode('PERCENTAGE');
     setHppPercent(50);
     setHppActual('');
     setBahanBaku('');
     setReminderDays(30);
-    setDurationHours(24);
+    setDurationVal(1);
+    setDurationUnit('HARI');
     setStockQty(10);
     setStockAlertThreshold(5);
     setShowAddForm(true);
@@ -53,13 +72,21 @@ export function ProductMasterDashboard() {
     setEditingItem(item);
     setNama(item.nama);
     setBaseHarga(item.base_harga);
+    setPricingUnit(item.pricing_unit || (item.item_type === 'PRODUCT' ? 'pc' : 'sepasang'));
     setItemType(item.item_type || 'PRODUCT');
     setHppMode(item.hpp_mode || 'PERCENTAGE');
     setHppPercent(item.hpp_percent ?? 50);
     setHppActual(item.hpp || '');
     setBahanBaku(item.bahan_baku || '');
     setReminderDays(item.reminder_days ?? 30);
-    setDurationHours(item.duration_hours ?? 24);
+    setDurationVal(
+      item.duration_val ??
+      (item.duration_hours ? (item.duration_hours < 24 ? item.duration_hours : Math.round(item.duration_hours / 24)) : 1)
+    );
+    setDurationUnit(
+      item.duration_unit ??
+      (item.duration_hours && item.duration_hours < 24 ? 'JAM' : 'HARI')
+    );
     setStockQty(item.stock_qty ?? 0);
     setStockAlertThreshold(item.stock_alert_threshold ?? 5);
     setShowAddForm(true);
@@ -85,7 +112,9 @@ export function ProductMasterDashboard() {
     }
 
     const finalReminderDays = Number(reminderDays) || 30;
-    const finalDurationHours = itemType === 'SERVICE' ? (Number(durationHours) || 24) : undefined;
+    const finalDurationVal = itemType === 'SERVICE' ? (Number(durationVal) || 1) : undefined;
+    const finalDurationUnit = itemType === 'SERVICE' ? durationUnit : undefined;
+    const finalDurationHours = itemType === 'SERVICE' ? durationToHours(finalDurationVal || 1, finalDurationUnit || 'HARI') : undefined;
     const finalStockQty = itemType === 'PRODUCT' ? (Number(stockQty) || 0) : 0;
     const finalStockThreshold = itemType === 'PRODUCT' ? (Number(stockAlertThreshold) || 5) : 0;
 
@@ -93,12 +122,15 @@ export function ProductMasterDashboard() {
       ServiceCatalogService.updateMasterService(editingItem.id, {
         nama,
         base_harga: hargaJual,
+        pricing_unit: pricingUnit,
         hpp: computedHpp,
         hpp_mode: hppMode,
         hpp_percent: pct,
         item_type: itemType,
         bahan_baku: bahanBaku || (itemType === 'SERVICE' ? 'Jasa Operasional' : 'Bahan Baku Standar'),
         reminder_days: finalReminderDays,
+        duration_val: finalDurationVal,
+        duration_unit: finalDurationUnit,
         duration_hours: finalDurationHours,
         stock_qty: finalStockQty,
         stock_alert_threshold: finalStockThreshold,
@@ -107,12 +139,15 @@ export function ProductMasterDashboard() {
       ServiceCatalogService.addMasterService({
         nama,
         base_harga: hargaJual,
+        pricing_unit: pricingUnit,
         hpp: computedHpp,
         hpp_mode: hppMode,
         hpp_percent: pct,
         item_type: itemType,
         bahan_baku: bahanBaku || (itemType === 'SERVICE' ? 'Jasa Operasional' : 'Bahan Baku Standar'),
         reminder_days: finalReminderDays,
+        duration_val: finalDurationVal,
+        duration_unit: finalDurationUnit,
         duration_hours: finalDurationHours,
         stock_qty: finalStockQty,
         stock_alert_threshold: finalStockThreshold,
@@ -216,7 +251,7 @@ export function ProductMasterDashboard() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                 Nama Item
@@ -244,6 +279,23 @@ export function ProductMasterDashboard() {
                 placeholder="Contoh: 75000"
                 className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#F26522]"
               />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                Harga Per (Satuan)
+              </label>
+              <select
+                value={pricingUnit}
+                onChange={(e) => setPricingUnit(e.target.value)}
+                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#F26522]"
+              >
+                {PRICING_UNITS.map((u) => (
+                  <option key={u.value} value={u.value}>
+                    per {u.label}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
@@ -292,48 +344,43 @@ export function ProductMasterDashboard() {
             </div>
           </div>
 
-          {/* KHUSUS JASA: ESTIMASI WAKTU SELESAI (TARGET SLA) */}
+          {/* KHUSUS JASA: ESTIMASI WAKTU SELESAI PENGERJAAN */}
           {itemType === 'SERVICE' && (
             <div className="bg-purple-50 dark:bg-purple-950/40 p-4 rounded-xl border border-purple-200 dark:border-purple-800 space-y-3">
               <label className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <Clock className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                <span>Estimasi Waktu Selesai Pengerjaan Layanan (Target SLA Jasa)</span>
+                <span>Estimasi Waktu Selesai Pengerjaan Layanan</span>
               </label>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[11px] text-slate-500 font-bold">Pilihan Cepat:</span>
-                {[
-                  { label: '1 Jam (Express)', h: 1 },
-                  { label: '3 Jam (Same Day)', h: 3 },
-                  { label: '24 Jam (1 Hari)', h: 24 },
-                  { label: '48 Jam (2 Hari)', h: 48 },
-                  { label: '72 Jam (3 Hari)', h: 72 },
-                ].map((preset) => (
-                  <button
-                    type="button"
-                    key={preset.h}
-                    onClick={() => setDurationHours(preset.h)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
-                      durationHours === preset.h
-                        ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
-                        : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-purple-600'
-                    }`}
-                  >
-                    {preset.label}
-                  </button>
-                ))}
-                <div className="flex items-center gap-2 ml-auto">
-                  <span className="text-[11px] text-slate-500 font-bold">Atau Ketik Kustom:</span>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Durasi:</span>
                   <input
                     type="number"
                     min="1"
-                    max="720"
-                    value={durationHours}
-                    onChange={(e) => setDurationHours(e.target.value === '' ? '' : Number(e.target.value))}
-                    placeholder="Jam..."
-                    className="w-20 px-2 py-1.5 text-xs text-center font-bold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-600"
+                    max="365"
+                    value={durationVal}
+                    onChange={(e) => setDurationVal(e.target.value === '' ? '' : Number(e.target.value))}
+                    placeholder="1"
+                    className="w-20 px-3 py-2 text-xs font-bold text-center rounded-xl border border-purple-300 dark:border-purple-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-600"
                   />
-                  <span className="text-xs text-slate-500 font-bold">Jam</span>
+                </div>
+
+                <div className="flex items-center space-x-1.5">
+                  {(['JAM', 'HARI', 'MINGGU'] as DurationUnit[]).map((unit) => (
+                    <button
+                      type="button"
+                      key={unit}
+                      onClick={() => setDurationUnit(unit)}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                        durationUnit === unit
+                          ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
+                          : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-purple-600'
+                      }`}
+                    >
+                      {unit === 'JAM' ? 'Jam' : unit === 'HARI' ? 'Hari' : 'Minggu'}
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
@@ -529,7 +576,7 @@ export function ProductMasterDashboard() {
               <tr>
                 <th className="px-5 py-3.5">Jenis</th>
                 <th className="px-5 py-3.5">SKU &amp; Item</th>
-                <th className="px-5 py-3.5">Harga Jual</th>
+                <th className="px-5 py-3.5">Harga Jual / Satuan</th>
                 <th className="px-5 py-3.5">Estimasi Selesai (SLA)</th>
                 <th className="px-5 py-3.5">Siklus Pengingat CRM</th>
                 <th className="px-5 py-3.5">Stok &amp; Peringatan</th>
@@ -568,16 +615,21 @@ export function ProductMasterDashboard() {
                       <div className="text-[11px] font-mono text-slate-500">{item.sku}</div>
                     </td>
                     <td className="px-5 py-3.5 font-bold text-slate-900 dark:text-white">
-                      Rp {item.base_harga.toLocaleString('id-ID')}
+                      <span>Rp {item.base_harga.toLocaleString('id-ID')}</span>
+                      <span className="text-[11px] font-normal text-slate-500 ml-1">
+                        / {item.pricing_unit || (type === 'PRODUCT' ? 'unit' : 'sepasang')}
+                      </span>
                     </td>
                     <td className="px-5 py-3.5">
                       {type === 'SERVICE' ? (
                         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
                           <Clock className="w-3 h-3" />
                           <span>
-                            {(item.duration_hours || 24) >= 24
-                              ? `${Math.round((item.duration_hours || 24) / 24)} Hari (${item.duration_hours || 24} Jam)`
-                              : `${item.duration_hours || 1} Jam`}
+                            {item.duration_val && item.duration_unit
+                              ? `${item.duration_val} ${item.duration_unit === 'JAM' ? 'Jam' : item.duration_unit === 'HARI' ? 'Hari' : 'Minggu'}`
+                              : (item.duration_hours || 24) >= 24
+                                ? `${Math.round((item.duration_hours || 24) / 24)} Hari`
+                                : `${item.duration_hours || 1} Jam`}
                           </span>
                         </span>
                       ) : (

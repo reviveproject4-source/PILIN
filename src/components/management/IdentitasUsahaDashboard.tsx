@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Building2, Save, Upload, CheckCircle2, Image as ImageIcon, Sun, Moon, Wrench, ShoppingBag, Layers, Clock } from 'lucide-react';
 import { BusinessProfileService, BusinessProfileConfig } from '@/domains/business/businessProfileService';
 import { useTheme } from '@/components/ThemeProvider';
+import { durationToHours, DurationUnit } from '@/domains/catalog/serviceCatalogService';
 
 interface IdentitasUsahaDashboardProps {
   businessId?: string;
@@ -19,7 +20,14 @@ export function IdentitasUsahaDashboard({ businessId = 'tenant-001' }: Identitas
   const [businessAddress, setBusinessAddress] = useState<string>(profile.business_address);
   const [businessPhone, setBusinessPhone] = useState<string>(profile.business_phone);
   const [businessType, setBusinessType] = useState<'JASA' | 'RETAIL' | 'HYBRID'>(profile.business_type || 'HYBRID');
-  const [defaultDurationHours, setDefaultDurationHours] = useState<number>(profile.default_service_duration_hours || 24);
+  const [durationVal, setDurationVal] = useState<number>(() => {
+    const h = profile.default_service_duration_hours || 24;
+    return h < 24 ? h : Math.round(h / 24);
+  });
+  const [durationUnit, setDurationUnit] = useState<DurationUnit>(() => {
+    const h = profile.default_service_duration_hours || 24;
+    return h < 24 ? 'JAM' : 'HARI';
+  });
   const [logoUrl, setLogoUrl] = useState<string>(profile.logo_url || '');
   const [terms, setTerms] = useState<string>(profile.terms_and_conditions);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -31,7 +39,9 @@ export function IdentitasUsahaDashboard({ businessId = 'tenant-001' }: Identitas
     setBusinessAddress(loaded.business_address);
     setBusinessPhone(loaded.business_phone);
     setBusinessType(loaded.business_type || 'HYBRID');
-    setDefaultDurationHours(loaded.default_service_duration_hours || 24);
+    const h = loaded.default_service_duration_hours || 24;
+    setDurationVal(h < 24 ? h : Math.round(h / 24));
+    setDurationUnit(h < 24 ? 'JAM' : 'HARI');
     setLogoUrl(loaded.logo_url || '');
     setTerms(loaded.terms_and_conditions);
   }, [businessId]);
@@ -52,12 +62,13 @@ export function IdentitasUsahaDashboard({ businessId = 'tenant-001' }: Identitas
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
+    const computedHours = durationToHours(durationVal, durationUnit);
     const updated = BusinessProfileService.updateProfile(businessId, {
       business_name: businessName,
       business_address: businessAddress,
       business_phone: businessPhone,
       business_type: businessType,
-      default_service_duration_hours: (businessType === 'JASA' || businessType === 'HYBRID') ? defaultDurationHours : undefined,
+      default_service_duration_hours: (businessType === 'JASA' || businessType === 'HYBRID') ? computedHours : undefined,
       logo_url: logoUrl || null,
       terms_and_conditions: terms,
     });
@@ -188,28 +199,33 @@ export function IdentitasUsahaDashboard({ businessId = 'tenant-001' }: Identitas
               <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-800">
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                   <Clock className="w-4 h-4 text-[#F26522]" />
-                  <span>Estimasi Standar Waktu Selesai (Target SLA Jasa)</span>
+                  <span>Estimasi Standar Waktu Selesai Pengerjaan (Layanan Jasa)</span>
                 </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { label: '1 Jam (Express)', hours: 1 },
-                    { label: '3 Jam (Same Day)', hours: 3 },
-                    { label: '24 Jam (1 Hari)', hours: 24 },
-                    { label: '48 Jam (2 Hari)', hours: 48 },
-                  ].map((preset) => (
-                    <button
-                      key={preset.hours}
-                      type="button"
-                      onClick={() => setDefaultDurationHours(preset.hours)}
-                      className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
-                        defaultDurationHours === preset.hours
-                          ? 'bg-[#F26522] text-white border-[#F26522]'
-                          : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-400'
-                      }`}
-                    >
-                      {preset.label}
-                    </button>
-                  ))}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="1"
+                    max="365"
+                    value={durationVal}
+                    onChange={(e) => setDurationVal(e.target.value === '' ? 1 : Number(e.target.value))}
+                    className="w-20 px-3 py-2 text-xs font-bold text-center rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:border-[#F26522]"
+                  />
+                  <div className="flex items-center space-x-1.5">
+                    {(['JAM', 'HARI', 'MINGGU'] as DurationUnit[]).map((unit) => (
+                      <button
+                        key={unit}
+                        type="button"
+                        onClick={() => setDurationUnit(unit)}
+                        className={`px-3 py-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                          durationUnit === unit
+                            ? 'bg-[#F26522] text-white border-[#F26522]'
+                            : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-400'
+                        }`}
+                      >
+                        {unit === 'JAM' ? 'Jam' : unit === 'HARI' ? 'Hari' : 'Minggu'}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
