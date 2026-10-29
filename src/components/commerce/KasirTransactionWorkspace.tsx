@@ -198,13 +198,7 @@ export function KasirTransactionWorkspace({
     }
   }, [isDemo]);
 
-  // Item Condition Photo (Service Pre-Condition Photo)
-  const [itemPhotoUrl, setItemPhotoUrl] = useState<string | null>(null);
-  const itemPhotoInputRef = useRef<HTMLInputElement>(null);
-
-  // Approvals State
-  const [discountPercent, setDiscountPercent] = useState<number>(10);
-  const [discountReason, setDiscountReason] = useState<string>('Diskon Member Setia');
+  // Approvals State (Pembatalan Nota ke Kepala Cabang)
   const [cancelNotaNumber, setCancelNotaNumber] = useState<string>(isDemo ? 'NOT-2026-0885' : '');
   const [cancelReason, setCancelReason] = useState<string>('Pelanggan membatalkan pesanan');
 
@@ -290,7 +284,7 @@ export function KasirTransactionWorkspace({
   const [requestedApprovals, setRequestedApprovals] = useState(() => {
     if (isDemo) {
       return [
-        { id: 'req-01', type: 'DISCOUNT', title: 'Permintaan Diskon Khusus 15%', nota: 'NOT-2026-0891', status: 'MENUNGGU_SETUJU_KC', time: '10:15 WIB' },
+        { id: 'req-01', type: 'CANCELLATION', title: 'Permintaan Pembatalan Nota NOT-2026-0891', nota: 'NOT-2026-0891', status: 'MENUNGGU_SETUJU_KC', time: '10:15 WIB' },
       ];
     }
     return [];
@@ -317,20 +311,6 @@ export function KasirTransactionWorkspace({
         }
         setCustomerPhone(found.phone);
       }
-    }
-  };
-
-  // Item Photo Capture Handler
-  const handleItemPhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setItemPhotoUrl(event.target.result as string);
-        }
-      };
-      reader.readAsDataURL(file);
     }
   };
 
@@ -367,12 +347,10 @@ export function KasirTransactionWorkspace({
       status: 'COMPLETED',
       time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
       estimatedCompletion: finalEstimatedCompletion,
-      itemPhotoUrl: itemPhotoUrl,
     };
 
     setRecentTransactions([newTrx, ...recentTransactions]);
     setActiveReceiptTrx(newTrx); // Open Thermal Receipt Modal
-    setItemPhotoUrl(null); // Reset photo input for next transaction
 
     // If new customer, register into customerList automatically with formal salutation
     if (selectedCustomerId === 'NEW_CUSTOMER' || !customerList.some(c => c.phone === customerPhone)) {
@@ -503,20 +481,6 @@ export function KasirTransactionWorkspace({
     });
   };
 
-  const handleRequestDiscount = (e: React.FormEvent) => {
-    e.preventDefault();
-    const newReq = {
-      id: `req-${Date.now()}`,
-      type: 'DISCOUNT',
-      title: `Permintaan Diskon Khusus ${discountPercent}%`,
-      nota: `NOT-2026-0${recentTransactions.length + 890}`,
-      status: 'MENUNGGU_SETUJU_KC',
-      time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
-    };
-    setRequestedApprovals([newReq, ...requestedApprovals]);
-    setFeedback({ type: 'success', text: `Permintaan Diskon Khusus ${discountPercent}% telah dikirim ke Kepala Cabang.` });
-  };
-
   const handleRequestCancellation = (e: React.FormEvent) => {
     e.preventDefault();
     const newReq = {
@@ -544,7 +508,7 @@ Waktu    : ${trx.time}
 Kasir    : ${actorName}
 Pelanggan: ${trx.customer} (${trx.phone})${completionLine}
 --------------------------------
-Item: ${trx.qty}x ${trx.service}
+Item: ${trx.qty} ${trx.pricing_unit || 'x'} ${trx.service}
 Total: Rp ${trx.total.toLocaleString('id-ID')}
 Pembayaran: ${trx.method} (LUNAS)
 --------------------------------
@@ -608,7 +572,7 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
               className="p-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-bold text-sm shadow-sm flex items-center justify-center gap-2.5 transition-all cursor-pointer active:scale-95"
             >
               <CheckCircle2 className="w-5 h-5" />
-              <span>Pelunasan/Pengambilan</span>
+              <span>Pengambilan Barang</span>
             </button>
           </div>
 
@@ -971,39 +935,6 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
               </div>
             )}
 
-            {/* Photo Condition of Goods (Pre-Service) */}
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block">
-                Foto Bukti Kondisi Barang (Sebelum Pengerjaan):
-              </label>
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                ref={itemPhotoInputRef}
-                onChange={handleItemPhotoCapture}
-                className="hidden"
-              />
-              <div className="flex items-center space-x-3">
-                <button
-                  type="button"
-                  onClick={() => itemPhotoInputRef.current?.click()}
-                  className="px-3.5 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs rounded-lg transition-all flex items-center gap-1.5"
-                >
-                  <Camera className="w-4 h-4 text-[#F26522]" />
-                  <span>Ambil Foto Kondisi Barang</span>
-                </button>
-                {itemPhotoUrl && (
-                  <div className="flex items-center space-x-2 bg-emerald-100 dark:bg-emerald-950 p-1.5 rounded-lg border border-emerald-300 dark:border-emerald-800">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={itemPhotoUrl} alt="Barang" className="w-8 h-8 rounded object-cover" />
-                    <span className="text-[11px] font-bold text-emerald-800 dark:text-emerald-300">Foto Terlampir</span>
-                    <button type="button" onClick={() => setItemPhotoUrl(null)} className="text-rose-600 font-bold px-1 hover:opacity-80">✕</button>
-                  </div>
-                )}
-              </div>
-            </div>
-
             <div>
               <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">Metode Pembayaran:</label>
               <select
@@ -1080,32 +1011,7 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
                 <span>Kirim Permintaan Ke Kepala Cabang</span>
               </h3>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <form onSubmit={handleRequestDiscount} className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-300 dark:border-slate-800 space-y-3">
-                  <div className="text-xs font-bold text-slate-900 dark:text-white">Permintaan Diskon Khusus</div>
-                  <div className="space-y-2">
-                    <input
-                      type="number"
-                      min={1}
-                      max={50}
-                      value={discountPercent}
-                      onChange={e => setDiscountPercent(parseInt(e.target.value, 10) || 0)}
-                      placeholder="Diskon %"
-                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg p-2 text-xs text-slate-900 dark:text-white"
-                    />
-                    <input
-                      type="text"
-                      value={discountReason}
-                      onChange={e => setDiscountReason(e.target.value)}
-                      placeholder="Alasan Diskon Khusus..."
-                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg p-2 text-xs text-slate-900 dark:text-white"
-                    />
-                  </div>
-                  <button type="submit" className="w-full py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-lg text-xs">
-                    Kirim Diskon Khusus
-                  </button>
-                </form>
-
+              <div className="max-w-md">
                 <form onSubmit={handleRequestCancellation} className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-300 dark:border-slate-800 space-y-3">
                   <div className="text-xs font-bold text-slate-900 dark:text-white">Permintaan Pembatalan Nota</div>
                   <div className="space-y-2">
@@ -1124,7 +1030,7 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
                       className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg p-2 text-xs text-slate-900 dark:text-white"
                     />
                   </div>
-                  <button type="submit" className="w-full py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg text-xs">
+                  <button type="submit" className="w-full py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg text-xs cursor-pointer">
                     Kirim Pembatalan Nota
                   </button>
                 </form>
@@ -2006,15 +1912,6 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
                       </div>
                     </div>
 
-                    {/* Pre-service photo thumbnail if available */}
-                    {activeReceiptTrx.itemPhotoUrl && (
-                      <div className="border-t border-dashed border-slate-400 pt-2 text-center">
-                        <div className="text-[9px] font-bold uppercase text-slate-600 mb-1">Bukti Kondisi Barang (Pre-Service)</div>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={activeReceiptTrx.itemPhotoUrl} alt="Kondisi Barang" className="w-24 h-24 mx-auto object-cover rounded border border-slate-300" />
-                      </div>
-                    )}
-
                     <div className="border-t border-dashed border-slate-400 pt-2 text-xs">
                       <div className="flex justify-between font-black">
                         <span>TOTAL:</span>
@@ -2287,14 +2184,14 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
         </div>
       )}
 
-      {/* MODAL: PELUNASAN / PENGAMBILAN */}
+      {/* MODAL: PENGAMBILAN BARANG */}
       {showPickupModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto">
           <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-2xl w-full p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
               <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <CheckCircle2 className="w-5 h-5 text-blue-500" />
-                <span>Pelunasan &amp; Pengambilan Barang Selesai</span>
+                <span>Pengambilan Barang Selesai</span>
               </h3>
               <button onClick={() => setShowPickupModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
                 <X className="w-5 h-5" />
@@ -2316,7 +2213,7 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
                       type="button"
                       onClick={() => {
                         setShowPickupModal(false);
-                        setFeedback({ type: 'success', text: `Nota ${order.order_number || order.id} (${order.customer_name}) telah dilunasi dan barang telah diserahkan.` });
+                        setFeedback({ type: 'success', text: `Nota ${order.order_number || order.id} (${order.customer_name}) barang telah diserahkan ke pelanggan.` });
                       }}
                       className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg text-xs cursor-pointer"
                     >
