@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Building2, Phone, Mail, Users, Rocket, ShieldCheck, User } from 'lucide-react';
+import { Building2, Phone, Mail, Users, Rocket, ShieldCheck, User, Wrench, ShoppingBag, Layers, Clock } from 'lucide-react';
 import { TenantService } from '@/domains/tenant/tenantService';
 import { BusinessProfileService } from '@/domains/business/businessProfileService';
 import { submitOwnerOnboardingAction } from '@/app/actions/onboardingActions';
@@ -16,6 +16,8 @@ export function TenantOnboardingModal({ onSuccess }: TenantOnboardingModalProps)
   const [contactNumber, setContactNumber] = useState('');
   const [email, setEmail] = useState('');
   const [employeeCount, setEmployeeCount] = useState('1-5');
+  const [businessType, setBusinessType] = useState<'JASA' | 'RETAIL' | 'HYBRID'>('JASA');
+  const [defaultServiceDurationHours, setDefaultServiceDurationHours] = useState<number>(24);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -53,6 +55,8 @@ export function TenantOnboardingModal({ onSuccess }: TenantOnboardingModalProps)
         contactNumber: contactNumber.trim(),
         email: email.trim(),
         employeeCount,
+        businessType,
+        defaultServiceDurationHours: (businessType === 'JASA' || businessType === 'HYBRID') ? defaultServiceDurationHours : undefined,
       });
 
       if (!res.success) {
@@ -68,11 +72,15 @@ export function TenantOnboardingModal({ onSuccess }: TenantOnboardingModalProps)
         contactNumber: contactNumber.trim(),
         email: email.trim(),
         employeeCount,
+        businessType,
+        defaultServiceDurationHours: (businessType === 'JASA' || businessType === 'HYBRID') ? defaultServiceDurationHours : undefined,
       });
 
       BusinessProfileService.updateProfile('tenant-001', {
         business_name: created.businessName,
         business_phone: created.contactNumber,
+        business_type: businessType,
+        default_service_duration_hours: (businessType === 'JASA' || businessType === 'HYBRID') ? defaultServiceDurationHours : undefined,
       });
 
       onSuccess();
@@ -191,6 +199,80 @@ export function TenantOnboardingModal({ onSuccess }: TenantOnboardingModalProps)
               </select>
             </div>
           </div>
+
+          <div>
+            <label className="text-xs font-bold text-slate-300 block mb-1.5">
+              Model / Jenis Usaha
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => setBusinessType('JASA')}
+                className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                  businessType === 'JASA'
+                    ? 'border-[#F26522] bg-[#F26522]/20 text-white'
+                    : 'border-slate-800 bg-slate-950 text-slate-400 hover:text-white'
+                }`}
+              >
+                <Wrench className="w-4 h-4 text-[#F26522]" />
+                <span>Jasa</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setBusinessType('RETAIL')}
+                className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                  businessType === 'RETAIL'
+                    ? 'border-[#F26522] bg-[#F26522]/20 text-white'
+                    : 'border-slate-800 bg-slate-950 text-slate-400 hover:text-white'
+                }`}
+              >
+                <ShoppingBag className="w-4 h-4 text-emerald-400" />
+                <span>Retail</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setBusinessType('HYBRID')}
+                className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                  businessType === 'HYBRID'
+                    ? 'border-[#F26522] bg-[#F26522]/20 text-white'
+                    : 'border-slate-800 bg-slate-950 text-slate-400 hover:text-white'
+                }`}
+              >
+                <Layers className="w-4 h-4 text-blue-400" />
+                <span>Jasa &amp; Retail</span>
+              </button>
+            </div>
+          </div>
+
+          {(businessType === 'JASA' || businessType === 'HYBRID') && (
+            <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl space-y-2.5">
+              <label className="text-xs font-bold text-slate-300 block flex items-center gap-1.5">
+                <Clock className="w-4 h-4 text-[#F26522]" />
+                <span>Estimasi Standar Waktu Selesai Pengerjaan (Target SLA Jasa)</span>
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {[
+                  { label: '1 Jam (Express)', hours: 1 },
+                  { label: '3 Jam (Same Day)', hours: 3 },
+                  { label: '24 Jam (1 Hari)', hours: 24 },
+                  { label: '48 Jam (2 Hari)', hours: 48 },
+                ].map((preset) => (
+                  <button
+                    key={preset.hours}
+                    type="button"
+                    onClick={() => setDefaultServiceDurationHours(preset.hours)}
+                    className={`py-1.5 px-2 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
+                      defaultServiceDurationHours === preset.hours
+                        ? 'bg-[#F26522] text-white border-[#F26522]'
+                        : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <button
             type="submit"

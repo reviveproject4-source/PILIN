@@ -12,6 +12,7 @@ export interface ServiceCatalogItem {
   reminder_days?: number; // Customizable cycle days: 30, 45, 60, 90, or custom days
   stock_alert_threshold?: number; // Min threshold for low stock alert to owner
   stock_qty?: number; // Current on-hand quantity
+  duration_hours?: number; // Estimasi Waktu Selesai Pengerjaan (Khusus Jasa)
 }
 
 const DEFAULT_CATALOG: ServiceCatalogItem[] = [
@@ -27,6 +28,7 @@ const DEFAULT_CATALOG: ServiceCatalogItem[] = [
     item_type: 'SERVICE',
     bahan_baku: 'Sabun Khusus Sepatu 50ml, Microfiber 1 pcs',
     reminder_days: 30,
+    duration_hours: 24, // 1 Hari
   },
   {
     id: 'srv-00000000-0000-0000-0000-000000000002',
@@ -40,6 +42,7 @@ const DEFAULT_CATALOG: ServiceCatalogItem[] = [
     item_type: 'SERVICE',
     bahan_baku: 'Cat Khusus Leather 30ml, Liquid Cleaner 100ml',
     reminder_days: 60,
+    duration_hours: 48, // 2 Hari
   },
   {
     id: 'srv-00000000-0000-0000-0000-000000000003',
@@ -53,6 +56,7 @@ const DEFAULT_CATALOG: ServiceCatalogItem[] = [
     item_type: 'SERVICE',
     bahan_baku: 'Minyak Pelembab Leather 50ml, Nano Coating Spray 10ml',
     reminder_days: 90,
+    duration_hours: 72, // 3 Hari
   },
   {
     id: 'prod-00000000-0000-0000-0000-000000000004',
@@ -184,6 +188,7 @@ export class ServiceCatalogService {
       hpp: computedHpp,
       item_type: service.item_type || 'SERVICE',
       reminder_days: service.reminder_days || 30,
+      duration_hours: service.duration_hours !== undefined ? service.duration_hours : (service.item_type === 'PRODUCT' ? undefined : 24),
       stock_qty: service.stock_qty !== undefined ? service.stock_qty : 0,
       stock_alert_threshold: service.stock_alert_threshold !== undefined ? service.stock_alert_threshold : 5,
     };

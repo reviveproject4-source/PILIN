@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Building2, Save, Upload, CheckCircle2, Image as ImageIcon, Sun, Moon } from 'lucide-react';
+import { Building2, Save, Upload, CheckCircle2, Image as ImageIcon, Sun, Moon, Wrench, ShoppingBag, Layers, Clock } from 'lucide-react';
 import { BusinessProfileService, BusinessProfileConfig } from '@/domains/business/businessProfileService';
 import { useTheme } from '@/components/ThemeProvider';
 
@@ -18,6 +18,8 @@ export function IdentitasUsahaDashboard({ businessId = 'tenant-001' }: Identitas
   const [businessName, setBusinessName] = useState<string>(profile.business_name);
   const [businessAddress, setBusinessAddress] = useState<string>(profile.business_address);
   const [businessPhone, setBusinessPhone] = useState<string>(profile.business_phone);
+  const [businessType, setBusinessType] = useState<'JASA' | 'RETAIL' | 'HYBRID'>(profile.business_type || 'HYBRID');
+  const [defaultDurationHours, setDefaultDurationHours] = useState<number>(profile.default_service_duration_hours || 24);
   const [logoUrl, setLogoUrl] = useState<string>(profile.logo_url || '');
   const [terms, setTerms] = useState<string>(profile.terms_and_conditions);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -28,6 +30,8 @@ export function IdentitasUsahaDashboard({ businessId = 'tenant-001' }: Identitas
     setBusinessName(loaded.business_name);
     setBusinessAddress(loaded.business_address);
     setBusinessPhone(loaded.business_phone);
+    setBusinessType(loaded.business_type || 'HYBRID');
+    setDefaultDurationHours(loaded.default_service_duration_hours || 24);
     setLogoUrl(loaded.logo_url || '');
     setTerms(loaded.terms_and_conditions);
   }, [businessId]);
@@ -52,6 +56,8 @@ export function IdentitasUsahaDashboard({ businessId = 'tenant-001' }: Identitas
       business_name: businessName,
       business_address: businessAddress,
       business_phone: businessPhone,
+      business_type: businessType,
+      default_service_duration_hours: (businessType === 'JASA' || businessType === 'HYBRID') ? defaultDurationHours : undefined,
       logo_url: logoUrl || null,
       terms_and_conditions: terms,
     });
@@ -133,6 +139,80 @@ export function IdentitasUsahaDashboard({ businessId = 'tenant-001' }: Identitas
                 className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-white font-mono focus:outline-none focus:border-emerald-500"
               />
             </div>
+
+            <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+                Model / Jenis Usaha
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setBusinessType('JASA')}
+                  className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                    businessType === 'JASA'
+                      ? 'border-[#F26522] bg-[#F26522]/10 text-[#F26522]'
+                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  <Wrench className="w-4 h-4" />
+                  <span>Jasa</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBusinessType('RETAIL')}
+                  className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                    businessType === 'RETAIL'
+                      ? 'border-emerald-500 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  <ShoppingBag className="w-4 h-4" />
+                  <span>Retail</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBusinessType('HYBRID')}
+                  className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                    businessType === 'HYBRID'
+                      ? 'border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  <Layers className="w-4 h-4" />
+                  <span>Jasa &amp; Retail</span>
+                </button>
+              </div>
+            </div>
+
+            {(businessType === 'JASA' || businessType === 'HYBRID') && (
+              <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <Clock className="w-4 h-4 text-[#F26522]" />
+                  <span>Estimasi Standar Waktu Selesai (Target SLA Jasa)</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { label: '1 Jam (Express)', hours: 1 },
+                    { label: '3 Jam (Same Day)', hours: 3 },
+                    { label: '24 Jam (1 Hari)', hours: 24 },
+                    { label: '48 Jam (2 Hari)', hours: 48 },
+                  ].map((preset) => (
+                    <button
+                      key={preset.hours}
+                      type="button"
+                      onClick={() => setDefaultDurationHours(preset.hours)}
+                      className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                        defaultDurationHours === preset.hours
+                          ? 'bg-[#F26522] text-white border-[#F26522]'
+                          : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-400'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Right Column: Logo Usaha */}

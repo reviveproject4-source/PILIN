@@ -5,6 +5,8 @@ export interface TenantOnboardingData {
   contactNumber: string;
   email: string;
   employeeCount: string;
+  businessType?: 'JASA' | 'RETAIL' | 'HYBRID';
+  defaultServiceDurationHours?: number;
   trialStartDate: string;
   trialEndDate: string;
   isOnboarded: boolean;
@@ -20,6 +22,8 @@ export class TenantService {
     contactNumber: '081280320505',
     email: 'bengkeltassepatu@gmail.com',
     employeeCount: '1 Cabang',
+    businessType: 'HYBRID',
+    defaultServiceDurationHours: 24,
     trialStartDate: new Date().toISOString(),
     trialEndDate: new Date(Date.now() + 14 * 86400000).toISOString(),
     isOnboarded: true,
@@ -64,6 +68,8 @@ export class TenantService {
     contactNumber: string;
     email: string;
     employeeCount: string;
+    businessType?: 'JASA' | 'RETAIL' | 'HYBRID';
+    defaultServiceDurationHours?: number;
     businessId?: string;
   }): TenantOnboardingData {
     const now = new Date();
@@ -77,6 +83,8 @@ export class TenantService {
       contactNumber: data.contactNumber ? data.contactNumber.trim() : '081280320505',
       email: data.email ? data.email.trim() : 'bengkeltassepatu@gmail.com',
       employeeCount: data.employeeCount || '1 Cabang',
+      businessType: data.businessType || 'HYBRID',
+      defaultServiceDurationHours: data.defaultServiceDurationHours || 24,
       trialStartDate: now.toISOString(),
       trialEndDate: endDate.toISOString(),
       isOnboarded: true,

@@ -9,6 +9,8 @@ export interface OnboardingPayload {
   contactNumber: string;
   email: string;
   employeeCount: string;
+  businessType?: 'JASA' | 'RETAIL' | 'HYBRID';
+  defaultServiceDurationHours?: number;
 }
 
 export interface OnboardingActionResult {

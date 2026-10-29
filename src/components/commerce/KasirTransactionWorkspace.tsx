@@ -41,6 +41,7 @@ interface TransactionRecord {
   method: 'CASH' | 'QRIS_TRANSFER';
   status: string;
   time: string;
+  estimatedCompletion?: string;
   itemPhotoUrl?: string | null;
 }
 
@@ -117,6 +118,19 @@ export function KasirTransactionWorkspace({
     return [];
   });
 
+  // Helper: Format completion time based on duration hours
+  const calculateDefaultCompletion = (hours: number = 24): string => {
+    const d = new Date(Date.now() + hours * 3600000);
+    return d.toLocaleDateString('id-ID', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }) + ' WIB';
+  };
+
   // Catalog & POS Form State
   const [catalog, setCatalog] = useState<ServiceCatalogItem[]>(() => {
     return isDemo ? ServiceCatalogService.getDefaultCatalogForDemo() : ServiceCatalogService.getMasterCatalog();
@@ -133,6 +147,22 @@ export function KasirTransactionWorkspace({
     const items = isDemo ? ServiceCatalogService.getDefaultCatalogForDemo() : ServiceCatalogService.getMasterCatalog();
     return items[0]?.base_harga || 0;
   });
+  const [estimatedCompletion, setEstimatedCompletion] = useState<string>(() => {
+    const items = isDemo ? ServiceCatalogService.getDefaultCatalogForDemo() : ServiceCatalogService.getMasterCatalog();
+    const first = items[0];
+    if (first && first.item_type !== 'PRODUCT') {
+      const d = new Date(Date.now() + (first.duration_hours || 24) * 3600000);
+      return d.toLocaleDateString('id-ID', {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }) + ' WIB';
+    }
+    return '';
+  });
   const [qty, setQty] = useState<number>(1);
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'QRIS_TRANSFER'>('CASH');
 
@@ -144,6 +174,11 @@ export function KasirTransactionWorkspace({
         setSelectedService(prev => {
           if (!prev || !items.some(i => i.nama === prev)) {
             setServicePrice(items[0].base_harga);
+            if (items[0].item_type !== 'PRODUCT') {
+              setEstimatedCompletion(calculateDefaultCompletion(items[0].duration_hours || 24));
+            } else {
+              setEstimatedCompletion('');
+            }
             return items[0].nama;
           }
           return prev;
@@ -151,6 +186,7 @@ export function KasirTransactionWorkspace({
       } else {
         setSelectedService('');
         setServicePrice(0);
+        setEstimatedCompletion('');
       }
     };
 
@@ -311,6 +347,12 @@ export function KasirTransactionWorkspace({
 
     const finalCustomerName = formatCustomerName(customerName, selectedSalutation);
     const total = servicePrice * qty;
+    const catalogItem = catalog.find(c => c.nama.toLowerCase() === selectedService.toLowerCase());
+    const isServiceItem = catalogItem?.item_type !== 'PRODUCT';
+    const finalEstimatedCompletion = isServiceItem
+      ? (estimatedCompletion || calculateDefaultCompletion(catalogItem?.duration_hours || 24))
+      : undefined;
+
     const newTrx: TransactionRecord = {
       id: `NOT-2026-0${recentTransactions.length + 893}`,
       customer: finalCustomerName,
@@ -322,6 +364,7 @@ export function KasirTransactionWorkspace({
       method: paymentMethod,
       status: 'COMPLETED',
       time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
+      estimatedCompletion: finalEstimatedCompletion,
       itemPhotoUrl: itemPhotoUrl,
     };
 
@@ -489,6 +532,7 @@ export function KasirTransactionWorkspace({
   // Generate WA Nota Text with official business sender sign-off
   const generateWaReceiptText = (trx: TransactionRecord) => {
     const profile = BusinessProfileService.getProfile(businessId);
+    const completionLine = trx.estimatedCompletion ? `\nEstimasi Selesai : ${trx.estimatedCompletion}` : '';
     return `*${profile.business_name.toUpperCase()}*
 ${profile.business_address}
 No. WA Bisnis Resmi: ${profile.business_phone}
@@ -496,7 +540,7 @@ No. WA Bisnis Resmi: ${profile.business_phone}
 No. Nota : ${trx.id}
 Waktu    : ${trx.time}
 Kasir    : ${actorName}
-Pelanggan: ${trx.customer} (${trx.phone})
+Pelanggan: ${trx.customer} (${trx.phone})${completionLine}
 --------------------------------
 Item: ${trx.qty}x ${trx.service}
 Total: Rp ${trx.total.toLocaleString('id-ID')}
@@ -863,13 +907,18 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
                       setSelectedService(chosen);
                       const found = catalog.find(c => c.nama === chosen);
                       setServicePrice(found ? found.base_harga : 0);
+                      if (found && found.item_type !== 'PRODUCT') {
+                        setEstimatedCompletion(calculateDefaultCompletion(found.duration_hours || 24));
+                      } else {
+                        setEstimatedCompletion('');
+                      }
                     }}
                     className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
                   >
                     <option value="" disabled>-- Pilih Layanan / Produk --</option>
                     {catalog.map(item => (
                       <option key={item.id} value={item.nama}>
-                        {item.nama} (Rp {item.base_harga.toLocaleString('id-ID')}) {item.item_type === 'PRODUCT' ? `[Stok: ${item.stock_qty ?? 0}]` : '[Jasa]'}
+                        {item.nama} (Rp {item.base_harga.toLocaleString('id-ID')}) {item.item_type === 'PRODUCT' ? `[Stok: ${item.stock_qty ?? 0}]` : `[Jasa - ${item.duration_hours || 24} Jam]`}
                       </option>
                     ))}
                   </select>
@@ -888,6 +937,35 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
                 />
               </div>
             </div>
+
+            {/* JASA: Target Waktu Selesai Pengerjaan (Target SLA) */}
+            {catalog.find(c => c.nama === selectedService)?.item_type !== 'PRODUCT' && selectedService && (
+              <div className="p-3 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 rounded-xl space-y-2">
+                <label className="text-xs font-bold text-purple-900 dark:text-purple-300 flex items-center gap-1.5">
+                  <Clock className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                  <span>Target Waktu Selesai Pengerjaan (SLA Layanan Jasa)</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={estimatedCompletion}
+                    onChange={e => setEstimatedCompletion(e.target.value)}
+                    placeholder="Contoh: Besok, 30 Okt 2026, 17:00 WIB"
+                    className="flex-1 bg-white dark:bg-slate-900 border border-purple-300 dark:border-purple-700 rounded-lg p-2 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-purple-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const matched = catalog.find(c => c.nama === selectedService);
+                      setEstimatedCompletion(calculateDefaultCompletion(matched?.duration_hours || 24));
+                    }}
+                    className="px-2.5 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-lg text-[11px] cursor-pointer shrink-0"
+                  >
+                    Reset SLA
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Photo Condition of Goods (Pre-Service) */}
             <div className="space-y-2">
@@ -1909,6 +1987,12 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
                       <div className="flex justify-between"><span>Kasir:</span><span>{actorName}</span></div>
                       <div className="flex justify-between"><span>Pelanggan:</span><span className="font-bold">{activeReceiptTrx.customer}</span></div>
                       <div className="flex justify-between"><span>No. WA:</span><span className="font-bold">{activeReceiptTrx.phone}</span></div>
+                      {activeReceiptTrx.estimatedCompletion && (
+                        <div className="flex justify-between font-bold text-amber-900 bg-amber-50 px-1 py-0.5 rounded border border-amber-200 mt-1">
+                          <span>EST. SELESAI:</span>
+                          <span>{activeReceiptTrx.estimatedCompletion}</span>
+                        </div>
+                      )}
                     </div>
 
                     <div className="border-t border-dashed border-slate-400 pt-2 space-y-1">
@@ -2069,13 +2153,18 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
                         setSelectedService(chosen);
                         const found = catalog.find(c => c.nama === chosen);
                         setServicePrice(found ? found.base_harga : 0);
+                        if (found && found.item_type !== 'PRODUCT') {
+                          setEstimatedCompletion(calculateDefaultCompletion(found.duration_hours || 24));
+                        } else {
+                          setEstimatedCompletion('');
+                        }
                       }}
                       className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white"
                     >
                       <option value="" disabled>-- Pilih Layanan / Produk --</option>
                       {catalog.map(item => (
                         <option key={item.id} value={item.nama}>
-                          {item.nama} (Rp {item.base_harga.toLocaleString('id-ID')}) {item.item_type === 'PRODUCT' ? `[Stok: ${item.stock_qty ?? 0}]` : '[Jasa]'}
+                          {item.nama} (Rp {item.base_harga.toLocaleString('id-ID')}) {item.item_type === 'PRODUCT' ? `[Stok: ${item.stock_qty ?? 0}]` : `[Jasa - ${item.duration_hours || 24} Jam]`}
                         </option>
                       ))}
                     </select>
@@ -2093,6 +2182,23 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
                   />
                 </div>
               </div>
+
+              {/* JASA: Target Waktu Selesai Pengerjaan Modal */}
+              {catalog.find(c => c.nama === selectedService)?.item_type !== 'PRODUCT' && selectedService && (
+                <div className="p-3 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 rounded-xl space-y-2">
+                  <label className="text-xs font-bold text-purple-900 dark:text-purple-300 flex items-center gap-1.5">
+                    <Clock className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                    <span>Target Waktu Selesai Pengerjaan (SLA Layanan Jasa)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={estimatedCompletion}
+                    onChange={e => setEstimatedCompletion(e.target.value)}
+                    placeholder="Contoh: Besok, 30 Okt 2026, 17:00 WIB"
+                    className="w-full bg-white dark:bg-slate-900 border border-purple-300 dark:border-purple-700 rounded-lg p-2 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">Metode Pembayaran:</label>

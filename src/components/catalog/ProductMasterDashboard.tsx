@@ -18,8 +18,9 @@ export function ProductMasterDashboard() {
   const [hppActual, setHppActual] = useState<number | ''>('');
   const [bahanBaku, setBahanBaku] = useState('');
   
-  // Customizable CRM cycle duration & stock alerts
+  // Customizable CRM cycle duration, SLA duration & stock alerts
   const [reminderDays, setReminderDays] = useState<number | ''>(30);
+  const [durationHours, setDurationHours] = useState<number | ''>(24);
   const [stockQty, setStockQty] = useState<number | ''>(10);
   const [stockAlertThreshold, setStockAlertThreshold] = useState<number | ''>(5);
 
@@ -42,6 +43,7 @@ export function ProductMasterDashboard() {
     setHppActual('');
     setBahanBaku('');
     setReminderDays(30);
+    setDurationHours(24);
     setStockQty(10);
     setStockAlertThreshold(5);
     setShowAddForm(true);
@@ -57,6 +59,7 @@ export function ProductMasterDashboard() {
     setHppActual(item.hpp || '');
     setBahanBaku(item.bahan_baku || '');
     setReminderDays(item.reminder_days ?? 30);
+    setDurationHours(item.duration_hours ?? 24);
     setStockQty(item.stock_qty ?? 0);
     setStockAlertThreshold(item.stock_alert_threshold ?? 5);
     setShowAddForm(true);
@@ -82,6 +85,7 @@ export function ProductMasterDashboard() {
     }
 
     const finalReminderDays = Number(reminderDays) || 30;
+    const finalDurationHours = itemType === 'SERVICE' ? (Number(durationHours) || 24) : undefined;
     const finalStockQty = itemType === 'PRODUCT' ? (Number(stockQty) || 0) : 0;
     const finalStockThreshold = itemType === 'PRODUCT' ? (Number(stockAlertThreshold) || 5) : 0;
 
@@ -95,6 +99,7 @@ export function ProductMasterDashboard() {
         item_type: itemType,
         bahan_baku: bahanBaku || (itemType === 'SERVICE' ? 'Jasa Operasional' : 'Bahan Baku Standar'),
         reminder_days: finalReminderDays,
+        duration_hours: finalDurationHours,
         stock_qty: finalStockQty,
         stock_alert_threshold: finalStockThreshold,
       });
@@ -108,6 +113,7 @@ export function ProductMasterDashboard() {
         item_type: itemType,
         bahan_baku: bahanBaku || (itemType === 'SERVICE' ? 'Jasa Operasional' : 'Bahan Baku Standar'),
         reminder_days: finalReminderDays,
+        duration_hours: finalDurationHours,
         stock_qty: finalStockQty,
         stock_alert_threshold: finalStockThreshold,
       });
@@ -285,6 +291,53 @@ export function ProductMasterDashboard() {
               </div>
             </div>
           </div>
+
+          {/* KHUSUS JASA: ESTIMASI WAKTU SELESAI (TARGET SLA) */}
+          {itemType === 'SERVICE' && (
+            <div className="bg-purple-50 dark:bg-purple-950/40 p-4 rounded-xl border border-purple-200 dark:border-purple-800 space-y-3">
+              <label className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Clock className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                <span>Estimasi Waktu Selesai Pengerjaan Layanan (Target SLA Jasa)</span>
+              </label>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[11px] text-slate-500 font-bold">Pilihan Cepat:</span>
+                {[
+                  { label: '1 Jam (Express)', h: 1 },
+                  { label: '3 Jam (Same Day)', h: 3 },
+                  { label: '24 Jam (1 Hari)', h: 24 },
+                  { label: '48 Jam (2 Hari)', h: 48 },
+                  { label: '72 Jam (3 Hari)', h: 72 },
+                ].map((preset) => (
+                  <button
+                    type="button"
+                    key={preset.h}
+                    onClick={() => setDurationHours(preset.h)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                      durationHours === preset.h
+                        ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
+                        : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-purple-600'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+                <div className="flex items-center gap-2 ml-auto">
+                  <span className="text-[11px] text-slate-500 font-bold">Atau Ketik Kustom:</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="720"
+                    value={durationHours}
+                    onChange={(e) => setDurationHours(e.target.value === '' ? '' : Number(e.target.value))}
+                    placeholder="Jam..."
+                    className="w-20 px-2 py-1.5 text-xs text-center font-bold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-600"
+                  />
+                  <span className="text-xs text-slate-500 font-bold">Jam</span>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* RETAIL ONLY: STOK & PERINGATAN REORDER OWNER */}
           {itemType === 'PRODUCT' && (
@@ -475,10 +528,11 @@ export function ProductMasterDashboard() {
             <thead className="bg-slate-100 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-800">
               <tr>
                 <th className="px-5 py-3.5">Jenis</th>
-                <th className="px-5 py-3.5">SKU & Item</th>
+                <th className="px-5 py-3.5">SKU &amp; Item</th>
                 <th className="px-5 py-3.5">Harga Jual</th>
+                <th className="px-5 py-3.5">Estimasi Selesai (SLA)</th>
                 <th className="px-5 py-3.5">Siklus Pengingat CRM</th>
-                <th className="px-5 py-3.5">Stok & Peringatan</th>
+                <th className="px-5 py-3.5">Stok &amp; Peringatan</th>
                 <th className="px-5 py-3.5">Nominal HPP</th>
                 <th className="px-5 py-3.5">Est. Gross Profit</th>
                 <th className="px-5 py-3.5 text-right">Aksi</th>
@@ -487,7 +541,7 @@ export function ProductMasterDashboard() {
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-slate-800 dark:text-slate-200">
               {catalog.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-5 py-12 text-center text-slate-400">
+                  <td colSpan={9} className="px-5 py-12 text-center text-slate-400">
                     <Package className="w-8 h-8 mx-auto mb-2 text-slate-400 opacity-40" />
                     <span className="font-bold text-slate-600 dark:text-slate-300">Belum ada layanan atau produk terdaftar</span>
                   </td>
@@ -515,6 +569,20 @@ export function ProductMasterDashboard() {
                     </td>
                     <td className="px-5 py-3.5 font-bold text-slate-900 dark:text-white">
                       Rp {item.base_harga.toLocaleString('id-ID')}
+                    </td>
+                    <td className="px-5 py-3.5">
+                      {type === 'SERVICE' ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                          <Clock className="w-3 h-3" />
+                          <span>
+                            {(item.duration_hours || 24) >= 24
+                              ? `${Math.round((item.duration_hours || 24) / 24)} Hari (${item.duration_hours || 24} Jam)`
+                              : `${item.duration_hours || 1} Jam`}
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-slate-400 font-mono">- (Fisik)</span>
+                      )}
                     </td>
                     <td className="px-5 py-3.5">
                       <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold ${

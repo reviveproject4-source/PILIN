@@ -6,6 +6,8 @@ export interface BusinessProfileConfig {
   business_address: string;
   business_phone: string;
   logo_url?: string | null;
+  business_type?: 'JASA' | 'RETAIL' | 'HYBRID';
+  default_service_duration_hours?: number;
   terms_and_conditions: string;
   updated_at: string;
 }
@@ -17,6 +19,8 @@ export class BusinessProfileService {
     business_address: 'Bengkel Tas Sepatu, Indonesia',
     business_phone: '081280320505',
     logo_url: '/logo.png',
+    business_type: 'HYBRID',
+    default_service_duration_hours: 24,
     terms_and_conditions: '1. Barang yang telah diserahkan wajib dicek kembali saat pengambilan.\n2. Garansi pengerjaan berlaku 3 hari setelah pengambilan barang.\n3. Pengambilan barang wajib membawa nota fisik atau nota WhatsApp resmi.',
     updated_at: new Date().toISOString(),
   };
