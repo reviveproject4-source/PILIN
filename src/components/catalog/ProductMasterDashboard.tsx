@@ -485,8 +485,16 @@ export function ProductMasterDashboard() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-slate-800 dark:text-slate-200">
-              {catalog.map((item) => {
-                const gp = item.base_harga - item.hpp;
+              {catalog.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-5 py-12 text-center text-slate-400">
+                    <Package className="w-8 h-8 mx-auto mb-2 text-slate-400 opacity-40" />
+                    <span className="font-bold text-slate-600 dark:text-slate-300">Belum ada layanan atau produk terdaftar</span>
+                  </td>
+                </tr>
+              ) : (
+                catalog.map((item) => {
+                  const gp = item.base_harga - item.hpp;
                 const type = item.item_type || 'SERVICE';
                 const isLowStock = type === 'PRODUCT' && item.stock_alert_threshold && (item.stock_qty ?? 0) <= item.stock_alert_threshold;
 
@@ -569,7 +577,7 @@ export function ProductMasterDashboard() {
                     </td>
                   </tr>
                 );
-              })}
+              }))}
             </tbody>
           </table>
         </div>

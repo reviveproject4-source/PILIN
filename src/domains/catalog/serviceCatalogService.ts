@@ -93,22 +93,47 @@ export class ServiceCatalogService {
     this.masterCatalog = [...DEFAULT_CATALOG];
   }
 
+  static getDefaultCatalogForDemo(): ServiceCatalogItem[] {
+    return [...DEFAULT_CATALOG];
+  }
+
   static loadFromStorage(): ServiceCatalogItem[] {
     if (typeof window !== 'undefined') {
       try {
+        const isDemo = localStorage.getItem('pilin_demo_mode') === 'true';
         const saved = localStorage.getItem('pilin_master_catalog');
-        if (saved) {
+        if (saved !== null) {
           const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) {
+          if (Array.isArray(parsed)) {
+            if (!isDemo) {
+              // For live production tenants, strictly filter out seed mock items
+              const liveItems = parsed.filter(
+                (item) => !item.id.startsWith('srv-00000000-') && !item.id.startsWith('prod-00000000-')
+              );
+              this.masterCatalog = liveItems;
+              return [...this.masterCatalog];
+            }
             this.masterCatalog = parsed;
             return [...this.masterCatalog];
           }
+        }
+        // If no saved catalog in storage:
+        if (isDemo) {
+          this.masterCatalog = [...DEFAULT_CATALOG];
+          return [...this.masterCatalog];
+        } else {
+          // LIVE TENANT: catalog starts 100% EMPTY until Owner adds services!
+          this.masterCatalog = [];
+          return [];
         }
       } catch (err) {
         console.error('ServiceCatalogService load error:', err);
       }
     }
-    this.masterCatalog = [...DEFAULT_CATALOG];
+    // Node / server environment fallback for unit tests
+    if (this.masterCatalog.length === 0) {
+      this.masterCatalog = [...DEFAULT_CATALOG];
+    }
     return [...this.masterCatalog];
   }
 
@@ -123,6 +148,9 @@ export class ServiceCatalogService {
   }
 
   static getMasterCatalog(): ServiceCatalogItem[] {
+    if (typeof window !== 'undefined') {
+      return this.loadFromStorage();
+    }
     if (this.masterCatalog.length === 0) {
       return this.loadFromStorage();
     }

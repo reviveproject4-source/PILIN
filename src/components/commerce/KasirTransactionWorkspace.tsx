@@ -15,7 +15,7 @@ import { BroadcastCameraModal } from '../broadcast/BroadcastCameraModal';
 import { WorkQueueService, WorkOrderQueueItem } from '@/domains/work/workQueueService';
 import { RetentionDomainService, SapaanLogRecord } from '@/domains/retention/retentionDomainService';
 import { BusinessProfileService } from '@/domains/business/businessProfileService';
-import { ServiceCatalogService } from '@/domains/catalog/serviceCatalogService';
+import { ServiceCatalogService, ServiceCatalogItem } from '@/domains/catalog/serviceCatalogService';
 import { ServiceOrderStatus } from '@/lib/types';
 import { Salutation, extractSalutation, formatCustomerName } from '@/lib/salutationHelper';
 
@@ -117,15 +117,49 @@ export function KasirTransactionWorkspace({
     return [];
   });
 
-  // POS Form State
+  // Catalog & POS Form State
+  const [catalog, setCatalog] = useState<ServiceCatalogItem[]>(() => {
+    return isDemo ? ServiceCatalogService.getDefaultCatalogForDemo() : ServiceCatalogService.getMasterCatalog();
+  });
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>(isDemo ? 'cust-101' : '');
   const [selectedSalutation, setSelectedSalutation] = useState<Salutation>(isDemo ? 'Bapak' : 'Kak');
   const [customerName, setCustomerName] = useState<string>(isDemo ? 'Budi Santoso' : '');
   const [customerPhone, setCustomerPhone] = useState<string>(isDemo ? '08123456789' : '');
-  const [selectedService, setSelectedService] = useState<string>('Layanan Cuci Express');
-  const [servicePrice, setServicePrice] = useState<number>(35000);
+  const [selectedService, setSelectedService] = useState<string>(() => {
+    const items = isDemo ? ServiceCatalogService.getDefaultCatalogForDemo() : ServiceCatalogService.getMasterCatalog();
+    return items[0]?.nama || '';
+  });
+  const [servicePrice, setServicePrice] = useState<number>(() => {
+    const items = isDemo ? ServiceCatalogService.getDefaultCatalogForDemo() : ServiceCatalogService.getMasterCatalog();
+    return items[0]?.base_harga || 0;
+  });
   const [qty, setQty] = useState<number>(1);
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'QRIS_TRANSFER'>('CASH');
+
+  React.useEffect(() => {
+    const refreshCatalog = () => {
+      const items = isDemo ? ServiceCatalogService.getDefaultCatalogForDemo() : ServiceCatalogService.getMasterCatalog();
+      setCatalog(items);
+      if (items.length > 0) {
+        setSelectedService(prev => {
+          if (!prev || !items.some(i => i.nama === prev)) {
+            setServicePrice(items[0].base_harga);
+            return items[0].nama;
+          }
+          return prev;
+        });
+      } else {
+        setSelectedService('');
+        setServicePrice(0);
+      }
+    };
+
+    refreshCatalog();
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storage', refreshCatalog);
+      return () => window.removeEventListener('storage', refreshCatalog);
+    }
+  }, [isDemo]);
 
   // Item Condition Photo (Service Pre-Condition Photo)
   const [itemPhotoUrl, setItemPhotoUrl] = useState<string | null>(null);
@@ -266,6 +300,10 @@ export function KasirTransactionWorkspace({
   // Create Transaction Handler
   const handleCreateTransaction = (e: React.FormEvent) => {
     e.preventDefault();
+    if (catalog.length === 0 || !selectedService) {
+      setFeedback({ type: 'error', text: 'Tidak dapat memproses transaksi karena belum ada layanan/produk yang dipilih. Owner belum menambahkan data di Master Produk/Layanan.' });
+      return;
+    }
     if (!customerName.trim() || !customerPhone.trim()) {
       setFeedback({ type: 'error', text: 'Nama dan Nomor WhatsApp Pelanggan wajib diisi.' });
       return;
@@ -802,24 +840,40 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
               </div>
             )}
 
+            {catalog.length === 0 && (
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-xl flex items-center gap-2 text-xs text-amber-800 dark:text-amber-300 font-medium">
+                <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                <span>Katalog layanan/produk masih kosong. Owner belum menambahkan jenis layanan atau produk di Master Data.</span>
+              </div>
+            )}
+
             {/* Service & Item Condition Photo Section */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">Layanan Jasa:</label>
-                <select
-                  value={selectedService}
-                  onChange={e => {
-                    setSelectedService(e.target.value);
-                    if (e.target.value.includes('Express')) setServicePrice(35000);
-                    else if (e.target.value.includes('Regular')) setServicePrice(20000);
-                    else setServicePrice(50000);
-                  }}
-                  className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
-                >
-                  <option value="Layanan Cuci Express">Cuci Express (Rp 35.000)</option>
-                  <option value="Layanan Cuci Regular">Cuci Regular (Rp 20.000)</option>
-                  <option value="Layanan Premium Treatment">Premium Treatment (Rp 50.000)</option>
-                </select>
+                <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">Layanan Jasa / Produk:</label>
+                {catalog.length === 0 ? (
+                  <div className="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-500 font-semibold">
+                    (Belum ada layanan/produk terdaftar)
+                  </div>
+                ) : (
+                  <select
+                    value={selectedService}
+                    onChange={e => {
+                      const chosen = e.target.value;
+                      setSelectedService(chosen);
+                      const found = catalog.find(c => c.nama === chosen);
+                      setServicePrice(found ? found.base_harga : 0);
+                    }}
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                  >
+                    <option value="" disabled>-- Pilih Layanan / Produk --</option>
+                    {catalog.map(item => (
+                      <option key={item.id} value={item.nama}>
+                        {item.nama} (Rp {item.base_harga.toLocaleString('id-ID')}) {item.item_type === 'PRODUCT' ? `[Stok: ${item.stock_qty ?? 0}]` : '[Jasa]'}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               <div>
@@ -828,8 +882,9 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
                   type="number"
                   min={1}
                   value={qty}
+                  disabled={catalog.length === 0}
                   onChange={e => setQty(parseInt(e.target.value, 10) || 1)}
-                  className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 disabled:opacity-50"
                 />
               </div>
             </div>
@@ -886,10 +941,11 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
 
             <button
               type="submit"
-              className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center justify-center gap-2"
+              disabled={catalog.length === 0 || !selectedService}
+              className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:cursor-not-allowed text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
             >
               <CheckCircle2 className="w-4 h-4" />
-              <span>PROSES PEMBAYARAN & CETAK NOTA THERMAL</span>
+              <span>{catalog.length === 0 ? 'LAYANAN BELUM DITAMBAHKAN' : 'PROSES PEMBAYARAN & CETAK NOTA THERMAL'}</span>
             </button>
           </form>
 
@@ -902,30 +958,36 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
               </h3>
 
               <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                {recentTransactions.map(t => (
-                  <div key={t.id} className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
-                    <div>
-                      <div className="font-bold text-slate-900 dark:text-white">{t.id} — {t.customer}</div>
-                      <div className="text-[11px] text-slate-500 font-mono">{t.service} ({t.qty}x) • Rp {t.total.toLocaleString('id-ID')} • {t.method}</div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() => setActiveReceiptTrx(t)}
-                        className="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 font-bold rounded text-[11px] flex items-center gap-1"
-                      >
-                        <Printer className="w-3.5 h-3.5 text-blue-500" />
-                        <span>Nota</span>
-                      </button>
-                      <button
-                        onClick={() => handleSendDirectWaReceipt(t)}
-                        className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded text-[11px] flex items-center gap-1"
-                      >
-                        <Send className="w-3.5 h-3.5" />
-                        <span>[Kirim]</span>
-                      </button>
-                    </div>
+                {recentTransactions.length === 0 ? (
+                  <div className="p-4 text-center text-slate-400 text-xs">
+                    Belum ada riwayat transaksi hari ini.
                   </div>
-                ))}
+                ) : (
+                  recentTransactions.map(t => (
+                    <div key={t.id} className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
+                      <div>
+                        <div className="font-bold text-slate-900 dark:text-white">{t.id} — {t.customer}</div>
+                        <div className="text-[11px] text-slate-500 font-mono">{t.service} ({t.qty}x) • Rp {t.total.toLocaleString('id-ID')} • {t.method}</div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => setActiveReceiptTrx(t)}
+                          className="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 font-bold rounded text-[11px] flex items-center gap-1 cursor-pointer"
+                        >
+                          <Printer className="w-3.5 h-3.5 text-blue-500" />
+                          <span>Nota</span>
+                        </button>
+                        <button
+                          onClick={() => handleSendDirectWaReceipt(t)}
+                          className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded text-[11px] flex items-center gap-1 cursor-pointer"
+                        >
+                          <Send className="w-3.5 h-3.5" />
+                          <span>[Kirim]</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 
@@ -1006,19 +1068,27 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-slate-800 dark:text-slate-200">
-                {spkOrders.map(o => (
-                  <tr key={o.id} className="hover:bg-slate-100 dark:hover:bg-slate-900/60">
-                    <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400">{o.order_number || o.id}</td>
-                    <td className="p-3 font-bold text-slate-900 dark:text-white">{o.customer_name || 'Pelanggan Umum'}</td>
-                    <td className="p-3">{o.service_name || 'Cuci Express'}</td>
-                    <td className="p-3 font-mono text-slate-500 dark:text-slate-400">{o.target_minutes || 60} Menit</td>
-                    <td className="p-3">
-                      <span className="px-2.5 py-0.5 bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800 rounded font-bold text-[10px] uppercase">
-                        {o.status}
-                      </span>
+                {spkOrders.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="p-6 text-center text-slate-400">
+                      Belum ada antrian SPK pengerjaan.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  spkOrders.map(o => (
+                    <tr key={o.id} className="hover:bg-slate-100 dark:hover:bg-slate-900/60">
+                      <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400">{o.order_number || o.id}</td>
+                      <td className="p-3 font-bold text-slate-900 dark:text-white">{o.customer_name || 'Pelanggan Umum'}</td>
+                      <td className="p-3">{o.service_name || '-'}</td>
+                      <td className="p-3 font-mono text-slate-500 dark:text-slate-400">{o.target_minutes || 60} Menit</td>
+                      <td className="p-3">
+                        <span className="px-2.5 py-0.5 bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800 rounded font-bold text-[10px] uppercase">
+                          {o.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -1169,31 +1239,35 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-slate-800 dark:text-slate-200">
-                  {(recentTransactions.length > 0 ? recentTransactions : [
-                    { id: 'NOT-2026-0891', customer: 'Budi Santoso', phone: '08123456789' },
-                    { id: 'NOT-2026-0885', customer: 'Dewi Lestari', phone: '08212345678' },
-                    { id: 'NOT-2026-0870', customer: 'Siti Rahma', phone: '08198765432' },
-                  ]).map(item => (
-                    <tr key={item.id} className="hover:bg-slate-100 dark:hover:bg-slate-900/60">
-                      <td className="p-3 font-bold text-slate-900 dark:text-white">{item.customer}</td>
-                      <td className="p-3 font-mono text-emerald-600 dark:text-emerald-400">{item.phone}</td>
-                      <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400">Nota #{item.id}</td>
-                      <td className="p-3 text-right">
-                        <button
-                          onClick={() => {
-                            setWaTargetName(item.customer);
-                            setWaTargetPhone(item.phone);
-                            updateWaTemplateText(item.customer, 'REMINDER', selectedIndustry);
-                            setFeedback({ type: 'success', text: `Pengingat nota #${item.id} disiapkan untuk ${item.customer}.` });
-                          }}
-                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs inline-flex items-center gap-1 shadow cursor-pointer"
-                        >
-                          <Send className="w-3 h-3" />
-                          <span>[Kirim]</span>
-                        </button>
+                  {recentTransactions.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="p-6 text-center text-slate-400">
+                        Belum ada riwayat nota transaksi.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    recentTransactions.map(item => (
+                      <tr key={item.id} className="hover:bg-slate-100 dark:hover:bg-slate-900/60">
+                        <td className="p-3 font-bold text-slate-900 dark:text-white">{item.customer}</td>
+                        <td className="p-3 font-mono text-emerald-600 dark:text-emerald-400">{item.phone}</td>
+                        <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400">Nota #{item.id}</td>
+                        <td className="p-3 text-right">
+                          <button
+                            onClick={() => {
+                              setWaTargetName(item.customer);
+                              setWaTargetPhone(item.phone);
+                              updateWaTemplateText(item.customer, 'REMINDER', selectedIndustry);
+                              setFeedback({ type: 'success', text: `Pengingat nota #${item.id} disiapkan untuk ${item.customer}.` });
+                            }}
+                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs inline-flex items-center gap-1 shadow cursor-pointer"
+                          >
+                            <Send className="w-3 h-3" />
+                            <span>[Kirim]</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -1982,21 +2056,30 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">Layanan Jasa:</label>
-                  <select
-                    value={selectedService}
-                    onChange={e => {
-                      setSelectedService(e.target.value);
-                      if (e.target.value.includes('Express')) setServicePrice(35000);
-                      else if (e.target.value.includes('Regular')) setServicePrice(20000);
-                      else setServicePrice(50000);
-                    }}
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white"
-                  >
-                    <option value="Layanan Cuci Express">Cuci Express (Rp 35.000)</option>
-                    <option value="Layanan Cuci Regular">Cuci Regular (Rp 20.000)</option>
-                    <option value="Layanan Premium Treatment">Premium Treatment (Rp 50.000)</option>
-                  </select>
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">Layanan Jasa / Produk:</label>
+                  {catalog.length === 0 ? (
+                    <div className="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-500 font-semibold">
+                      (Belum ada layanan/produk)
+                    </div>
+                  ) : (
+                    <select
+                      value={selectedService}
+                      onChange={e => {
+                        const chosen = e.target.value;
+                        setSelectedService(chosen);
+                        const found = catalog.find(c => c.nama === chosen);
+                        setServicePrice(found ? found.base_harga : 0);
+                      }}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white"
+                    >
+                      <option value="" disabled>-- Pilih Layanan / Produk --</option>
+                      {catalog.map(item => (
+                        <option key={item.id} value={item.nama}>
+                          {item.nama} (Rp {item.base_harga.toLocaleString('id-ID')}) {item.item_type === 'PRODUCT' ? `[Stok: ${item.stock_qty ?? 0}]` : '[Jasa]'}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
                 <div>
                   <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">Jumlah (Qty):</label>
@@ -2004,8 +2087,9 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
                     type="number"
                     min={1}
                     value={qty}
+                    disabled={catalog.length === 0}
                     onChange={e => setQty(parseInt(e.target.value, 10) || 1)}
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white disabled:opacity-50"
                   />
                 </div>
               </div>
@@ -2029,10 +2113,11 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
 
               <button
                 type="submit"
-                className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                disabled={catalog.length === 0 || !selectedService}
+                className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:cursor-not-allowed text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                <span>Simpan Transaksi &amp; Cetak Nota</span>
+                <span>{catalog.length === 0 ? 'Layanan Belum Ditambahkan' : 'Simpan Transaksi & Cetak Nota'}</span>
               </button>
             </form>
           </div>
@@ -2063,18 +2148,26 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-slate-800 dark:text-slate-200">
-                  {spkOrders.map(o => (
-                    <tr key={o.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                      <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400">{o.order_number || o.id}</td>
-                      <td className="p-3 font-bold text-slate-900 dark:text-white">{o.customer_name || 'Pelanggan Umum'}</td>
-                      <td className="p-3">{o.service_name || 'Cuci Express'}</td>
-                      <td className="p-3">
-                        <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-400 border border-amber-300 dark:border-amber-800 rounded font-bold text-[10px] uppercase">
-                          {o.status}
-                        </span>
+                  {spkOrders.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="p-6 text-center text-slate-400">
+                        Belum ada antrian SPK pengerjaan.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    spkOrders.map(o => (
+                      <tr key={o.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                        <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400">{o.order_number || o.id}</td>
+                        <td className="p-3 font-bold text-slate-900 dark:text-white">{o.customer_name || 'Pelanggan Umum'}</td>
+                        <td className="p-3">{o.service_name || '-'}</td>
+                        <td className="p-3">
+                          <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-400 border border-amber-300 dark:border-amber-800 rounded font-bold text-[10px] uppercase">
+                            {o.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -2096,22 +2189,30 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
               </button>
             </div>
             <div className="space-y-3 text-xs">
-              <div className="p-3.5 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between">
-                <div>
-                  <div className="font-bold text-slate-900 dark:text-white">NOT-2026-0891 — Siti Rahma</div>
-                  <div className="text-slate-500 font-mono">Layanan Premium Treatment (7x) • Status: Siap Diambil</div>
+              {readyPickupOrders.length === 0 ? (
+                <div className="p-6 text-center text-slate-400">
+                  Tidak ada barang yang siap diambil saat ini.
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowPickupModal(false);
-                    setFeedback({ type: 'success', text: 'Nota NOT-2026-0891 (Siti Rahma) telah dilunasi dan barang telah diserahkan.' });
-                  }}
-                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg text-xs cursor-pointer"
-                >
-                  Serahkan Barang
-                </button>
-              </div>
+              ) : (
+                readyPickupOrders.map(order => (
+                  <div key={order.id} className="p-3.5 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                    <div>
+                      <div className="font-bold text-slate-900 dark:text-white">{order.order_number || order.id} — {order.customer_name}</div>
+                      <div className="text-slate-500 font-mono">{order.service_name || 'Layanan Jasa'} • Status: Siap Diambil</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowPickupModal(false);
+                        setFeedback({ type: 'success', text: `Nota ${order.order_number || order.id} (${order.customer_name}) telah dilunasi dan barang telah diserahkan.` });
+                      }}
+                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg text-xs cursor-pointer"
+                    >
+                      Serahkan Barang
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -2131,30 +2232,36 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
               </button>
             </div>
             <div className="space-y-2 max-h-96 overflow-y-auto">
-              {recentTransactions.map(t => (
-                <div key={t.id} className="p-3.5 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
-                  <div>
-                    <div className="font-bold text-slate-900 dark:text-white">{t.id} — {t.customer} ({t.phone})</div>
-                    <div className="text-[11px] text-slate-500 font-mono">{t.service} ({t.qty}x) • {t.method} • {t.time}</div>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={() => { setShowHistoryModal(false); setActiveReceiptTrx(t); }}
-                      className="px-2.5 py-1 bg-white dark:bg-slate-800 hover:bg-slate-100 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 font-bold rounded text-[11px] flex items-center gap-1 cursor-pointer"
-                    >
-                      <Printer className="w-3.5 h-3.5 text-blue-500" />
-                      <span>Cetak Nota</span>
-                    </button>
-                    <button
-                      onClick={() => handleSendDirectWaReceipt(t)}
-                      className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded text-[11px] flex items-center gap-1 cursor-pointer"
-                    >
-                      <Send className="w-3.5 h-3.5" />
-                      <span>[Kirim WA]</span>
-                    </button>
-                  </div>
+              {recentTransactions.length === 0 ? (
+                <div className="p-6 text-center text-slate-400 text-xs">
+                  Belum ada riwayat transaksi hari ini.
                 </div>
-              ))}
+              ) : (
+                recentTransactions.map(t => (
+                  <div key={t.id} className="p-3.5 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
+                    <div>
+                      <div className="font-bold text-slate-900 dark:text-white">{t.id} — {t.customer} ({t.phone})</div>
+                      <div className="text-[11px] text-slate-500 font-mono">{t.service} ({t.qty}x) • {t.method} • {t.time}</div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => { setShowHistoryModal(false); setActiveReceiptTrx(t); }}
+                        className="px-2.5 py-1 bg-white dark:bg-slate-800 hover:bg-slate-100 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 font-bold rounded text-[11px] flex items-center gap-1 cursor-pointer"
+                      >
+                        <Printer className="w-3.5 h-3.5 text-blue-500" />
+                        <span>Cetak Nota</span>
+                      </button>
+                      <button
+                        onClick={() => handleSendDirectWaReceipt(t)}
+                        className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded text-[11px] flex items-center gap-1 cursor-pointer"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        <span>[Kirim WA]</span>
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
