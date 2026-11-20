@@ -19,6 +19,7 @@ import { ServiceCatalogService, ServiceCatalogItem, formatDurationLabel } from '
 import { BluetoothPrinterService } from '@/domains/printer/bluetoothPrinterService';
 import { ServiceOrderStatus } from '@/lib/types';
 import { Salutation, extractSalutation, formatCustomerName } from '@/lib/salutationHelper';
+import { normalizePhoneNumber } from '@/lib/normalizePhoneNumber';
 
 import { IndustryTemplateService, IndustryCategory, IndustryTemplate } from '@/domains/retention/industryTemplateService';
 
@@ -644,6 +645,137 @@ export function KasirTransactionWorkspace({
     setNewCustPhone('');
     setNewCustSalutation('Kak');
     setFeedback({ type: 'success', text: `Pelanggan baru '${newC.name}' berhasil ditambahkan ke Database Pelanggan.` });
+  };
+
+  // CSV Import & Export Handlers for Bulk Customers
+  const csvInputRef = useRef<HTMLInputElement>(null);
+
+  const handleDownloadCustomerTemplate = () => {
+    const csvContent = 'Nama Pelanggan,Nomor WhatsApp,Email,Alamat\n' +
+      'Bapak Budi Santoso,08123456789,budi@email.com,Jl. Merdeka No. 10\n' +
+      'Ibu Siti Rahma,08198765432,siti@email.com,Jl. Sudirman No. 5\n' +
+      'Kak Kevin Pratama,08567890123,kevin@email.com,Jl. Anggrek No. 12\n';
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'Template_Import_Pelanggan_PILIN.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    setFeedback({
+      type: 'success',
+      text: 'Template CSV berhasil diunduh. Silakan buka di Excel, isi daftar pelanggan Mami, lalu upload kembali ke PILIN.',
+    });
+  };
+
+  const handleExportCustomersToCsv = () => {
+    if (customerList.length === 0) {
+      setFeedback({ type: 'error', text: 'Belum ada data pelanggan untuk diunduh.' });
+      return;
+    }
+
+    const header = 'ID Pelanggan,Nama Pelanggan,Nomor WhatsApp,Total Transaksi,Kunjungan Terakhir,Status\n';
+    const rows = customerList.map(c => 
+      `"${c.id}","${c.name}","${c.phone}","${c.totalTrx}","${c.lastVisit}","${c.status}"`
+    ).join('\n');
+
+    const csvContent = header + rows;
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `Data_Pelanggan_PILIN_${new Date().toISOString().substring(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    setFeedback({
+      type: 'success',
+      text: `Berhasil mengekspor ${customerList.length} data pelanggan ke file CSV.`,
+    });
+  };
+
+  const handleImportCsvCustomers = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        if (!text) return;
+
+        const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        if (lines.length <= 1) {
+          setFeedback({ type: 'error', text: 'File CSV kosong atau hanya berisi baris judul.' });
+          return;
+        }
+
+        const firstLine = lines[0];
+        const delimiter = firstLine.includes(';') ? ';' : ',';
+
+        let importedCount = 0;
+        let skippedDuplicate = 0;
+        const newCustomers: typeof customerList = [];
+        const existingPhones = new Set(customerList.map(c => normalizePhoneNumber(c.phone)));
+
+        for (let i = 1; i < lines.length; i++) {
+          const rowText = lines[i];
+          const cols = rowText.split(delimiter).map(c => c.replace(/^["']|["']$/g, '').trim());
+          if (cols.length < 2) continue;
+
+          const rawName = cols[0];
+          const rawPhone = cols[1];
+          if (!rawName || rawName.length < 2 || !rawPhone) continue;
+
+          const normPhone = normalizePhoneNumber(rawPhone);
+          if (!normPhone) continue;
+
+          if (existingPhones.has(normPhone)) {
+            skippedDuplicate++;
+            continue;
+          }
+
+          existingPhones.add(normPhone);
+          const { salutation, cleanName } = extractSalutation(rawName);
+          const formattedName = formatCustomerName(cleanName || rawName, salutation || 'Kak');
+
+          newCustomers.push({
+            id: `cust-imp-${Date.now()}-${i}`,
+            name: formattedName,
+            phone: normPhone,
+            status: 'NEW',
+            totalTrx: 0,
+            lastVisit: new Date().toISOString().substring(0, 10),
+          });
+          importedCount++;
+        }
+
+        if (newCustomers.length > 0) {
+          setCustomerList(prev => [...newCustomers, ...prev]);
+          setFeedback({
+            type: 'success',
+            text: `Sukses mengimpor ${importedCount} pelanggan baru dari file CSV! ${skippedDuplicate > 0 ? `(${skippedDuplicate} nomor duplikat dilewati).` : ''}`,
+          });
+        } else {
+          setFeedback({
+            type: 'error',
+            text: skippedDuplicate > 0 
+              ? `Seluruh ${skippedDuplicate} data pelanggan dalam file sudah terdaftar sebelumnya di database.` 
+              : 'Format file tidak sesuai. Pastikan kolom pertama adalah Nama dan kolom kedua adalah Nomor WhatsApp.',
+          });
+        }
+      } catch (err) {
+        console.error('Failed to parse CSV:', err);
+        setFeedback({ type: 'error', text: 'Gagal memproses file CSV. Pastikan format file sesuai template.' });
+      } finally {
+        if (csvInputRef.current) csvInputRef.current.value = '';
+      }
+    };
+    reader.readAsText(file);
   };
 
   // WA Engine Target Customer Change Handler
@@ -1315,6 +1447,53 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
       {/* TAB 3: DATABASE PELANGGAN */}
       {activeBottomNav === 'KONSUMEN' && (
         <div className="space-y-6">
+          {/* BAR AKSI: IMPORT & EXPORT EXCEL/CSV MASSAL */}
+          <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Users className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+              <span className="font-extrabold text-sm text-slate-900 dark:text-white">Kelola Pelanggan Massal (Excel/CSV)</span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Hidden File Input for CSV Import */}
+              <input
+                ref={csvInputRef}
+                type="file"
+                accept=".csv,text/csv,text/plain"
+                onChange={handleImportCsvCustomers}
+                className="hidden"
+              />
+
+              <button
+                type="button"
+                onClick={handleDownloadCustomerTemplate}
+                className="px-3.5 py-2 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+              >
+                <FileText className="w-4 h-4 text-blue-500" />
+                <span>Unduh Template CSV</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => csvInputRef.current?.click()}
+                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-95"
+              >
+                <PlusCircle className="w-4 h-4" />
+                <span>Upload &amp; Import Pelanggan</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleExportCustomersToCsv}
+                disabled={customerList.length === 0}
+                className="px-3.5 py-2 bg-slate-800 dark:bg-slate-700 hover:bg-slate-700 text-white disabled:opacity-50 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+              >
+                <FileText className="w-4 h-4 text-emerald-400" />
+                <span>Export Data ({customerList.length})</span>
+              </button>
+            </div>
+          </div>
+
           <form onSubmit={handleAddCustomer} className="bg-slate-50 dark:bg-slate-950 p-5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-4">
             <h3 className="text-sm font-bold text-[#F26522] flex items-center gap-2">
               <Users className="w-4 h-4" />
