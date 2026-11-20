@@ -16,6 +16,7 @@ import { WorkQueueService, WorkOrderQueueItem } from '@/domains/work/workQueueSe
 import { RetentionDomainService, SapaanLogRecord } from '@/domains/retention/retentionDomainService';
 import { BusinessProfileService } from '@/domains/business/businessProfileService';
 import { ServiceCatalogService, ServiceCatalogItem, formatDurationLabel } from '@/domains/catalog/serviceCatalogService';
+import { BluetoothPrinterService } from '@/domains/printer/bluetoothPrinterService';
 import { ServiceOrderStatus } from '@/lib/types';
 import { Salutation, extractSalutation, formatCustomerName } from '@/lib/salutationHelper';
 
@@ -95,6 +96,55 @@ export function KasirTransactionWorkspace({
   const [showPrinterModal, setShowPrinterModal] = useState<boolean>(false);
   const [showAboutModal, setShowAboutModal] = useState<boolean>(false);
   const [showThemeModal, setShowThemeModal] = useState<boolean>(false);
+
+  // Bluetooth Direct Thermal Printer State
+  const [bluetoothDeviceName, setBluetoothDeviceName] = useState<string | null>(() => {
+    return BluetoothPrinterService.getConnectedDeviceName();
+  });
+  const [isConnectingBt, setIsConnectingBt] = useState<boolean>(false);
+  const [isPrintingBt, setIsPrintingBt] = useState<boolean>(false);
+
+  const handleConnectBluetooth = async () => {
+    setIsConnectingBt(true);
+    const res = await BluetoothPrinterService.connect();
+    setIsConnectingBt(false);
+    if (res.success && res.deviceName) {
+      setBluetoothDeviceName(res.deviceName);
+      setFeedback({ type: 'success', text: `Printer Bluetooth '${res.deviceName}' berhasil tersambung!` });
+    } else if (res.error) {
+      setFeedback({ type: 'error', text: res.error });
+    }
+  };
+
+  const handleDisconnectBluetooth = () => {
+    BluetoothPrinterService.disconnect();
+    setBluetoothDeviceName(null);
+    setFeedback({ type: 'success', text: 'Koneksi printer Bluetooth telah diputuskan.' });
+  };
+
+  const handlePrintBluetooth = async (trx: TransactionRecord) => {
+    if (!BluetoothPrinterService.isConnected()) {
+      setIsConnectingBt(true);
+      const conn = await BluetoothPrinterService.connect();
+      setIsConnectingBt(false);
+      if (!conn.success) {
+        if (conn.error) setFeedback({ type: 'error', text: conn.error });
+        return;
+      }
+      setBluetoothDeviceName(conn.deviceName || 'Printer Bluetooth POS');
+    }
+
+    setIsPrintingBt(true);
+    const profile = BusinessProfileService.getProfile(businessId);
+    const res = await BluetoothPrinterService.printReceipt(trx, profile, actorName || 'Kasir');
+    setIsPrintingBt(false);
+
+    if (res.success) {
+      setFeedback({ type: 'success', text: `Nota ${trx.id} berhasil dicetak via printer Bluetooth!` });
+    } else {
+      setFeedback({ type: 'error', text: res.error || 'Gagal mencetak ke printer Bluetooth.' });
+    }
+  };
 
   const handleSaveKasirProfile = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1960,18 +2010,57 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
               <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <Printer className="w-5 h-5 text-emerald-500" />
-                <span>Pengaturan Printer</span>
+                <span>Pengaturan Printer POS</span>
               </h3>
               <button onClick={() => setShowPrinterModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="space-y-4 text-xs">
-              <div className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800">
-                <div>
-                  <div className="font-bold text-slate-900 dark:text-white">Cetak Nota Otomatis</div>
-                  <div className="text-[11px] text-slate-500">Cetak nota thermal setelah transaksi lunas</div>
+              {/* Koneksi Bluetooth Direct */}
+              <div className="p-3.5 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="font-bold text-slate-900 dark:text-white">Printer Bluetooth Direct (ESC/POS)</div>
+                  {bluetoothDeviceName ? (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                      TERHUBUNG
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                      BELUM TERHUBUNG
+                    </span>
+                  )}
                 </div>
+
+                {bluetoothDeviceName ? (
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="font-mono font-bold text-slate-700 dark:text-slate-300 text-xs">
+                      {bluetoothDeviceName}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleDisconnectBluetooth}
+                      className="px-2.5 py-1 text-[11px] font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/60 rounded-lg border border-rose-200 dark:border-rose-900 cursor-pointer transition-all"
+                    >
+                      Putuskan
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={isConnectingBt}
+                    onClick={handleConnectBluetooth}
+                    className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>{isConnectingBt ? 'Mencari Printer Bluetooth...' : '+ Sambungkan Printer Bluetooth'}</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Cetak Nota Otomatis */}
+              <div className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800">
+                <div className="font-bold text-slate-900 dark:text-white">Cetak Nota Otomatis</div>
                 <button
                   type="button"
                   onClick={() => setAutoPrintEnabled(!autoPrintEnabled)}
@@ -1983,12 +2072,39 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
                 </button>
               </div>
 
-              <div className="p-3.5 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 space-y-1">
+              {/* Ukuran Kertas Thermal */}
+              <div className="p-3.5 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between">
                 <div className="font-bold text-slate-900 dark:text-white">Ukuran Kertas Thermal</div>
-                <div className="text-[11px] text-slate-500 font-mono">Standard Thermal Receipt 58mm (POS Bluetooth/USB)</div>
+                <span className="font-mono font-bold text-xs text-slate-700 dark:text-slate-300">58 mm (Roll Paper)</span>
               </div>
 
-              <div className="flex justify-end space-x-2 pt-2">
+              {/* Tombol Uji Cetak */}
+              <div className="grid grid-cols-2 gap-2 pt-2">
+                <button
+                  type="button"
+                  disabled={isPrintingBt}
+                  onClick={() => {
+                    const sampleTrx = recentTransactions[0] || {
+                      id: 'TEST-001',
+                      customer: 'Pelanggan Uji',
+                      phone: '081234567890',
+                      service: 'Uji Cetak Thermal Bluetooth',
+                      qty: 1,
+                      pricing_unit: 'item',
+                      price: 25000,
+                      total: 25000,
+                      method: 'CASH' as const,
+                      status: 'COMPLETED',
+                      time: '12:00 WIB',
+                    };
+                    handlePrintBluetooth(sampleTrx);
+                  }}
+                  className="py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow cursor-pointer transition-all"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Tes Bluetooth</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => {
@@ -1999,10 +2115,10 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
                       window.print();
                     }
                   }}
-                  className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow cursor-pointer"
+                  className="py-2.5 bg-slate-800 dark:bg-slate-700 hover:bg-slate-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow cursor-pointer transition-all"
                 >
-                  <Printer className="w-4 h-4" />
-                  <span>Tes Cetak Nota Thermal 58mm</span>
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Tes Cetak Sistem</span>
                 </button>
               </div>
             </div>
@@ -2058,7 +2174,7 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
               {(() => {
                 const profile = BusinessProfileService.getProfile(businessId);
                 return (
-                  <div className="w-[280px] bg-white text-slate-900 p-4 rounded border border-slate-300 font-mono text-[11px] leading-tight space-y-2 shadow-inner">
+                  <div id="thermal-receipt-print-area" className="w-[280px] bg-white text-slate-900 p-4 rounded border border-slate-300 font-mono text-[11px] leading-tight space-y-2 shadow-inner">
                     <div className="text-center border-b border-dashed border-slate-400 pb-2 space-y-1">
                       {profile.logo_url && (
                         /* eslint-disable-next-line @next/next/no-img-element */
@@ -2144,23 +2260,43 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
             </div>
 
             {/* Actions */}
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => window.print()}
-                className="py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow"
-              >
-                <Printer className="w-4 h-4" />
-                <span>Cetak 58 mm</span>
-              </button>
+            <div className="space-y-2.5">
+              <div className="grid grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  disabled={isPrintingBt || isConnectingBt}
+                  onClick={() => handlePrintBluetooth(activeReceiptTrx)}
+                  className="py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow cursor-pointer transition-all active:scale-95"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>
+                    {isPrintingBt
+                      ? 'Mencetak...'
+                      : isConnectingBt
+                      ? 'Menghubungkan...'
+                      : bluetoothDeviceName
+                      ? 'Cetak Bluetooth'
+                      : 'Cetak via Bluetooth'}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow cursor-pointer transition-all active:scale-95"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Cetak 58 mm (Sistem)</span>
+                </button>
+              </div>
 
               <button
                 type="button"
                 onClick={() => handleSendDirectWaReceipt(activeReceiptTrx)}
-                className="py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow"
+                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow cursor-pointer transition-all active:scale-95"
               >
                 <Send className="w-4 h-4" />
-                <span>[Kirim]</span>
+                <span>Kirim Nota ke WhatsApp Konsumen</span>
               </button>
             </div>
           </div>
