@@ -38,13 +38,13 @@ function MainErpAppContent() {
     if (roleParam) {
       const targetRole = roleParam === ('PEGAWAI' as any) ? 'TEAM_PRODUKSI' : roleParam;
       if (['OWNER', 'KEPALA_CABANG', 'KASIR', 'TEAM_PRODUKSI'].includes(targetRole)) {
-        if (directParam === 'true') {
+        if (directParam === 'true' && isDemoMode) {
           setActiveRole(targetRole);
           setIsAuthenticated(true);
         }
       }
     }
-  }, [roleParam, directParam]);
+  }, [roleParam, directParam, isDemoMode]);
 
   useEffect(() => {
     let isMounted = true;

@@ -16,6 +16,8 @@ export interface RegistrationRecord {
   password?: string;
 }
 
+const DATA_DIR = path.join(process.cwd(), 'data');
+const PERSISTENT_FILE = path.join(DATA_DIR, 'pilin_pending_registrations.json');
 const TMP_FILE = path.join(os.tmpdir(), 'pilin_pending_registrations.json');
 
 declare global {
@@ -25,18 +27,52 @@ declare global {
 
 export class PendingRegistrationStore {
   private static loadFromFile(): RegistrationRecord[] {
+    const list: RegistrationRecord[] = [];
+    const map = new Map<string, RegistrationRecord>();
+
+    // 1. Try persistent file first
+    try {
+      if (fs.existsSync(PERSISTENT_FILE)) {
+        const raw = fs.readFileSync(PERSISTENT_FILE, 'utf8');
+        const parsed: RegistrationRecord[] = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          parsed.forEach(r => map.set(r.id, r));
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to read from persistent registrations file', e);
+    }
+
+    // 2. Try tmp file and merge
     try {
       if (fs.existsSync(TMP_FILE)) {
         const raw = fs.readFileSync(TMP_FILE, 'utf8');
-        return JSON.parse(raw);
+        const parsed: RegistrationRecord[] = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          parsed.forEach(r => {
+            if (!map.has(r.id)) map.set(r.id, r);
+          });
+        }
       }
     } catch (e) {
       console.warn('Failed to read from tmp registrations file', e);
     }
-    return [];
+
+    return Array.from(map.values());
   }
 
   private static saveToFile(records: RegistrationRecord[]) {
+    // 1. Save to persistent directory
+    try {
+      if (!fs.existsSync(DATA_DIR)) {
+        fs.mkdirSync(DATA_DIR, { recursive: true });
+      }
+      fs.writeFileSync(PERSISTENT_FILE, JSON.stringify(records, null, 2), 'utf8');
+    } catch (e) {
+      console.warn('Failed to write to persistent registrations file', e);
+    }
+
+    // 2. Save to tmp file as replica
     try {
       fs.writeFileSync(TMP_FILE, JSON.stringify(records, null, 2), 'utf8');
     } catch (e) {

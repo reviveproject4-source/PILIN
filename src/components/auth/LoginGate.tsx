@@ -76,7 +76,7 @@ export function LoginGate({
     }
   }, [countdown]);
 
-  // Handle Login Submit
+  // Handle Login Submit with Strict Role-Based Enforcement
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedRole) {
@@ -84,53 +84,84 @@ export function LoginGate({
       return;
     }
 
+    const cleanUsername = username.trim();
+    const cleanPassword = password.trim();
+
+    if (!cleanUsername) {
+      setErrorMessage('Email, Nomor WhatsApp, atau Kode Pegawai wajib diisi.');
+      return;
+    }
+
+    if (!cleanPassword) {
+      setErrorMessage('Kata sandi atau PIN wajib diisi.');
+      return;
+    }
+
     setErrorMessage(null);
     setSuccessMessage(null);
     setLoginLoading(true);
 
-    if (username.trim()) {
-      try {
-        let clientKnownPassword = '';
-        if (typeof window !== 'undefined') {
-          const digits = username.trim().replace(/[^0-9]/g, '');
-          if (digits) {
-            clientKnownPassword = localStorage.getItem('pilin_saved_pwd_' + digits) || '';
-          }
-          if (!clientKnownPassword && username.includes('@')) {
-            clientKnownPassword = localStorage.getItem('pilin_saved_pwd_' + username.trim().toLowerCase()) || '';
-          }
+    try {
+      let clientKnownPassword = '';
+      if (typeof window !== 'undefined') {
+        const digits = cleanUsername.replace(/[^0-9]/g, '');
+        if (digits) {
+          clientKnownPassword = localStorage.getItem('pilin_saved_pwd_' + digits) || '';
         }
-
-        const verifyRes = await verifyTenantLoginAction(selectedRole, username.trim(), password.trim(), clientKnownPassword);
-        if (!verifyRes.success) {
-          setErrorMessage(verifyRes.message || 'Kredensial tidak valid.');
-          setLoginLoading(false);
-          return;
+        if (!clientKnownPassword && cleanUsername.includes('@')) {
+          clientKnownPassword = localStorage.getItem('pilin_saved_pwd_' + cleanUsername.toLowerCase()) || '';
         }
-        if (verifyRes.tenant) {
-          TenantService.completeOnboarding({
-            businessId: verifyRes.tenant.businessId,
-            businessName: verifyRes.tenant.businessName,
-            ownerName: verifyRes.tenant.ownerName,
-            contactNumber: verifyRes.tenant.whatsapp,
-            email: verifyRes.tenant.email,
-            employeeCount: verifyRes.tenant.employeeCount || '1 Cabang',
-          });
-        }
-      } catch {
-        // Fallback if network or offline
       }
+
+      // Collect all known employees across all businesses from localStorage (Master Pegawai)
+      const clientKnownEmployees: any[] = [];
+      if (typeof window !== 'undefined') {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('pilin_employees_')) {
+            try {
+              const list = JSON.parse(localStorage.getItem(key) || '[]');
+              if (Array.isArray(list)) {
+                clientKnownEmployees.push(...list);
+              }
+            } catch {}
+          }
+        }
+      }
+
+      const verifyRes = await verifyTenantLoginAction(
+        selectedRole,
+        cleanUsername,
+        cleanPassword,
+        clientKnownPassword,
+        clientKnownEmployees
+      );
+
+      if (!verifyRes.success) {
+        setErrorMessage(verifyRes.message || 'Kredensial tidak valid.');
+        setLoginLoading(false);
+        return; // STRICT STOP: Do NOT proceed!
+      }
+
+      if (verifyRes.tenant) {
+        TenantService.completeOnboarding({
+          businessId: verifyRes.tenant.businessId,
+          businessName: verifyRes.tenant.businessName,
+          ownerName: verifyRes.tenant.ownerName,
+          contactNumber: verifyRes.tenant.whatsapp,
+          email: verifyRes.tenant.email,
+          employeeCount: verifyRes.tenant.employeeCount || '1 Cabang',
+        });
+      }
+
+      setLoginLoading(false);
+      const finalUserName = verifyRes.tenant?.ownerName || cleanUsername;
+      onLoginSuccess(selectedRole, finalUserName, false);
+    } catch (err: any) {
+      setLoginLoading(false);
+      setErrorMessage(err?.message || 'Gagal memverifikasi login. Pastikan kredensial dan jabatan Anda sesuai.');
+      return; // STRICT STOP: Do NOT proceed on error!
     }
-
-    setLoginLoading(false);
-    const finalUserName = username.trim() || (
-      selectedRole === 'OWNER' ? 'Owner' :
-      selectedRole === 'KEPALA_CABANG' ? 'Kepala Cabang' :
-      selectedRole === 'KASIR' ? 'Kasir' :
-      'Tim Produksi'
-    );
-
-    onLoginSuccess(selectedRole, finalUserName, false);
   };
 
   // Handle Registration Submit

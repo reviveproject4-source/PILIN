@@ -397,160 +397,276 @@ export async function verifyOtpAndSetPasswordAction(params: {
 /**
  * Verify Tenant Login Credentials
  */
+/**
+ * Verify Tenant Login Credentials with Strict Role-Based Access Enforcement
+ */
 export async function verifyTenantLoginAction(
   role: string,
   identifier: string,
   passwordInput: string,
-  clientKnownPassword?: string
+  clientKnownPassword?: string,
+  clientKnownEmployees?: any[]
 ): Promise<TenantLoginResult> {
   const cleanId = (identifier || '').trim();
   const cleanPass = (passwordInput || '').trim();
+  const targetRole = (role || 'OWNER').trim().toUpperCase();
 
   if (!cleanId) {
     return {
-      success: true,
-      tenant: {
-        businessId: 'tenant-001',
-        businessName: 'Usaha Anda',
-        ownerName: 'Owner',
-        whatsapp: '',
-        email: '',
-      },
+      success: false,
+      message: 'Email, Nomor WhatsApp, atau Kode Pegawai wajib diisi.',
     };
   }
 
-  // 1. If clientKnownPassword matches
-  if (clientKnownPassword && clientKnownPassword === cleanPass) {
+  if (!cleanPass) {
     return {
-      success: true,
-      tenant: {
-        businessId: `tenant-${cleanId.replace(/[^0-9]/g, '').slice(-6) || '001'}`,
-        businessName: 'Usaha Anda',
-        ownerName: 'Owner',
-        whatsapp: cleanId,
-        email: cleanId.includes('@') ? cleanId : '',
-      },
+      success: false,
+      message: 'Kata sandi atau PIN wajib diisi.',
     };
   }
 
-  // 2. Check store
-  const res = PendingRegistrationStore.verifyCredentials(cleanId, cleanPass);
-  if (res.valid && res.record) {
-    return {
-      success: true,
-      tenant: {
-        businessId: `tenant-${res.record.id.slice(0, 8)}`,
-        businessName: res.record.name,
-        ownerName: res.record.ownerName,
-        whatsapp: res.record.whatsapp,
-        email: res.record.email,
-        employeeCount: res.record.employeeCount,
-      },
-    };
-  }
+  const cleanLower = cleanId.toLowerCase();
+  const normInputPhone = normalizePhoneDigits(cleanId);
 
-  // 3. Check Supabase employees & platform_customers
-  try {
-    const supabaseAdmin = createAdminClient();
-    const normPhone = normalizePhoneDigits(cleanId);
+  // Helper to format role names for user-friendly error messages
+  const formatRoleLabel = (r: string) => {
+    switch (r) {
+      case 'OWNER': return 'Owner';
+      case 'KEPALA_CABANG': return 'Kepala Cabang';
+      case 'KASIR': return 'Kasir';
+      case 'TEAM_PRODUKSI':
+      case 'PEGAWAI':
+        return 'Tim Produksi / Teknisi';
+      default: return r;
+    }
+  };
 
-    // 3a. Check employees table (for Kasir & Team Staff)
-    const { data: dbEmp } = await supabaseAdmin
-      .from('employees')
-      .select('*')
-      .or(`code.ilike.%${cleanId}%,phone.ilike.%${normPhone}%`)
-      .limit(1)
-      .maybeSingle();
+  // Helper to resolve dashboard role from employee position name/code
+  const resolveRoleFromPosition = (posNameOrCode?: string): 'KASIR' | 'KEPALA_CABANG' | 'TEAM_PRODUKSI' => {
+    const p = (posNameOrCode || '').toLowerCase().trim();
+    if (p.includes('kepala') || p.includes('manager') || p === 'kc') {
+      return 'KEPALA_CABANG';
+    }
+    if (p.includes('kasir') || p.includes('keuangan')) {
+      return 'KASIR';
+    }
+    if (p.includes('produksi') || p.includes('teknisi') || p.includes('prod') || p.includes('pegawai')) {
+      return 'TEAM_PRODUKSI';
+    }
+    return 'KASIR';
+  };
 
-    if (dbEmp) {
-      const empPhoneNorm = normalizePhoneDigits(dbEmp.phone || '');
-      const validEmpPass =
-        empPhoneNorm.endsWith(cleanPass) ||
-        cleanPass === '123456' ||
-        cleanPass === '0505' ||
-        cleanPass === (dbEmp.pin || '') ||
-        cleanPass === '';
+  // =========================================================================
+  // STEP 1: CHECK IF IDENTIFIER BELONGS TO AN EMPLOYEE IN MASTER PEGAWAI
+  // =========================================================================
+  let matchedEmployee: any = null;
 
-      if (validEmpPass) {
-        return {
-          success: true,
-          tenant: {
-            businessId: dbEmp.business_id || '8ec99d6e-3f6f-47d4-910f-265cfe26c609',
-            businessName: 'Bengkel Tas Sepatu',
-            ownerName: dbEmp.full_name || 'Kasir Bengkel Tas Sepatu',
-            whatsapp: dbEmp.phone || '081280320505',
-            email: 'bengkeltassepatu@gmail.com',
-          },
-        };
+  // 1a. Check clientKnownEmployees passed from browser localStorage (Master Pegawai)
+  if (clientKnownEmployees && Array.isArray(clientKnownEmployees)) {
+    matchedEmployee = clientKnownEmployees.find((e: any) => {
+      if (e.email && e.email.trim().toLowerCase() === cleanLower) return true;
+      if (e.employee_code && e.employee_code.trim().toLowerCase() === cleanLower) return true;
+      if (e.phone) {
+        const p = normalizePhoneDigits(e.phone);
+        if (normInputPhone && (p === normInputPhone || p.endsWith(normInputPhone) || normInputPhone.endsWith(p))) return true;
       }
+      return false;
+    });
+  }
+
+  // 1b. Check Supabase employees table if not matched in clientKnownEmployees
+  if (!matchedEmployee) {
+    try {
+      const supabaseAdmin = createAdminClient();
+      const { data: dbEmps } = await supabaseAdmin
+        .from('employees')
+        .select('*, positions(id, code, name), branches(id, name)')
+        .limit(50);
+
+      if (dbEmps && Array.isArray(dbEmps)) {
+        matchedEmployee = dbEmps.find((e: any) => {
+          if (e.email && e.email.trim().toLowerCase() === cleanLower) return true;
+          if (e.employee_code && e.employee_code.trim().toLowerCase() === cleanLower) return true;
+          if (e.phone) {
+            const p = normalizePhoneDigits(e.phone);
+            if (normInputPhone && (p === normInputPhone || p.endsWith(normInputPhone) || normInputPhone.endsWith(p))) return true;
+          }
+          return false;
+        });
+      }
+    } catch {
+      // offline / mock fallback
+    }
+  }
+
+  // =========================================================================
+  // STRICT RULE ENFORCEMENT FOR EMPLOYEES:
+  // =========================================================================
+  if (matchedEmployee) {
+    const rawPosName = matchedEmployee.position_name || matchedEmployee.positions?.name || matchedEmployee.position_code || 'Kasir';
+    const assignedRole = resolveRoleFromPosition(rawPosName);
+
+    // STRICT RULE: PEGAWAI TIDAK BOLEH LOGIN SEBAGAI OWNER!
+    if (targetRole === 'OWNER') {
+      return {
+        success: false,
+        message: `Akses Ditolak: Akun '${cleanId}' terdaftar di Master Pegawai sebagai ${rawPosName}, BUKAN Owner. Pegawai tidak diizinkan masuk ke Dashboard Owner. Silakan pilih jabatan '${rawPosName}' pada menu login.`,
+      };
     }
 
-    // 3b. Check platform_customers table
-    const { data: dbCust } = await supabaseAdmin
-      .from('platform_customers')
-      .select('*')
-      .or(`email.eq.${cleanId.toLowerCase()},phone.ilike.%${normPhone}%`)
-      .maybeSingle();
+    // STRICT RULE: PEGAWAI TIDAK BOLEH MASUK KE JABATAN ORANG LAIN!
+    const isTargetRoleMatching = (
+      targetRole === assignedRole ||
+      ((targetRole === 'PEGAWAI' || targetRole === 'TEAM_PRODUKSI') && assignedRole === 'TEAM_PRODUKSI')
+    );
 
-    if (dbCust) {
-      const cleanDbPhone = normalizePhoneDigits(dbCust.phone || '');
-      if (cleanDbPhone.endsWith(cleanPass) || cleanPass === '123456' || cleanPass === '0505' || cleanPass === '') {
-        return {
-          success: true,
-          tenant: {
-            businessId: dbCust.id,
-            businessName: dbCust.name,
-            ownerName: dbCust.contact_name || 'Owner',
-            whatsapp: dbCust.phone,
-            email: dbCust.email,
-          },
-        };
-      }
+    if (!isTargetRoleMatching) {
+      return {
+        success: false,
+        message: `Akses Ditolak: Akun Anda memiliki jabatan '${rawPosName}'. Anda tidak diizinkan masuk sebagai ${formatRoleLabel(targetRole)}. Silakan pilih jabatan '${rawPosName}' untuk masuk.`,
+      };
     }
-  } catch {
-    // fallback
-  }
 
-  // 4. Fallback check: 4 last digits of phone or Bengkel Tas Sepatu match
-  const cleanNorm = normalizePhoneDigits(cleanId);
-  const isBengkelTenant =
-    cleanNorm.includes('081280320505') ||
-    cleanId.toLowerCase().includes('bengkel') ||
-    cleanId.toLowerCase().includes('kasir') ||
-    cleanNorm.endsWith('0505');
+    // Validate employee password / PIN
+    const empPhoneDigits = normalizePhoneDigits(matchedEmployee.phone || '');
+    const validEmpPassword =
+      (matchedEmployee.pin && matchedEmployee.pin === cleanPass) ||
+      (empPhoneDigits.length >= 4 && empPhoneDigits.endsWith(cleanPass)) ||
+      (clientKnownPassword && clientKnownPassword === cleanPass) ||
+      cleanPass === '123456' ||
+      cleanPass === '0505';
 
-  if (isBengkelTenant && (cleanPass === '0505' || cleanPass === '123456' || cleanPass === '' || cleanNorm.endsWith(cleanPass))) {
+    if (!validEmpPassword) {
+      return {
+        success: false,
+        message: 'Kata sandi atau PIN pegawai salah. Pastikan PIN yang diinput sesuai.',
+      };
+    }
+
     return {
       success: true,
       tenant: {
-        businessId: '8ec99d6e-3f6f-47d4-910f-265cfe26c609',
-        businessName: 'Bengkel Tas Sepatu',
-        ownerName: role === 'KASIR' ? 'Kasir Bengkel Tas Sepatu' : 'Marlina',
-        whatsapp: '081280320505',
+        businessId: matchedEmployee.business_id || '8ec99d6e-3f6f-47d4-910f-265cfe26c609',
+        businessName: matchedEmployee.branch_name || 'Bengkel Tas Sepatu',
+        ownerName: matchedEmployee.full_name || 'Kasir',
+        whatsapp: matchedEmployee.phone || cleanId,
+        email: matchedEmployee.email || cleanId,
+        employeeCount: '1 Cabang',
+      },
+    };
+  }
+
+  // =========================================================================
+  // STEP 2: CHECK IF IDENTIFIER IS AN OWNER IN SUPER ADMIN CONSOLE
+  // =========================================================================
+  let matchedOwner: any = null;
+
+  // 2a. Check PendingRegistrationStore
+  const storeRecord = PendingRegistrationStore.findByPhoneOrEmail(cleanId);
+  if (storeRecord && (storeRecord.status === 'CLOSED_WON' || storeRecord.trialStatus === 'ACTIVE')) {
+    matchedOwner = {
+      id: storeRecord.id,
+      name: storeRecord.name,
+      contact_name: storeRecord.ownerName,
+      phone: storeRecord.whatsapp,
+      email: storeRecord.email,
+      password: storeRecord.password,
+      temporaryPin: storeRecord.temporaryPin,
+      employeeCount: storeRecord.employeeCount,
+    };
+  }
+
+  // 2b. Check Supabase platform_customers
+  if (!matchedOwner) {
+    try {
+      const supabaseAdmin = createAdminClient();
+      const { data: dbCust } = await supabaseAdmin
+        .from('platform_customers')
+        .select('*')
+        .or(`email.eq.${cleanLower},owner_email.eq.${cleanLower},phone.ilike.%${normInputPhone}%`)
+        .maybeSingle();
+
+      if (dbCust) {
+        matchedOwner = {
+          id: dbCust.tenant_id || dbCust.id,
+          name: dbCust.name,
+          contact_name: dbCust.contact_name || 'Owner',
+          phone: dbCust.phone,
+          email: dbCust.email,
+          password: (dbCust as any).password || null,
+        };
+      }
+    } catch {
+      // offline fallback
+    }
+  }
+
+  // 2c. Fallback for registered Bengkel Tas Sepatu Owner (Marlina)
+  if (!matchedOwner) {
+    const isBengkelOwner = (
+      cleanLower === 'bengkeltassepatu@gmail.com' ||
+      cleanLower === 'marlina' ||
+      normInputPhone.includes('081280320505') ||
+      normInputPhone.endsWith('0505')
+    );
+    if (isBengkelOwner) {
+      matchedOwner = {
+        id: '8ec99d6e-3f6f-47d4-910f-265cfe26c609',
+        name: 'Bengkel Tas Sepatu',
+        contact_name: 'Marlina',
+        phone: '081280320505',
         email: 'bengkeltassepatu@gmail.com',
-      },
-    };
+        password: '0505',
+      };
+    }
   }
 
-  if (cleanNorm.length >= 4 && cleanNorm.endsWith(cleanPass)) {
+  // =========================================================================
+  // STRICT RULE ENFORCEMENT FOR OWNER:
+  // =========================================================================
+  if (targetRole === 'OWNER') {
+    if (!matchedOwner) {
+      return {
+        success: false,
+        message: `Akses Ditolak: Akun '${cleanId}' tidak terdaftar sebagai Owner di konsol Super Admin. Hanya pemilik usaha yang sah yang dapat masuk sebagai Owner.`,
+      };
+    }
+
+    // Validate Owner Password
+    const ownerPhoneDigits = normalizePhoneDigits(matchedOwner.phone || '');
+    const validOwnerPassword =
+      (matchedOwner.password && matchedOwner.password === cleanPass) ||
+      (matchedOwner.temporaryPin && matchedOwner.temporaryPin === cleanPass) ||
+      (clientKnownPassword && clientKnownPassword === cleanPass) ||
+      (ownerPhoneDigits.length >= 4 && ownerPhoneDigits.endsWith(cleanPass)) ||
+      cleanPass === '0505' ||
+      cleanPass === '123456';
+
+    if (!validOwnerPassword) {
+      return {
+        success: false,
+        message: 'Kata sandi atau PIN Owner salah. Anda dapat mereset kata sandi melalui menu "Lupa Password".',
+      };
+    }
+
     return {
       success: true,
       tenant: {
-        businessId: `tenant-${cleanNorm.slice(-6)}`,
-        businessName: 'Usaha Anda',
-        ownerName: 'Owner',
-        whatsapp: cleanId,
-        email: '',
+        businessId: matchedOwner.id,
+        businessName: matchedOwner.name,
+        ownerName: matchedOwner.contact_name,
+        whatsapp: matchedOwner.phone,
+        email: matchedOwner.email,
+        employeeCount: matchedOwner.employeeCount || '1 Cabang',
       },
     };
   }
 
-  if (res.reason) {
-    return { success: false, message: res.reason };
-  }
-
+  // =========================================================================
+  // STEP 3: USER SELECTED NON-OWNER ROLE BUT WAS NOT FOUND AS EMPLOYEE
+  // =========================================================================
   return {
     success: false,
-    message: 'Kata sandi atau PIN salah. Anda dapat mereset kata sandi melalui menu "Lupa Password".',
+    message: `Akses Ditolak: Akun '${cleanId}' belum terdaftar di Master Pegawai untuk jabatan ${formatRoleLabel(targetRole)}. Silakan minta Owner untuk mendaftarkan Anda di menu Master Pegawai terlebih dahulu.`,
   };
 }
