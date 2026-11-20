@@ -5,8 +5,9 @@ import {
   ShoppingCart, DollarSign, CreditCard, Clock, CheckCircle2, 
   AlertCircle, AlertTriangle, Send, FileText, UserCheck, Users, MessageSquare, 
   Sparkles, Camera, Image as ImageIcon, Search, Phone, Printer, X, Filter,
-  Home, Settings, Edit3, Bookmark, LogOut, HelpCircle, Info, User, Save, PhoneCall, ChevronRight, Sun, Moon,
-  PlusCircle, Wrench, BarChart3, UserPlus, ArrowRight, Trash2, Plus
+  Home, Settings, Edit3, Bookmark, LogOut, HelpCircle, Info, User, Save, PhoneCall, ChevronRight, ChevronDown, Sun, Moon,
+  PlusCircle, Wrench, BarChart3, UserPlus, ArrowRight, Trash2, Plus, MapPin, Edit2, FileSpreadsheet, RotateCcw,
+  Gift, Percent, Wallet, Award, Share2
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useTheme } from '@/components/ThemeProvider';
@@ -16,12 +17,17 @@ import { WorkQueueService, WorkOrderQueueItem } from '@/domains/work/workQueueSe
 import { RetentionDomainService, SapaanLogRecord } from '@/domains/retention/retentionDomainService';
 import { BusinessProfileService } from '@/domains/business/businessProfileService';
 import { ServiceCatalogService, ServiceCatalogItem, formatDurationLabel } from '@/domains/catalog/serviceCatalogService';
+import { CustomerDomainService } from '@/domains/customer/customerService';
 import { BluetoothPrinterService } from '@/domains/printer/bluetoothPrinterService';
+import { ImportExportService } from '@/domains/commerce/importExportService';
+import { DataImportExportManager } from '@/components/admin/DataImportExportManager';
+import { getLiveCustomersAction, saveImportedCustomersAction } from '@/app/actions/importActions';
 import { ServiceOrderStatus } from '@/lib/types';
 import { Salutation, extractSalutation, formatCustomerName } from '@/lib/salutationHelper';
 import { normalizePhoneNumber } from '@/lib/normalizePhoneNumber';
-
 import { IndustryTemplateService, IndustryCategory, IndustryTemplate } from '@/domains/retention/industryTemplateService';
+import { TransactionManagementService, RegularTransactionItem, DepositTopupItem } from '@/domains/commerce/transactionManagementService';
+import { PromoManagementService, PromoBundleConfig, PromoBasicItem, PromoGeneralItem, PromoVoucherItem } from '@/domains/promo/promoManagementService';
 
 interface KasirTransactionWorkspaceProps {
   businessId: string;
@@ -50,21 +56,53 @@ interface TransactionRecord {
   id: string;
   customer: string;
   phone: string;
+  customerAddress?: string;
   service: string;
   qty: number;
   pricing_unit?: string;
   price: number;
+  subtotal?: number;
+  discount_amount?: number;
+  promo_name?: string;
+  points_used?: number;
+  points_discount?: number;
+  points_earned?: number;
+  deposit_used?: number;
+  remaining_deposit_balance?: number;
   total: number;
   payment_type?: 'LUNAS' | 'DP';
   dp_amount?: number;
   remaining_amount?: number;
-  method: 'CASH' | 'QRIS_TRANSFER';
+  method: 'CASH' | 'QRIS_TRANSFER' | 'DEPOSIT';
   status: string;
   time: string;
   estimatedCompletion?: string;
   itemPhotoUrl?: string | null;
   items?: PosOrderItem[];
 }
+
+export interface PosCustomerItem {
+  id: string;
+  name: string;
+  phone: string;
+  address?: string;
+  status: string;
+  totalTrx: number;
+  lastVisit: string;
+  depositBalance?: number;
+  loyaltyPoints?: number;
+}
+
+export const DEFAULT_POS_CUSTOMERS: PosCustomerItem[] = [
+  { id: 'cust-sl-081218388131', name: 'Pak cece', phone: '081218388131', address: '', status: 'REPEAT', totalTrx: 2, lastVisit: '2026-09-03', depositBalance: 200000, loyaltyPoints: 20 },
+  { id: 'cust-sl-081283164785', name: 'Bu Reynanda', phone: '081283164785', address: '', status: 'NEW', totalTrx: 1, lastVisit: '2026-08-28', depositBalance: 175000, loyaltyPoints: 12 },
+  { id: 'cust-sl-085694206061', name: 'Bu sonya', phone: '085694206061', address: '', status: 'REPEAT', totalTrx: 2, lastVisit: '2026-08-27', depositBalance: 0, loyaltyPoints: 15 },
+  { id: 'cust-sl-081387654321', name: 'Pak abdul', phone: '081387654321', address: '', status: 'NEW', totalTrx: 1, lastVisit: '2026-08-26', depositBalance: 50000, loyaltyPoints: 8 },
+  { id: 'cust-sl-081298765432', name: 'Bu maya', phone: '081298765432', address: '', status: 'REPEAT', totalTrx: 3, lastVisit: '2026-08-25', depositBalance: 100000, loyaltyPoints: 30 },
+  { id: 'cust-sl-081311223344', name: 'Bu dewi', phone: '081311223344', address: '', status: 'NEW', totalTrx: 1, lastVisit: '2026-08-24', depositBalance: 0, loyaltyPoints: 5 },
+  { id: 'cust-sl-081233445566', name: 'Pak roni', phone: '081233445566', address: '', status: 'REPEAT', totalTrx: 2, lastVisit: '2026-08-23', depositBalance: 25000, loyaltyPoints: 18 },
+  { id: 'cust-sl-081255667788', name: 'Bu siti', phone: '081255667788', address: '', status: 'NEW', totalTrx: 1, lastVisit: '2026-08-22', depositBalance: 0, loyaltyPoints: 6 },
+];
 
 export function KasirTransactionWorkspace({
   businessId = 'tenant-001',
@@ -86,6 +124,7 @@ export function KasirTransactionWorkspace({
   const [showHistoryModal, setShowHistoryModal] = useState<boolean>(false);
   const [showStatsModal, setShowStatsModal] = useState<boolean>(false);
   const [showMemberModal, setShowMemberModal] = useState<boolean>(false);
+  const [showImportExportModal, setShowImportExportModal] = useState<boolean>(false);
 
   const [activeTab, setActiveTab] = useState<'POS' | 'SPK' | 'CUSTOMER' | 'WA_ENGINE' | 'BROADCAST' | 'OPERASIONAL' | 'PRESENSI' | 'PENGATURAN' | null>(null);
 
@@ -123,6 +162,67 @@ export function KasirTransactionWorkspace({
     setFeedback({ type: 'success', text: 'Koneksi printer Bluetooth telah diputuskan.' });
   };
 
+  // Business Profile State (Standard PILIN: No WA Pengirim Nota = No WA Kontak Resmi dari Menu Identitas Usaha & Nota)
+  const [businessProfile, setBusinessProfile] = useState(() => BusinessProfileService.getProfile(businessId));
+
+  React.useEffect(() => {
+    const handleProfileUpdate = () => {
+      setBusinessProfile(BusinessProfileService.getProfile(businessId));
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('pilin_business_profile_updated', handleProfileUpdate);
+      window.addEventListener('storage', handleProfileUpdate);
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('pilin_business_profile_updated', handleProfileUpdate);
+        window.removeEventListener('storage', handleProfileUpdate);
+      }
+    };
+  }, [businessId]);
+
+  // Promo & Loyalty State
+  const [promoBundle, setPromoBundle] = useState<PromoBundleConfig>(() => PromoManagementService.getConfig(businessId));
+  const [selectedPromoBasicId, setSelectedPromoBasicId] = useState<string>('');
+  const [customDiscountPercent, setCustomDiscountPercent] = useState<number>(0);
+  const [useLoyaltyPoints, setUseLoyaltyPoints] = useState<boolean>(false);
+  const [redeemedPointsQty, setRedeemedPointsQty] = useState<number>(0);
+  const [useDeposit, setUseDeposit] = useState<boolean>(true);
+
+  // CRM Promo Sub-Tab State
+  const [promoCrmSubTab, setPromoCrmSubTab] = useState<'PROMO_GENERAL' | 'VOUCHER' | 'OVERDUE_WA'>('PROMO_GENERAL');
+  const [promoGeneralCustomerTarget, setPromoGeneralCustomerTarget] = useState<string>('');
+
+  // Top-Up Deposit Modal State (Transaksi Terpisah dari Nota Reguler)
+  const [showTopupModal, setShowTopupModal] = useState<boolean>(false);
+  const [topupTargetCustomer, setTopupTargetCustomer] = useState<PosCustomerItem | null>(null);
+  const [topupCustSearch, setTopupCustSearch] = useState<string>('');
+  const [showTopupCustSuggestions, setShowTopupCustSuggestions] = useState<boolean>(false);
+  const [isNewTopupCustomer, setIsNewTopupCustomer] = useState<boolean>(false);
+  const [topupCustName, setTopupCustName] = useState<string>('');
+  const [topupCustPhone, setTopupCustPhone] = useState<string>('');
+  const [topupAmount, setTopupAmount] = useState<number | ''>(100000);
+  const [topupMethod, setTopupMethod] = useState<'CASH' | 'QRIS_TRANSFER'>('CASH');
+  const [topupNotes, setTopupNotes] = useState<string>('Top-up deposit saldo laundry');
+  const topupCustomerDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Listen to Promo Updates from Owner
+  React.useEffect(() => {
+    const handlePromoUpdate = () => {
+      setPromoBundle(PromoManagementService.getConfig(businessId));
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('pilin_promos_updated', handlePromoUpdate);
+      window.addEventListener('storage', handlePromoUpdate);
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('pilin_promos_updated', handlePromoUpdate);
+        window.removeEventListener('storage', handlePromoUpdate);
+      }
+    };
+  }, [businessId]);
+
   const handlePrintBluetooth = async (trx: TransactionRecord) => {
     if (!BluetoothPrinterService.isConnected()) {
       setIsConnectingBt(true);
@@ -136,7 +236,7 @@ export function KasirTransactionWorkspace({
     }
 
     setIsPrintingBt(true);
-    const profile = BusinessProfileService.getProfile(businessId);
+    const profile = businessProfile || BusinessProfileService.getProfile(businessId);
     const res = await BluetoothPrinterService.printReceipt(trx, profile, actorName || 'Kasir');
     setIsPrintingBt(false);
 
@@ -175,29 +275,132 @@ export function KasirTransactionWorkspace({
   // Thermal Receipt Modal State
   const [activeReceiptTrx, setActiveReceiptTrx] = useState<TransactionRecord | null>(null);
 
-  // Customer DB Local State
-  const [customerList, setCustomerList] = useState(() => {
-    if (isDemo) {
-      return [
-        { id: 'cust-101', name: 'Bapak Budi Santoso', phone: '08123456789', status: 'REPEAT', totalTrx: 12, lastVisit: '2026-08-14' },
-        { id: 'cust-102', name: 'Ibu Siti Rahma', phone: '08198765432', status: 'LOYAL', totalTrx: 28, lastVisit: '2026-08-15' },
-        { id: 'cust-103', name: 'Bapak Ahmad Fauzi', phone: '08567890123', status: 'NEW', totalTrx: 1, lastVisit: '2026-08-15' },
-        { id: 'cust-104', name: 'Ibu Dewi Lestari', phone: '08212345678', status: 'AT_RISK', totalTrx: 5, lastVisit: '2026-06-10' },
-      ];
-    }
-    return [];
-  });
+  // Multi-tier customer initial loader (searches tenant key, global backups, and all local keys)
+  const loadInitialCustomers = (bizId: string): PosCustomerItem[] => {
+    if (typeof window === 'undefined') return DEFAULT_POS_CUSTOMERS;
+    try {
+      // 1. Direct tenant match
+      const saved = localStorage.getItem(`pilin_kasir_customers_${bizId}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
 
-  // Helper: Format completion time based on duration value & unit
-  const calculateDefaultCompletion = (durationVal?: number, durationUnit?: 'JAM' | 'HARI' | 'MINGGU', hoursFallback?: number): string => {
-    let ms = 24 * 3600000;
-    if (durationVal && durationUnit) {
-      if (durationUnit === 'JAM') ms = durationVal * 3600000;
-      else if (durationUnit === 'MINGGU') ms = durationVal * 7 * 86400000;
-      else ms = durationVal * 86400000; // HARI
-    } else if (hoursFallback) {
-      ms = hoursFallback * 3600000;
+      // 2. Master / Global Backup key
+      const master = localStorage.getItem('pilin_kasir_customers_master') ||
+                     localStorage.getItem('pilin_kasir_customers_global_backup');
+      if (master) {
+        const parsed = JSON.parse(master);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+
+      // 3. Scan all localStorage keys for any customer list with valid data
+      let bestList: PosCustomerItem[] | null = null;
+      let maxLen = 0;
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('pilin_kasir_customers_') || key.includes('customer'))) {
+          try {
+            const val = JSON.parse(localStorage.getItem(key) || '[]');
+            if (Array.isArray(val) && val.length > maxLen) {
+              maxLen = val.length;
+              bestList = val;
+            }
+          } catch {}
+        }
+      }
+      if (bestList && bestList.length > 0) return bestList;
+
+      // 4. Fallback default key
+      const def = localStorage.getItem('pilin_kasir_customers_default');
+      if (def) {
+        const parsed = JSON.parse(def);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {
+      // fallback
     }
+    return DEFAULT_POS_CUSTOMERS;
+  };
+
+  // Customer DB Local State with Multi-Tier LocalStorage & Server Persistence
+  const [customerList, setCustomerList] = useState<PosCustomerItem[]>(() => loadInitialCustomers(businessId));
+
+  const saveCustomers = (list: PosCustomerItem[]) => {
+    setCustomerList(list);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(`pilin_kasir_customers_${businessId}`, JSON.stringify(list));
+        localStorage.setItem('pilin_kasir_customers_master', JSON.stringify(list));
+        localStorage.setItem('pilin_kasir_customers_global_backup', JSON.stringify(list));
+        localStorage.setItem('pilin_kasir_customers_default', JSON.stringify(list));
+        localStorage.setItem('pilin_kasir_customers_trio-r-laundry', JSON.stringify(list));
+        localStorage.setItem('pilin_kasir_customers_8ec99d6e-3f6f-47d4-910f-265cfe26c609', JSON.stringify(list));
+        localStorage.setItem('pilin_kasir_customers_tenant-001', JSON.stringify(list));
+        localStorage.setItem('pilin_kasir_customers_demo-tenant', JSON.stringify(list));
+      } catch {
+        // ignore
+      }
+    }
+    try {
+      saveImportedCustomersAction(businessId, list.map(c => ({
+        id: c.id,
+        business_id: businessId,
+        name: c.name,
+        phone: c.phone,
+        address: c.address,
+        status: c.status,
+        totalTrx: c.totalTrx,
+        lastVisit: c.lastVisit,
+      }))).catch(() => {});
+    } catch {}
+  };
+
+  // Auto-sync with Server Persistent Store (pilin_customers.json) on mount
+  React.useEffect(() => {
+    getLiveCustomersAction(businessId).then(serverList => {
+      if (serverList && serverList.length > 0) {
+        setCustomerList(prev => {
+          const phoneMap = new Map<string, PosCustomerItem>();
+          serverList.forEach(s => phoneMap.set(s.phone, {
+            id: s.id,
+            name: s.name,
+            phone: s.phone,
+            address: s.address,
+            status: s.status || 'NEW',
+            totalTrx: s.totalTrx || 1,
+            lastVisit: s.lastVisit || new Date().toISOString().substring(0, 10),
+          }));
+          prev.forEach(p => phoneMap.set(p.phone, p));
+          const merged = Array.from(phoneMap.values());
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.setItem(`pilin_kasir_customers_${businessId}`, JSON.stringify(merged));
+              localStorage.setItem('pilin_kasir_customers_master', JSON.stringify(merged));
+              localStorage.setItem('pilin_kasir_customers_global_backup', JSON.stringify(merged));
+              localStorage.setItem('pilin_kasir_customers_default', JSON.stringify(merged));
+            } catch {}
+          }
+          return merged;
+        });
+      }
+    }).catch(() => {});
+  }, [businessId]);
+
+  // Helper: Format duration to milliseconds
+  const getDurationMs = (durationVal?: number, durationUnit?: 'JAM' | 'HARI' | 'MINGGU', hoursFallback?: number): number => {
+    if (durationVal && durationUnit) {
+      if (durationUnit === 'JAM') return durationVal * 3600000;
+      if (durationUnit === 'MINGGU') return durationVal * 7 * 86400000;
+      return durationVal * 86400000; // HARI
+    }
+    if (hoursFallback) {
+      return hoursFallback * 3600000;
+    }
+    return 24 * 3600000; // default 1 hari
+  };
+
+  const formatCompletionDate = (ms: number): string => {
     const d = new Date(Date.now() + ms);
     return d.toLocaleDateString('id-ID', {
       weekday: 'short',
@@ -209,47 +412,160 @@ export function KasirTransactionWorkspace({
     }) + ' WIB';
   };
 
+  // Helper: Format completion time based on duration value & unit
+  const calculateDefaultCompletion = (durationVal?: number, durationUnit?: 'JAM' | 'HARI' | 'MINGGU', hoursFallback?: number): string => {
+    return formatCompletionDate(getDurationMs(durationVal, durationUnit, hoursFallback));
+  };
+
+  // Helper: Calculate completion date taking the longest duration among non-product services
+  const calculateLongestCompletion = (items: PosOrderItem[]): string | undefined => {
+    const serviceItems = items.filter(it => it.item_type !== 'PRODUCT');
+    if (serviceItems.length === 0) return undefined;
+
+    let maxDurationMs = 0;
+    for (const it of serviceItems) {
+      let itemMs = 0;
+      if (it.duration_val && it.duration_unit) {
+        itemMs = getDurationMs(it.duration_val, it.duration_unit);
+      } else {
+        const cat = catalog.find(c => c.id === it.catalog_id || c.nama === it.service);
+        itemMs = getDurationMs(cat?.duration_val, cat?.duration_unit, cat?.duration_hours);
+      }
+      if (itemMs > maxDurationMs) {
+        maxDurationMs = itemMs;
+      }
+    }
+
+    if (maxDurationMs <= 0) {
+      maxDurationMs = 24 * 3600000;
+    }
+
+    return formatCompletionDate(maxDurationMs);
+  };
+
   // Catalog & POS Form State
   const [catalog, setCatalog] = useState<ServiceCatalogItem[]>(() => {
     return isDemo ? ServiceCatalogService.getDefaultCatalogForDemo() : ServiceCatalogService.getMasterCatalog();
   });
-  const [isNewCustomerMode, setIsNewCustomerMode] = useState<boolean>(() => {
-    return !isDemo;
-  });
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>(isDemo ? 'cust-101' : 'NEW_CUSTOMER');
-  const [selectedSalutation, setSelectedSalutation] = useState<Salutation>(isDemo ? 'Bapak' : 'Kak');
-  const [customerName, setCustomerName] = useState<string>(isDemo ? 'Budi Santoso' : '');
-  const [customerPhone, setCustomerPhone] = useState<string>(isDemo ? '08123456789' : '');
+  const [isNewCustomerMode, setIsNewCustomerMode] = useState<boolean>(false);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
+  const [selectedSalutation, setSelectedSalutation] = useState<Salutation>('Kak');
+  const [customerName, setCustomerName] = useState<string>('');
+  const [customerPhone, setCustomerPhone] = useState<string>('');
+  const [customerAddress, setCustomerAddress] = useState<string>('');
+  const [isEditingContact, setIsEditingContact] = useState<boolean>(false);
 
-  // Auto-switch to new customer mode if database is empty
+  // Sync customer details only if an ID was explicitly chosen/set
   React.useEffect(() => {
-    if (customerList.length === 0) {
-      setIsNewCustomerMode(true);
-      setSelectedCustomerId('NEW_CUSTOMER');
+    if (customerList.length > 0 && selectedCustomerId && selectedCustomerId !== 'NEW_CUSTOMER') {
+      const found = customerList.find(c => c.id === selectedCustomerId);
+      if (found) {
+        setSelectedCustomerId(found.id);
+        const ext = extractSalutation(found.name);
+        setSelectedSalutation(ext.salutation || 'Kak');
+        setCustomerName(ext.cleanName || found.name);
+        setCustomerPhone(found.phone);
+        setCustomerAddress(found.address || '');
+      }
     }
-  }, [customerList.length]);
+  }, [customerList, selectedCustomerId]);
 
   // Multi-Item Order State (Bisa Tambah Lebih dari 1 Layanan)
   const [orderItems, setOrderItems] = useState<PosOrderItem[]>([]);
 
-  // Item Picker State (Untuk Menambahkan Item ke Nota)
-  const [selectedService, setSelectedService] = useState<string>(() => {
-    const items = isDemo ? ServiceCatalogService.getDefaultCatalogForDemo() : ServiceCatalogService.getMasterCatalog();
-    return items[0]?.nama || '';
-  });
-  const [servicePrice, setServicePrice] = useState<number>(() => {
-    const items = isDemo ? ServiceCatalogService.getDefaultCatalogForDemo() : ServiceCatalogService.getMasterCatalog();
-    return items[0]?.base_harga || 0;
-  });
-  const [estimatedCompletion, setEstimatedCompletion] = useState<string>(() => {
-    const items = isDemo ? ServiceCatalogService.getDefaultCatalogForDemo() : ServiceCatalogService.getMasterCatalog();
-    const first = items[0];
-    if (first && first.item_type !== 'PRODUCT') {
-      return calculateDefaultCompletion(first.duration_val, first.duration_unit, first.duration_hours);
-    }
-    return '';
-  });
+  // Item Picker State (Untuk Menambahkan Item ke Nota) — Default kosong, kasir mengetik terlebih dahulu
+  const [selectedService, setSelectedService] = useState<string>('');
+  const [servicePrice, setServicePrice] = useState<number>(0);
+  const [estimatedCompletion, setEstimatedCompletion] = useState<string>('');
   const [qty, setQty] = useState<number>(1);
+
+  // Customer Smart Search Combobox State — Default tertutup sampai diketik
+  const [showCustomerSuggestions, setShowCustomerSuggestions] = useState<boolean>(false);
+  const customerDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Service Smart Search Combobox State — Default kosong, kasir mengetik terlebih dahulu
+  const [serviceSearchText, setServiceSearchText] = useState<string>('');
+  const [showServiceSuggestions, setShowServiceSuggestions] = useState<boolean>(false);
+  const serviceDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Click outside listener for suggestions
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (customerDropdownRef.current && !customerDropdownRef.current.contains(event.target as Node)) {
+        setShowCustomerSuggestions(false);
+      }
+      if (serviceDropdownRef.current && !serviceDropdownRef.current.contains(event.target as Node)) {
+        setShowServiceSuggestions(false);
+      }
+      if (topupCustomerDropdownRef.current && !topupCustomerDropdownRef.current.contains(event.target as Node)) {
+        setShowTopupCustSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  // Filtered customers for Top-Up Search
+  const matchingTopupCustomers = useMemo(() => {
+    const q = topupCustSearch.toLowerCase().trim();
+    if (!q) return customerList.slice(0, 8);
+    const cleanDigits = q.replace(/[^0-9]/g, '');
+    return customerList.filter(c => {
+      const matchName = c.name.toLowerCase().includes(q);
+      const matchPhone = cleanDigits.length >= 3 && c.phone.replace(/[^0-9]/g, '').includes(cleanDigits);
+      return matchName || matchPhone;
+    });
+  }, [customerList, topupCustSearch]);
+
+  // Filtered customers matching typed name or phone (hanya keluar jika ditulis)
+  const matchingCustomers = useMemo(() => {
+    const q = customerName.toLowerCase().trim();
+    if (!q) return [];
+    const cleanDigits = q.replace(/[^0-9]/g, '');
+    return customerList.filter(c => {
+      const matchName = c.name.toLowerCase().includes(q);
+      const matchPhone = cleanDigits.length >= 3 && c.phone.replace(/[^0-9]/g, '').includes(cleanDigits);
+      return matchName || matchPhone;
+    });
+  }, [customerList, customerName]);
+
+  const handleSelectCustomerFromSuggestion = (c: PosCustomerItem) => {
+    setSelectedCustomerId(c.id);
+    setIsNewCustomerMode(false);
+    const { salutation, cleanName } = extractSalutation(c.name);
+    setSelectedSalutation(salutation || 'Kak');
+    setCustomerName(cleanName || c.name);
+    setCustomerPhone(c.phone);
+    setCustomerAddress(c.address || '');
+    if (c.depositBalance && c.depositBalance > 0) {
+      setUseDeposit(true);
+    }
+    setShowCustomerSuggestions(false);
+  };
+
+  // Filtered services matching search text (hanya keluar jika ditulis)
+  const matchingServices = useMemo(() => {
+    const q = serviceSearchText.toLowerCase().trim();
+    if (!q) return [];
+    return catalog.filter(item => 
+      item.nama.toLowerCase().includes(q) || 
+      (item.sku && item.sku.toLowerCase().includes(q))
+    );
+  }, [catalog, serviceSearchText]);
+
+  const handleSelectServiceFromSuggestion = (item: ServiceCatalogItem) => {
+    setSelectedService(item.nama);
+    setServiceSearchText(item.nama);
+    setServicePrice(item.base_harga);
+    if (item.item_type !== 'PRODUCT') {
+      setEstimatedCompletion(calculateDefaultCompletion(item.duration_val, item.duration_unit, item.duration_hours));
+    } else {
+      setEstimatedCompletion('');
+    }
+    setShowServiceSuggestions(false);
+  };
 
   // Photo Evidence State (Kamera atau Galeri)
   const [itemPhotoUrl, setItemPhotoUrl] = useState<string | null>(null);
@@ -275,31 +591,36 @@ export function KasirTransactionWorkspace({
   };
 
   const handleAddOrderItem = () => {
-    if (!selectedService) return;
-    const found = catalog.find(c => c.nama === selectedService);
-    if (!found) return;
+    const targetName = selectedService || serviceSearchText;
+    if (!targetName.trim()) return;
+    const found = catalog.find(c => c.nama.toLowerCase() === targetName.toLowerCase()) || catalog.find(c => c.nama === targetName);
 
-    const finalPrice = found.base_harga;
+    const finalPrice = found ? found.base_harga : (servicePrice || 0);
     const finalQty = Math.max(1, qty);
     const itemSubtotal = finalPrice * finalQty;
-    const isService = found.item_type !== 'PRODUCT';
+    const isService = found ? found.item_type !== 'PRODUCT' : true;
 
     const newItem: PosOrderItem = {
       id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      catalog_id: found.id,
-      service: found.nama,
+      catalog_id: found ? found.id : `custom-${Date.now()}`,
+      service: found ? found.nama : targetName,
       qty: finalQty,
       price: finalPrice,
-      pricing_unit: (found.pricing_unit || (isService ? 'sepasang' : 'pc')) as string,
-      item_type: found.item_type || 'SERVICE',
-      duration_val: isService ? (found.duration_val || 1) : undefined,
-      duration_unit: isService ? (found.duration_unit || 'HARI') : undefined,
-      estimatedCompletion: isService ? (estimatedCompletion || calculateDefaultCompletion(found.duration_val, found.duration_unit, found.duration_hours)) : undefined,
+      pricing_unit: (found?.pricing_unit || (isService ? 'sepasang' : 'pc')) as string,
+      item_type: found?.item_type || 'SERVICE',
+      duration_val: isService ? (found?.duration_val || 1) : undefined,
+      duration_unit: isService ? (found?.duration_unit || 'HARI') : undefined,
+      estimatedCompletion: isService ? (estimatedCompletion || (found ? calculateDefaultCompletion(found.duration_val, found.duration_unit, found.duration_hours) : '')) : undefined,
       subtotal: itemSubtotal,
     };
 
     setOrderItems(prev => [...prev, newItem]);
     setQty(1);
+    setSelectedService('');
+    setServiceSearchText('');
+    setServicePrice(0);
+    setEstimatedCompletion('');
+    setShowServiceSuggestions(false);
     setFeedback({ type: 'success', text: `Layanan '${newItem.service}' (${newItem.qty} ${newItem.pricing_unit}) berhasil ditambahkan ke daftar nota.` });
   };
 
@@ -307,17 +628,185 @@ export function KasirTransactionWorkspace({
     setOrderItems(prev => prev.filter(it => it.id !== itemId));
   };
 
-  const totalBill = useMemo(() => {
+  // Subtotal before discounts
+  const subtotalBill = useMemo(() => {
     if (orderItems.length > 0) {
       return orderItems.reduce((acc, it) => acc + it.subtotal, 0);
     }
     return (servicePrice || 0) * (qty || 1);
   }, [orderItems, servicePrice, qty]);
 
-  const finalDpAmount = paymentType === 'LUNAS'
-    ? totalBill
+  // Selected promo basic item
+  const selectedPromoBasic = useMemo(() => {
+    return promoBundle.basics.find(b => b.id === selectedPromoBasicId && b.is_active) || null;
+  }, [promoBundle.basics, selectedPromoBasicId]);
+
+  // Selected customer object
+  const currentSelectedCustomer = useMemo(() => {
+    return customerList.find(c => c.id === selectedCustomerId || (customerPhone && c.phone === customerPhone.trim()));
+  }, [customerList, selectedCustomerId, customerPhone]);
+
+  const customerLoyaltyPoints = currentSelectedCustomer?.loyaltyPoints || 0;
+  const customerDepositBalance = currentSelectedCustomer?.depositBalance || 0;
+
+  // Promo Basic Discount in Rp
+  const promoDiscountAmount = useMemo(() => {
+    if (!selectedPromoBasicId || customDiscountPercent <= 0) return 0;
+    return Math.round((subtotalBill * customDiscountPercent) / 100);
+  }, [subtotalBill, selectedPromoBasicId, customDiscountPercent]);
+
+  const afterPromoSubtotal = Math.max(0, subtotalBill - promoDiscountAmount);
+
+  // Loyalty Points Discount in Rp
+  const pointsDiscountAmount = useMemo(() => {
+    if (!useLoyaltyPoints || redeemedPointsQty <= 0) return 0;
+    const calc = PromoManagementService.calculatePointsDiscount(redeemedPointsQty, promoBundle.poin);
+    return Math.min(afterPromoSubtotal, calc);
+  }, [useLoyaltyPoints, redeemedPointsQty, promoBundle.poin, afterPromoSubtotal]);
+
+  // Final Total Bill after all discounts
+  const totalBill = Math.max(0, afterPromoSubtotal - pointsDiscountAmount);
+
+  // Projected points earned on this transaction
+  const projectedPointsEarned = useMemo(() => {
+    return PromoManagementService.calculatePointsEarned(totalBill, promoBundle.poin);
+  }, [totalBill, promoBundle.poin]);
+
+  // Overall transaction estimated completion: longest duration among services
+  const longestEstimatedCompletion = useMemo(() => {
+    if (orderItems.length > 0) {
+      return calculateLongestCompletion(orderItems);
+    }
+    const found = catalog.find(c => c.nama === selectedService);
+    if (found && found.item_type !== 'PRODUCT') {
+      return estimatedCompletion || calculateDefaultCompletion(found.duration_val, found.duration_unit, found.duration_hours);
+    }
+    return undefined;
+  }, [orderItems, catalog, selectedService, estimatedCompletion]);
+
+  // Saldo Deposit Deduction: deposit berkurang dari total transaksi pada nota
+  const depositDeductionAmount = useMemo(() => {
+    if (!useDeposit || customerDepositBalance <= 0) return 0;
+    return Math.min(totalBill, customerDepositBalance);
+  }, [useDeposit, customerDepositBalance, totalBill]);
+
+  const payableBillAfterDeposit = Math.max(0, totalBill - depositDeductionAmount);
+  const remainingDepositBalance = Math.max(0, customerDepositBalance - depositDeductionAmount);
+
+  const finalDpAmount = paymentType === 'LUNAS' || payableBillAfterDeposit === 0
+    ? payableBillAfterDeposit
     : (dpAmount === '' ? 0 : Number(dpAmount));
-  const remainingAmount = Math.max(0, totalBill - finalDpAmount);
+  const remainingAmount = Math.max(0, payableBillAfterDeposit - finalDpAmount);
+
+  const handlePromoBasicChange = (promoId: string) => {
+    setSelectedPromoBasicId(promoId);
+    if (!promoId) {
+      setCustomDiscountPercent(0);
+      return;
+    }
+    const found = promoBundle.basics.find(b => b.id === promoId);
+    if (found) {
+      setCustomDiscountPercent(found.percentage);
+    }
+  };
+
+  // Open Standalone Top-Up Deposit Modal (Terpisah dari Transaksi Reguler)
+  const handleOpenStandaloneTopup = (target?: PosCustomerItem) => {
+    if (target) {
+      setTopupTargetCustomer(target);
+      setTopupCustSearch(target.name);
+    } else {
+      setTopupTargetCustomer(null);
+      setTopupCustSearch('');
+    }
+    setIsNewTopupCustomer(false);
+    setTopupCustName('');
+    setTopupCustPhone('');
+    setTopupAmount(100000);
+    setTopupMethod('CASH');
+    setTopupNotes('Top-up deposit saldo laundry');
+    setShowTopupCustSuggestions(false);
+    setShowTopupModal(true);
+  };
+
+  // Top-Up Deposit Execution Handler (Terpisah dari Transaksi Reguler)
+  const handleExecuteTopup = (e: React.FormEvent) => {
+    e.preventDefault();
+    let target = topupTargetCustomer;
+    if (!target) {
+      if (!topupCustName.trim() || !topupCustPhone.trim()) {
+        setFeedback({ type: 'error', text: 'Silakan pilih atau masukkan data pelanggan terlebih dahulu untuk top-up deposit.' });
+        return;
+      }
+      const cleanPhone = topupCustPhone.trim();
+      const existing = customerList.find(c => c.phone === cleanPhone);
+      if (existing) {
+        target = existing;
+      } else {
+        const newCust: PosCustomerItem = {
+          id: `cust-${Date.now()}`,
+          name: formatCustomerName(topupCustName.trim(), 'Kak'),
+          phone: cleanPhone,
+          status: 'REGULAR',
+          totalTrx: 0,
+          lastVisit: new Date().toISOString().substring(0, 10),
+          depositBalance: 0,
+          loyaltyPoints: 0,
+        };
+        const updated = [newCust, ...customerList];
+        saveCustomers(updated);
+        target = newCust;
+      }
+    }
+
+    const numAmount = Number(topupAmount) || 0;
+    if (numAmount <= 0) {
+      setFeedback({ type: 'error', text: 'Nominal top-up harus lebih besar dari 0.' });
+      return;
+    }
+
+    const prevBal = target.depositBalance || 0;
+    const newBal = prevBal + numAmount;
+    const newTopupId = `DEP-2026-${Date.now().toString().slice(-4)}`;
+
+    TransactionManagementService.addDepositTopup(businessId, {
+      id: newTopupId,
+      business_id: businessId,
+      customer_id: target.id,
+      customer_name: target.name,
+      customer_phone: target.phone,
+      amount: numAmount,
+      previous_balance: prevBal,
+      current_balance: newBal,
+      payment_method: topupMethod,
+      status: 'SUCCESS',
+      time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
+      date: new Date().toISOString().substring(0, 10),
+      notes: topupNotes || 'Top up deposit saldo laundry',
+    });
+
+    const updated = customerList.map(c => {
+      if (c.id === target!.id || c.phone === target!.phone) {
+        return {
+          ...c,
+          depositBalance: newBal,
+        };
+      }
+      return c;
+    });
+    saveCustomers(updated);
+
+    setShowTopupModal(false);
+    setTopupTargetCustomer(null);
+    setTopupCustSearch('');
+    setIsNewTopupCustomer(false);
+    setTopupCustName('');
+    setTopupCustPhone('');
+    setFeedback({
+      type: 'success',
+      text: `Top-up deposit Rp ${numAmount.toLocaleString('id-ID')} (${topupMethod === 'CASH' ? 'Tunai' : 'QRIS/Transfer'}) untuk ${target.name} berhasil disimpan! Saldo sekarang: Rp ${newBal.toLocaleString('id-ID')}.`,
+    });
+  };
 
   React.useEffect(() => {
     const refreshCatalog = () => {
@@ -325,14 +814,10 @@ export function KasirTransactionWorkspace({
       setCatalog(items);
       if (items.length > 0) {
         setSelectedService(prev => {
-          if (!prev || !items.some(i => i.nama === prev)) {
-            setServicePrice(items[0].base_harga);
-            if (items[0].item_type !== 'PRODUCT') {
-              setEstimatedCompletion(calculateDefaultCompletion(items[0].duration_val, items[0].duration_unit, items[0].duration_hours));
-            } else {
-              setEstimatedCompletion('');
-            }
-            return items[0].nama;
+          if (prev && !items.some(i => i.nama === prev)) {
+            setServicePrice(0);
+            setEstimatedCompletion('');
+            return '';
           }
           return prev;
         });
@@ -421,17 +906,36 @@ export function KasirTransactionWorkspace({
     return spkOrders.filter(o => (o.status as any) === 'READY_FOR_PICKUP' || (o.status as any) === 'READY_FOR_DELIVERY');
   }, [spkOrders]);
 
-  // Transactions State
+  // Transactions State with LocalStorage Persistence
   const [recentTransactions, setRecentTransactions] = useState<TransactionRecord[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem(`pilin_kasir_recent_trx_${businessId}`) || localStorage.getItem('pilin_kasir_recent_trx_master');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
     if (isDemo) {
       return [
-        { id: 'NOT-2026-0892', customer: 'Bapak Budi Santoso', phone: '08123456789', service: 'Layanan Cuci Express', qty: 2, price: 35000, total: 70000, method: 'CASH', status: 'COMPLETED', time: '11:05 WIB' },
-        { id: 'NOT-2026-0891', customer: 'Ibu Siti Rahma', phone: '08198765432', service: 'Layanan Premium Treatment', qty: 7, price: 50000, total: 350000, method: 'QRIS_TRANSFER', status: 'COMPLETED', time: '10:45 WIB' },
-        { id: 'NOT-2026-0890', customer: 'Bapak Ahmad Fauzi', phone: '08567890123', service: 'Layanan Cuci Regular', qty: 6, price: 20000, total: 120000, method: 'CASH', status: 'COMPLETED', time: '09:30 WIB' },
+        { id: 'NOT-2026-0892', customer: 'Pak cece', phone: '081218388131', service: 'Cuci Kiloan Reguler', qty: 5, price: 10000, total: 50000, method: 'CASH', status: 'COMPLETED', time: '11:05 WIB' },
+        { id: 'NOT-2026-0891', customer: 'Bu Reynanda', phone: '081283164785', service: 'Bed Cover Jumbo', qty: 1, price: 35000, total: 35000, method: 'QRIS_TRANSFER', status: 'COMPLETED', time: '10:45 WIB' },
+        { id: 'NOT-2026-0890', customer: 'Bu sonya', phone: '085694206061', service: 'Cuci Kiloan Express', qty: 3, price: 15000, total: 45000, method: 'CASH', status: 'COMPLETED', time: '09:30 WIB' },
       ];
     }
     return [];
   });
+
+  const saveRecentTransactions = (list: TransactionRecord[]) => {
+    setRecentTransactions(list);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(`pilin_kasir_recent_trx_${businessId}`, JSON.stringify(list));
+        localStorage.setItem('pilin_kasir_recent_trx_master', JSON.stringify(list));
+      } catch {}
+    }
+  };
 
   const [requestedApprovals, setRequestedApprovals] = useState(() => {
     if (isDemo) {
@@ -444,28 +948,75 @@ export function KasirTransactionWorkspace({
 
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // Switch to Existing Registered Customer Mode
+  const handleSwitchToExistingCustomer = () => {
+    setIsNewCustomerMode(false);
+    setIsEditingContact(false);
+    const target = customerList.find(c => c.id === selectedCustomerId) || customerList[0];
+    if (target) {
+      handlePOSCustomerSelect(target.id);
+    }
+  };
+
+  // Switch to New Customer Mode
+  const handleSwitchToNewCustomer = () => {
+    setIsNewCustomerMode(true);
+    setSelectedCustomerId('NEW_CUSTOMER');
+    setCustomerName('');
+    setCustomerPhone('');
+    setCustomerAddress('');
+    setSelectedSalutation('Kak');
+    setIsEditingContact(false);
+    setUseDeposit(false);
+  };
+
   // Customer Selector Change Handler in POS Form
   const handlePOSCustomerSelect = (customerId: string) => {
     setSelectedCustomerId(customerId);
+    setIsEditingContact(false);
     if (customerId === 'NEW_CUSTOMER') {
       setIsNewCustomerMode(true);
       setCustomerName('');
       setCustomerPhone('');
+      setCustomerAddress('');
       setSelectedSalutation('Kak');
+      setUseDeposit(false);
     } else {
       setIsNewCustomerMode(false);
       const found = customerList.find(c => c.id === customerId);
       if (found) {
         const { salutation, cleanName } = extractSalutation(found.name);
-        if (salutation) {
-          setSelectedSalutation(salutation);
-          setCustomerName(cleanName);
-        } else {
-          setCustomerName(found.name);
-        }
+        setSelectedSalutation(salutation || 'Kak');
+        setCustomerName(cleanName || found.name);
         setCustomerPhone(found.phone);
+        setCustomerAddress(found.address || '');
+        if (found.depositBalance && found.depositBalance > 0) {
+          setUseDeposit(true);
+        }
       }
     }
+  };
+
+  // Update existing customer contact (Phone / Address) directly
+  const handleUpdateCurrentCustomerContact = () => {
+    if (!customerPhone.trim()) {
+      setFeedback({ type: 'error', text: 'Nomor WhatsApp tidak boleh kosong.' });
+      return;
+    }
+    const updated = customerList.map(c => {
+      if (c.id === selectedCustomerId) {
+        return {
+          ...c,
+          name: formatCustomerName(customerName, selectedSalutation),
+          phone: customerPhone.trim(),
+          address: customerAddress.trim() || undefined,
+        };
+      }
+      return c;
+    });
+    saveCustomers(updated);
+    setIsEditingContact(false);
+    setFeedback({ type: 'success', text: 'Data kontak pelanggan (No. WA / Alamat) berhasil diperbarui.' });
   };
 
   // Create Transaction Handler (Mendukung Multi-Layanan, Foto Kamera/Galeri, dan Lunas/DP)
@@ -480,28 +1031,28 @@ export function KasirTransactionWorkspace({
     // Determine final items to include in this nota
     let finalItems: PosOrderItem[] = [...orderItems];
     if (finalItems.length === 0) {
-      if (catalog.length === 0 || !selectedService) {
-        setFeedback({ type: 'error', text: 'Silakan pilih layanan atau produk terlebih dahulu.' });
+      const targetName = selectedService || serviceSearchText;
+      if (!targetName.trim()) {
+        setFeedback({ type: 'error', text: 'Silakan pilih atau ketik layanan / produk terlebih dahulu.' });
         return;
       }
-      const found = catalog.find(c => c.nama === selectedService);
-      if (found) {
-        const isService = found.item_type !== 'PRODUCT';
-        const finalQty = Math.max(1, qty);
-        finalItems = [{
-          id: `item-${Date.now()}`,
-          catalog_id: found.id,
-          service: found.nama,
-          qty: finalQty,
-          price: found.base_harga,
-          pricing_unit: (found.pricing_unit || (isService ? 'sepasang' : 'pc')) as string,
-          item_type: found.item_type || 'SERVICE',
-          duration_val: isService ? (found.duration_val || 1) : undefined,
-          duration_unit: isService ? (found.duration_unit || 'HARI') : undefined,
-          estimatedCompletion: isService ? (estimatedCompletion || calculateDefaultCompletion(found.duration_val, found.duration_unit, found.duration_hours)) : undefined,
-          subtotal: found.base_harga * finalQty,
-        }];
-      }
+      const found = catalog.find(c => c.nama.toLowerCase() === targetName.toLowerCase()) || catalog.find(c => c.nama === targetName);
+      const isService = found ? found.item_type !== 'PRODUCT' : true;
+      const finalPrice = found ? found.base_harga : (servicePrice || 0);
+      const finalQty = Math.max(1, qty);
+      finalItems = [{
+        id: `item-${Date.now()}`,
+        catalog_id: found ? found.id : `custom-${Date.now()}`,
+        service: found ? found.nama : targetName,
+        qty: finalQty,
+        price: finalPrice,
+        pricing_unit: (found?.pricing_unit || (isService ? 'sepasang' : 'pc')) as string,
+        item_type: found?.item_type || 'SERVICE',
+        duration_val: isService ? (found?.duration_val || 1) : undefined,
+        duration_unit: isService ? (found?.duration_unit || 'HARI') : undefined,
+        estimatedCompletion: isService ? (estimatedCompletion || (found ? calculateDefaultCompletion(found.duration_val, found.duration_unit, found.duration_hours) : '')) : undefined,
+        subtotal: finalPrice * finalQty,
+      }];
     }
 
     if (finalItems.length === 0) {
@@ -509,60 +1060,168 @@ export function KasirTransactionWorkspace({
       return;
     }
 
-    const currentTotal = finalItems.reduce((acc, it) => acc + it.subtotal, 0);
-    const computedDp = paymentType === 'LUNAS' ? currentTotal : (Number(dpAmount) || 0);
-    const computedRemaining = Math.max(0, currentTotal - computedDp);
+    const subtotal = finalItems.reduce((acc, it) => acc + it.subtotal, 0);
+    const promoDisc = selectedPromoBasicId && customDiscountPercent > 0
+      ? Math.round((subtotal * customDiscountPercent) / 100)
+      : 0;
+    const afterPromo = Math.max(0, subtotal - promoDisc);
+    const ptsDisc = useLoyaltyPoints && redeemedPointsQty > 0
+      ? Math.min(afterPromo, PromoManagementService.calculatePointsDiscount(redeemedPointsQty, promoBundle.poin))
+      : 0;
+    const finalTotal = Math.max(0, afterPromo - ptsDisc);
 
-    if (paymentType === 'DP' && computedDp <= 0) {
+    // Deposit Deduction: deposit berkurang dari total transaksi pada nota
+    const depositUsed = useDeposit ? Math.min(finalTotal, customerDepositBalance) : 0;
+    const payableAfterDeposit = Math.max(0, finalTotal - depositUsed);
+    const remainingDepositBal = Math.max(0, customerDepositBalance - depositUsed);
+
+    const isFullyPaidByDeposit = depositUsed > 0 && payableAfterDeposit === 0;
+    const effectivePaymentType = isFullyPaidByDeposit ? 'LUNAS' : paymentType;
+    const effectivePaymentMethod = isFullyPaidByDeposit ? 'DEPOSIT' : paymentMethod;
+
+    const computedDp = effectivePaymentType === 'LUNAS' ? payableAfterDeposit : (Number(dpAmount) || 0);
+    const computedRemaining = Math.max(0, payableAfterDeposit - computedDp);
+
+    if (effectivePaymentType === 'DP' && computedDp <= 0 && payableAfterDeposit > 0) {
       setFeedback({ type: 'error', text: 'Silakan masukkan nominal DP (Uang Muka) lebih besar dari 0.' });
       return;
     }
 
+    const pointsEarned = PromoManagementService.calculatePointsEarned(finalTotal, promoBundle.poin);
+    const pointsDeducted = useLoyaltyPoints ? Math.min(customerLoyaltyPoints, redeemedPointsQty) : 0;
+
     const finalCustomerName = formatCustomerName(customerName, selectedSalutation);
+    const finalPhone = customerPhone.trim();
+    const finalAddress = customerAddress.trim();
     const serviceSummary = finalItems.length === 1 
       ? finalItems[0].service 
       : `${finalItems[0].service} + ${finalItems.length - 1} layanan lain`;
     
-    // Find earliest or longest estimated completion if services exist
-    const serviceWithSla = finalItems.find(it => it.estimatedCompletion);
-    const finalEstimatedCompletion = serviceWithSla ? serviceWithSla.estimatedCompletion : undefined;
+    // Calculate estimated completion taking the longest duration among all services
+    const finalEstimatedCompletion = calculateLongestCompletion(finalItems) 
+      || (orderItems.length === 0 && estimatedCompletion ? estimatedCompletion : undefined);
 
     const newTrx: TransactionRecord = {
       id: `NOT-2026-0${recentTransactions.length + 893}`,
       customer: finalCustomerName,
-      phone: customerPhone.trim(),
+      phone: finalPhone,
+      customerAddress: finalAddress || undefined,
       service: serviceSummary,
       qty: finalItems.reduce((sum, it) => sum + it.qty, 0),
       pricing_unit: finalItems[0]?.pricing_unit || 'unit',
       price: finalItems[0]?.price || 0,
-      total: currentTotal,
-      payment_type: paymentType,
+      subtotal: subtotal,
+      discount_amount: promoDisc,
+      promo_name: selectedPromoBasic ? `${selectedPromoBasic.name} (${customDiscountPercent}%)` : undefined,
+      points_used: pointsDeducted,
+      points_discount: ptsDisc,
+      points_earned: pointsEarned,
+      deposit_used: depositUsed,
+      remaining_deposit_balance: (customerDepositBalance > 0 || depositUsed > 0) ? remainingDepositBal : undefined,
+      total: finalTotal,
+      payment_type: effectivePaymentType,
       dp_amount: computedDp,
       remaining_amount: computedRemaining,
-      method: paymentMethod,
-      status: paymentType === 'LUNAS' ? 'COMPLETED' : 'DP_PAID',
+      method: effectivePaymentMethod,
+      status: effectivePaymentType === 'LUNAS' ? 'COMPLETED' : 'DP_PAID',
       time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
       estimatedCompletion: finalEstimatedCompletion,
       itemPhotoUrl: itemPhotoUrl,
       items: finalItems,
     };
 
-    setRecentTransactions([newTrx, ...recentTransactions]);
+    saveRecentTransactions([newTrx, ...recentTransactions]);
+
+    // Register into TransactionManagementService for Owner Rekap & Pembatalan
+    try {
+      TransactionManagementService.addRegularTransaction(businessId, {
+        id: newTrx.id,
+        business_id: businessId,
+        customer: finalCustomerName,
+        phone: finalPhone,
+        customerAddress: finalAddress || undefined,
+        service: serviceSummary,
+        qty: newTrx.qty,
+        pricing_unit: newTrx.pricing_unit,
+        price: newTrx.price,
+        subtotal: subtotal,
+        discount_amount: promoDisc,
+        promo_name: newTrx.promo_name,
+        points_used: pointsDeducted,
+        points_discount: ptsDisc,
+        deposit_used: depositUsed,
+        remaining_deposit_balance: (customerDepositBalance > 0 || depositUsed > 0) ? remainingDepositBal : undefined,
+        total: finalTotal,
+        payment_type: effectivePaymentType,
+        dp_amount: computedDp,
+        remaining_amount: computedRemaining,
+        method: effectivePaymentMethod,
+        status: 'COMPLETED',
+        time: newTrx.time,
+        date: new Date().toISOString().substring(0, 10),
+        items: finalItems.map(it => ({
+          id: it.id,
+          service: it.service,
+          qty: it.qty,
+          price: it.price,
+          pricing_unit: it.pricing_unit,
+          subtotal: it.subtotal,
+        })),
+      });
+    } catch (err) {
+      console.error('Failed to sync to TransactionManagementService', err);
+    }
+
     setActiveReceiptTrx(newTrx); // Buka Thermal Receipt Modal
     setShowPosModal(false); // Tutup Form Buat Nota Pop-up
 
-    // Auto-save new customer to customerList if unregistered
-    if (isNewCustomerMode || !customerList.some(c => c.phone === customerPhone.trim())) {
-      const newC = {
+    // Auto-save new customer to customerList or update existing customer totalTrx & loyalty points
+    if (isNewCustomerMode || !customerList.some(c => c.phone === finalPhone)) {
+      const newC: PosCustomerItem = {
         id: `cust-${Date.now()}`,
         name: finalCustomerName,
-        phone: customerPhone.trim(),
+        phone: finalPhone,
+        address: finalAddress || undefined,
         status: 'NEW',
         totalTrx: 1,
         lastVisit: new Date().toISOString().substring(0, 10),
+        depositBalance: remainingDepositBal,
+        loyaltyPoints: pointsEarned,
       };
-      setCustomerList(prev => [newC, ...prev]);
+      const updatedList = [newC, ...customerList.filter(c => c.phone !== finalPhone)];
+      saveCustomers(updatedList);
       setSelectedCustomerId(newC.id);
+      setIsNewCustomerMode(false);
+    } else {
+      const updatedList = customerList.map(c => {
+        if (c.id === selectedCustomerId || c.phone === finalPhone) {
+          const currentPts = c.loyaltyPoints || 0;
+          const nextPts = Math.max(0, currentPts - pointsDeducted) + pointsEarned;
+          return {
+            ...c,
+            name: finalCustomerName,
+            phone: finalPhone,
+            address: finalAddress || c.address,
+            totalTrx: (c.totalTrx || 0) + 1,
+            lastVisit: new Date().toISOString().substring(0, 10),
+            loyaltyPoints: nextPts,
+            depositBalance: remainingDepositBal,
+          };
+        }
+        return c;
+      });
+      saveCustomers(updatedList);
+    }
+
+    try {
+      CustomerDomainService.registerCustomer({
+        nama: finalCustomerName,
+        no_hp: finalPhone,
+        alamat: finalAddress || undefined,
+        branch_id: branchId,
+      });
+    } catch {
+      // safe ignore
     }
 
     // Auto-schedule sharp CRM reminder & decrement retail stock for each item in nota
@@ -604,15 +1263,30 @@ export function KasirTransactionWorkspace({
       console.error('Failed to process item CRM reminders:', err);
     }
 
-    // Reset Form for next transaction
+    // Reset Form for next transaction — kembali ke form bersih tanpa default
+    setSelectedCustomerId('');
+    setCustomerName('');
+    setCustomerPhone('');
+    setCustomerAddress('');
+    setSelectedSalutation('Kak');
+    setSelectedService('');
+    setServiceSearchText('');
+    setServicePrice(0);
+    setEstimatedCompletion('');
+    setShowCustomerSuggestions(false);
+    setShowServiceSuggestions(false);
     setOrderItems([]);
     setItemPhotoUrl(null);
     setPaymentType('LUNAS');
     setDpAmount('');
     setQty(1);
+    setSelectedPromoBasicId('');
+    setCustomDiscountPercent(0);
+    setUseLoyaltyPoints(false);
+    setRedeemedPointsQty(0);
 
     const paymentFeedback = paymentType === 'LUNAS'
-      ? `LUNAS (Rp ${currentTotal.toLocaleString('id-ID')})`
+      ? `LUNAS (Rp ${finalTotal.toLocaleString('id-ID')})`
       : `DP Rp ${computedDp.toLocaleString('id-ID')} (Sisa: Rp ${computedRemaining.toLocaleString('id-ID')})`;
 
     setFeedback({
@@ -628,7 +1302,7 @@ export function KasirTransactionWorkspace({
       return;
     }
     const finalFormattedName = formatCustomerName(newCustName, newCustSalutation);
-    const newC = {
+    const newC: PosCustomerItem = {
       id: `cust-${Date.now()}`,
       name: finalFormattedName,
       phone: newCustPhone.trim(),
@@ -636,7 +1310,19 @@ export function KasirTransactionWorkspace({
       totalTrx: 1,
       lastVisit: new Date().toISOString().substring(0, 10),
     };
-    setCustomerList([newC, ...customerList]);
+    const updatedList = [newC, ...customerList.filter(c => c.phone !== newC.phone)];
+    saveCustomers(updatedList);
+    try {
+      saveImportedCustomersAction('ALL', [{
+        id: newC.id,
+        business_id: businessId,
+        name: newC.name,
+        phone: newC.phone,
+        status: newC.status,
+        totalTrx: newC.totalTrx,
+        lastVisit: newC.lastVisit,
+      }]).catch(() => {});
+    } catch {}
     setSelectedCustomerId(newC.id);
     setCustomerName(newCustName.trim());
     setSelectedSalutation(newCustSalutation);
@@ -644,7 +1330,72 @@ export function KasirTransactionWorkspace({
     setNewCustName('');
     setNewCustPhone('');
     setNewCustSalutation('Kak');
-    setFeedback({ type: 'success', text: `Pelanggan baru '${newC.name}' berhasil ditambahkan ke Database Pelanggan.` });
+    setFeedback({ type: 'success', text: `Pelanggan baru '${newC.name}' berhasil disimpan permanen ke Database Pelanggan.` });
+  };
+
+  const handleRestoreCustomersBackup = async () => {
+    let restoredCount = 0;
+    const phoneMap = new Map<string, PosCustomerItem>();
+
+    // 1. Current list
+    customerList.forEach(c => phoneMap.set(c.phone, c));
+
+    // 2. Scan all localStorage keys
+    if (typeof window !== 'undefined') {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('pilin_kasir_customers_') || key.includes('customer'))) {
+          try {
+            const list = JSON.parse(localStorage.getItem(key) || '[]');
+            if (Array.isArray(list)) {
+              list.forEach((c: PosCustomerItem) => {
+                if (c && c.name && c.phone && c.name.length >= 2) {
+                  if (!phoneMap.has(c.phone)) {
+                    phoneMap.set(c.phone, c);
+                    restoredCount++;
+                  }
+                }
+              });
+            }
+          } catch {}
+        }
+      }
+    }
+
+    // 3. Scan server persistent file
+    try {
+      const serverList = await getLiveCustomersAction('ALL');
+      if (serverList && serverList.length > 0) {
+        serverList.forEach(s => {
+          if (!phoneMap.has(s.phone)) {
+            phoneMap.set(s.phone, {
+              id: s.id,
+              name: s.name,
+              phone: s.phone,
+              address: s.address,
+              status: s.status || 'NEW',
+              totalTrx: s.totalTrx || 1,
+              lastVisit: s.lastVisit || new Date().toISOString().substring(0, 10),
+            });
+            restoredCount++;
+          }
+        });
+      }
+    } catch {}
+
+    const allRestored = Array.from(phoneMap.values());
+    if (allRestored.length > 0) {
+      saveCustomers(allRestored);
+      setFeedback({
+        type: 'success',
+        text: `Sukses memulihkan database! Saat ini terdapat total ${allRestored.length} data pelanggan aman tersimpan (${restoredCount} kontak dipulihkan dari cadangan).`,
+      });
+    } else {
+      setFeedback({
+        type: 'error',
+        text: 'Tidak ditemukan berkas cadangan tambahan di browser atau server.',
+      });
+    }
   };
 
   // CSV Import & Export Handlers for Bulk Customers
@@ -698,84 +1449,48 @@ export function KasirTransactionWorkspace({
     });
   };
 
-  const handleImportCsvCustomers = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportCsvCustomers = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const text = event.target?.result as string;
-        if (!text) return;
-
-        const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-        if (lines.length <= 1) {
-          setFeedback({ type: 'error', text: 'File CSV kosong atau hanya berisi baris judul.' });
-          return;
-        }
-
-        const firstLine = lines[0];
-        const delimiter = firstLine.includes(';') ? ';' : ',';
-
-        let importedCount = 0;
-        let skippedDuplicate = 0;
-        const newCustomers: typeof customerList = [];
-        const existingPhones = new Set(customerList.map(c => normalizePhoneNumber(c.phone)));
-
-        for (let i = 1; i < lines.length; i++) {
-          const rowText = lines[i];
-          const cols = rowText.split(delimiter).map(c => c.replace(/^["']|["']$/g, '').trim());
-          if (cols.length < 2) continue;
-
-          const rawName = cols[0];
-          const rawPhone = cols[1];
-          if (!rawName || rawName.length < 2 || !rawPhone) continue;
-
-          const normPhone = normalizePhoneNumber(rawPhone);
-          if (!normPhone) continue;
-
-          if (existingPhones.has(normPhone)) {
-            skippedDuplicate++;
-            continue;
-          }
-
-          existingPhones.add(normPhone);
-          const { salutation, cleanName } = extractSalutation(rawName);
-          const formattedName = formatCustomerName(cleanName || rawName, salutation || 'Kak');
-
-          newCustomers.push({
-            id: `cust-imp-${Date.now()}-${i}`,
-            name: formattedName,
-            phone: normPhone,
-            status: 'NEW',
-            totalTrx: 0,
-            lastVisit: new Date().toISOString().substring(0, 10),
-          });
-          importedCount++;
-        }
-
-        if (newCustomers.length > 0) {
-          setCustomerList(prev => [...newCustomers, ...prev]);
-          setFeedback({
-            type: 'success',
-            text: `Sukses mengimpor ${importedCount} pelanggan baru dari file CSV! ${skippedDuplicate > 0 ? `(${skippedDuplicate} nomor duplikat dilewati).` : ''}`,
-          });
-        } else {
-          setFeedback({
-            type: 'error',
-            text: skippedDuplicate > 0 
-              ? `Seluruh ${skippedDuplicate} data pelanggan dalam file sudah terdaftar sebelumnya di database.` 
-              : 'Format file tidak sesuai. Pastikan kolom pertama adalah Nama dan kolom kedua adalah Nomor WhatsApp.',
-          });
-        }
-      } catch (err) {
-        console.error('Failed to parse CSV:', err);
-        setFeedback({ type: 'error', text: 'Gagal memproses file CSV. Pastikan format file sesuai template.' });
-      } finally {
-        if (csvInputRef.current) csvInputRef.current.value = '';
+    try {
+      const parsedRows = await ImportExportService.parseCustomerFile(file);
+      if (parsedRows.length === 0) {
+        setFeedback({
+          type: 'error',
+          text: 'File kosong atau baris data pelanggan tidak dapat ditemukan. Pastikan format tabel memiliki kolom Nama dan No Telpon/WA.',
+        });
+        return;
       }
-    };
-    reader.readAsText(file);
+
+      const validRows = parsedRows.filter(r => r.isValid);
+      if (validRows.length === 0) {
+        setFeedback({
+          type: 'error',
+          text: `Ditemukan ${parsedRows.length} baris, namun tidak ada nomor telepon dan nama yang valid.`,
+        });
+        return;
+      }
+
+      const result = ImportExportService.commitImportCustomers(validRows, businessId, branchId);
+      saveCustomers(result.currentList);
+      if (result.currentList.length > 0 && (!selectedCustomerId || selectedCustomerId === 'NEW_CUSTOMER')) {
+        handlePOSCustomerSelect(result.currentList[0].id);
+      }
+
+      setFeedback({
+        type: 'success',
+        text: `Sukses mengimpor dari ${file.name}! ${result.added} pelanggan baru ditambahkan, ${result.updated} data diperbarui.`,
+      });
+    } catch (err) {
+      console.error('Failed to import customer file:', err);
+      setFeedback({
+        type: 'error',
+        text: 'Gagal memproses file. Pastikan format file berupa spreadsheet Excel (.xlsx/.xls) atau CSV yang valid.',
+      });
+    } finally {
+      if (csvInputRef.current) csvInputRef.current.value = '';
+    }
   };
 
   // WA Engine Target Customer Change Handler
@@ -844,30 +1559,61 @@ export function KasirTransactionWorkspace({
 
   // Generate WA Nota Text with official business sender sign-off
   const generateWaReceiptText = (trx: TransactionRecord) => {
-    const profile = BusinessProfileService.getProfile(businessId);
-    const completionLine = trx.estimatedCompletion ? `\nEstimasi Selesai : ${trx.estimatedCompletion}` : '';
+    const profile = businessProfile || BusinessProfileService.getProfile(businessId);
+    const completionSection = trx.estimatedCompletion
+      ? `TANGGAL SELESAI:\n*${trx.estimatedCompletion}*\n--------------------------------\n`
+      : '';
 
     const itemsLines = trx.items && trx.items.length > 0
       ? trx.items.map(it => `• ${it.service} (${it.qty} ${it.pricing_unit || 'x'}) : Rp ${it.subtotal.toLocaleString('id-ID')}`).join('\n')
-      : `• ${trx.service} (${trx.qty} ${trx.pricing_unit || 'x'}) : Rp ${trx.total.toLocaleString('id-ID')}`;
+      : `• ${trx.service} (${trx.qty} ${trx.pricing_unit || 'x'}) : Rp ${(trx.subtotal || trx.total).toLocaleString('id-ID')}`;
+
+    const discountLines: string[] = [];
+    if (trx.discount_amount && trx.discount_amount > 0) {
+      discountLines.push(`Diskon Promo (${trx.promo_name || 'Promo'}) : -Rp ${trx.discount_amount.toLocaleString('id-ID')}`);
+    }
+    if (trx.points_discount && trx.points_discount > 0) {
+      discountLines.push(`Diskon Poin Loyalty (${trx.points_used || 0} Poin) : -Rp ${trx.points_discount.toLocaleString('id-ID')}`);
+    }
+    const discountText = discountLines.length > 0 ? `\n${discountLines.join('\n')}` : '';
+
+    const subtotalText = trx.subtotal && (trx.discount_amount || trx.points_discount)
+      ? `Subtotal      : Rp ${trx.subtotal.toLocaleString('id-ID')}${discountText}\n`
+      : '';
+
+    const pointsEarnedText = trx.points_earned && trx.points_earned > 0
+      ? `\nPoin Diperoleh: +${trx.points_earned} Poin`
+      : '';
+
+    const depositDeductionText = trx.deposit_used && trx.deposit_used > 0
+      ? `\nPotong Deposit: -Rp ${trx.deposit_used.toLocaleString('id-ID')}`
+      : '';
+
+    const remainingDepositText = trx.remaining_deposit_balance !== undefined
+      ? `\n--------------------------------\n*SISA SALDO DEPOSIT: Rp ${trx.remaining_deposit_balance.toLocaleString('id-ID')}*`
+      : '';
+
+    const methodDisplay = trx.method === 'DEPOSIT'
+      ? 'SALDO DEPOSIT (LUNAS)'
+      : `${trx.method} (LUNAS)`;
 
     const paymentLines = trx.payment_type === 'DP'
-      ? `Total Tagihan : Rp ${trx.total.toLocaleString('id-ID')}
+      ? `${subtotalText}Total Tagihan : Rp ${trx.total.toLocaleString('id-ID')}${depositDeductionText}
 DP Diterima   : Rp ${(trx.dp_amount || 0).toLocaleString('id-ID')} (${trx.method})
-SISA TAGIHAN  : Rp ${(trx.remaining_amount || 0).toLocaleString('id-ID')} (Pelunasan saat pengambilan)`
-      : `Total Tagihan : Rp ${trx.total.toLocaleString('id-ID')}
-Pembayaran    : ${trx.method} (LUNAS)`;
+SISA TAGIHAN  : Rp ${(trx.remaining_amount || 0).toLocaleString('id-ID')} (Pelunasan saat pengambilan)${pointsEarnedText}${remainingDepositText}`
+      : `${subtotalText}Total Tagihan : Rp ${trx.total.toLocaleString('id-ID')}${depositDeductionText}
+Pembayaran    : ${methodDisplay}${pointsEarnedText}${remainingDepositText}`;
 
     return `*${profile.business_name.toUpperCase()}*
 ${profile.business_address}
-No. WA Bisnis Resmi: ${profile.business_phone}
+No. WA Resmi Toko: ${profile.business_phone}
 --------------------------------
 No. Nota : ${trx.id}
 Waktu    : ${trx.time}
 Kasir    : ${actorName}
-Pelanggan: ${trx.customer} (${trx.phone})${completionLine}
+Pelanggan: ${trx.customer} (${trx.phone})
 --------------------------------
-RINCIAN PESANAN:
+${completionSection}DAFTAR LAYANAN:
 ${itemsLines}
 --------------------------------
 STATUS PEMBAYARAN:
@@ -877,15 +1623,16 @@ Syarat & Ketentuan:
 ${profile.terms_and_conditions}
 
 --------------------------------
-Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
+Pesan nota ini dikirim resmi dari No. WA Toko: ${profile.business_phone}`;
   };
 
   const handleSendDirectWaReceipt = (trx: TransactionRecord) => {
+    const profile = businessProfile || BusinessProfileService.getProfile(businessId);
     const text = generateWaReceiptText(trx);
     RetentionDomainService.openDirectWhatsApp(trx.phone, text);
     setFeedback({
       type: 'success',
-      text: `Membuka WhatsApp langsung (WA Cepat) ke nomor tujuan ${trx.customer} (${trx.phone}). Silakan langsung tekan kirim di WhatsApp.`,
+      text: `Membuka WhatsApp resmi Toko (${profile.business_phone}) ke pelanggan ${trx.customer} (${trx.phone}). Silakan langsung tekan kirim di WhatsApp.`,
     });
   };
 
@@ -906,34 +1653,78 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
         </div>
       )}
 
+      {/* BANNER RECOVERY: CADANGAN DATA PELANGGAN (SELALU AKTIF DI SEMUA TAB) */}
+      <div className="bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-400 dark:border-amber-700 p-3.5 rounded-2xl flex flex-wrap items-center justify-between gap-3 shadow-md">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center font-black shrink-0 shadow-sm">
+            <RotateCcw className="w-4 h-4" />
+          </div>
+          <span className="font-black text-xs sm:text-sm text-slate-900 dark:text-white">
+            Pusat Pemulihan Data ({customerList.length} Pelanggan Terdaftar)
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={handleRestoreCustomersBackup}
+          className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold text-xs flex items-center gap-2 shadow-md transition-all cursor-pointer active:scale-95"
+        >
+          <RotateCcw className="w-4 h-4" />
+          <span>Pulihkan Cadangan Data</span>
+        </button>
+      </div>
+
       {/* BERANDA MAIN VIEW */}
       {activeBottomNav === 'BERANDA' && (
         <div className="space-y-6">
-          {/* MAIN ACTION BUTTONS: [Buat Nota] [SPK] [Pelunasan/Pengambilan] */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+
+          {/* MAIN ACTION BUTTONS: [Buat Nota Reguler] [Top-Up Deposit] [SPK Kerja] [Pengambilan Barang] */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <button
               type="button"
-              onClick={() => setShowPosModal(true)}
-              className="p-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-bold text-sm shadow-sm flex items-center justify-center gap-2.5 transition-all cursor-pointer active:scale-95"
+              onClick={() => {
+                if (orderItems.length === 0) {
+                  setSelectedCustomerId('');
+                  setCustomerName('');
+                  setCustomerPhone('');
+                  setCustomerAddress('');
+                  setSelectedSalutation('Kak');
+                  setSelectedService('');
+                  setServiceSearchText('');
+                  setServicePrice(0);
+                  setEstimatedCompletion('');
+                }
+                setShowCustomerSuggestions(false);
+                setShowServiceSuggestions(false);
+                setShowPosModal(true);
+              }}
+              className="p-3.5 sm:p-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-bold text-xs sm:text-sm shadow-sm flex flex-col sm:flex-row items-center justify-center gap-2 transition-all cursor-pointer active:scale-95 text-center"
             >
-              <PlusCircle className="w-5 h-5" />
-              <span>Buat Nota</span>
+              <PlusCircle className="w-5 h-5 shrink-0" />
+              <span>Buat Nota Reguler</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleOpenStandaloneTopup()}
+              className="p-3.5 sm:p-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-bold text-xs sm:text-sm shadow-sm flex flex-col sm:flex-row items-center justify-center gap-2 transition-all cursor-pointer active:scale-95 text-center"
+            >
+              <Wallet className="w-5 h-5 shrink-0" />
+              <span>Top-Up Deposit</span>
             </button>
             <button
               type="button"
               onClick={() => setShowSpkModal(true)}
-              className="p-4 bg-amber-600 hover:bg-amber-500 text-white rounded-2xl font-bold text-sm shadow-sm flex items-center justify-center gap-2.5 transition-all cursor-pointer active:scale-95"
+              className="p-3.5 sm:p-4 bg-amber-600 hover:bg-amber-500 text-white rounded-2xl font-bold text-xs sm:text-sm shadow-sm flex flex-col sm:flex-row items-center justify-center gap-2 transition-all cursor-pointer active:scale-95 text-center"
             >
-              <Wrench className="w-5 h-5" />
+              <Wrench className="w-5 h-5 shrink-0" />
               <span>SPK ({spkOrders.length})</span>
             </button>
             <button
               type="button"
               onClick={() => setShowPickupModal(true)}
-              className="p-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-bold text-sm shadow-sm flex items-center justify-center gap-2.5 transition-all cursor-pointer active:scale-95"
+              className="p-3.5 sm:p-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-bold text-xs sm:text-sm shadow-sm flex flex-col sm:flex-row items-center justify-center gap-2 transition-all cursor-pointer active:scale-95 text-center"
             >
-              <CheckCircle2 className="w-5 h-5" />
-              <span>Pengambilan Barang</span>
+              <CheckCircle2 className="w-5 h-5 shrink-0" />
+              <span>Pengambilan</span>
             </button>
           </div>
 
@@ -1121,95 +1912,234 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
               <span>Input Transaksi Pelanggan (POS Kasir)</span>
             </h3>
 
-            {/* Customer Dropdown Selection */}
-            <div>
-              <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">
-                Pilih Pelanggan dari Database:
-              </label>
-              <select
-                value={selectedCustomerId}
-                onChange={e => handlePOSCustomerSelect(e.target.value)}
-                className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white font-bold focus:outline-none focus:border-emerald-500 cursor-pointer"
-              >
-                {customerList.map(c => (
-                  <option key={c.id} value={c.id}>
-                    👤 {c.name} ({c.phone}) — {c.status}
-                  </option>
-                ))}
-                <option value="NEW_CUSTOMER">✏️ + Input Pelanggan Baru / Unregistered</option>
-              </select>
-            </div>
+            {/* TAHAP 1: IDENTIFIKASI PELANGGAN */}
+            <div className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs font-bold text-emerald-700 dark:text-emerald-400">
+                  <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[11px] font-black">1</span>
+                  <span>Identifikasi Pelanggan</span>
+                </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-medium text-slate-700 dark:text-slate-400">Nama Pelanggan:</label>
-                  <div className="inline-flex rounded-lg p-0.5 bg-slate-200 dark:bg-slate-800">
-                    {(['Bapak', 'Ibu', 'Kak'] as const).map(sal => (
-                      <button
-                        key={sal}
-                        type="button"
-                        onClick={() => setSelectedSalutation(sal)}
-                        className={`px-2 py-0.5 text-[11px] font-bold rounded-md transition-all ${
-                          selectedSalutation === sal
-                            ? 'bg-emerald-600 text-white shadow-sm'
-                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                        }`}
-                      >
-                        {sal}
-                      </button>
-                    ))}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowImportExportModal(true)}
+                    className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-[11px] font-bold border border-slate-300 dark:border-slate-700 transition-all flex items-center gap-1 cursor-pointer"
+                    title="Impor / Ekspor Excel Pelanggan"
+                  >
+                    <span>📊 Impor / Ekspor</span>
+                  </button>
+
+                  <div className="inline-flex rounded-lg p-0.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs">
+                    <button
+                      type="button"
+                      onClick={handleSwitchToExistingCustomer}
+                      className={`px-3 py-1 font-bold rounded-md transition-all flex items-center gap-1.5 ${
+                        !isNewCustomerMode
+                          ? 'bg-emerald-600 text-white shadow-sm'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      <User className="w-3.5 h-3.5" />
+                      <span>Pilih Pelanggan ({customerList.length})</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSwitchToNewCustomer}
+                      className={`px-3 py-1 font-bold rounded-md transition-all flex items-center gap-1.5 ${
+                        isNewCustomerMode
+                          ? 'bg-emerald-600 text-white shadow-sm'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>+ Pelanggan Baru</span>
+                    </button>
                   </div>
                 </div>
-                <div className="relative flex items-center">
-                  <span className="absolute left-3 text-xs font-bold text-emerald-600 dark:text-emerald-400 select-none">
-                    {selectedSalutation}
-                  </span>
-                  <input
-                    type="text"
-                    required
-                    value={customerName}
-                    onChange={e => {
-                      const val = e.target.value;
-                      const { salutation, cleanName } = extractSalutation(val);
-                      if (salutation) {
-                        setSelectedSalutation(salutation);
-                        setCustomerName(cleanName);
-                      } else {
-                        setCustomerName(val);
-                      }
-                    }}
-                    placeholder="Nama Pelanggan"
-                    className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg py-2.5 pr-2.5 pl-14 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 font-medium"
-                  />
-                </div>
               </div>
 
-              <div>
-                <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">No. HP WhatsApp (Target Nota):</label>
-                <input
-                  type="text"
-                  required
-                  value={customerPhone}
-                  onChange={e => setCustomerPhone(e.target.value)}
-                  placeholder="08xxxxxxxxxx"
-                  className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white font-mono focus:outline-none focus:border-emerald-500"
-                />
-              </div>
+              {!isNewCustomerMode ? (
+                /* Mode Pelanggan Terdaftar: Pilih & Tampil Otomatis Tanpa Perlu Input Ulang */
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">
+                      Pilih Pelanggan dari Database:
+                    </label>
+                    <select
+                      value={selectedCustomerId}
+                      onChange={e => handlePOSCustomerSelect(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white font-bold focus:outline-none focus:border-emerald-500 cursor-pointer"
+                    >
+                      {customerList.map(c => (
+                        <option key={c.id} value={c.id}>
+                          👤 {c.name} ({c.phone}) — {c.status}
+                        </option>
+                      ))}
+                      <option value="NEW_CUSTOMER">✏️ + Input Pelanggan Baru / Unregistered</option>
+                    </select>
+                  </div>
+
+                  {/* Profil Pelanggan Terpilih: No WA & Alamat Langsung Siap Pakai */}
+                  <div className="p-3 bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/80 rounded-xl space-y-2">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black text-slate-900 dark:text-white">
+                          {formatCustomerName(customerName, selectedSalutation)}
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200">
+                          {customerList.find(c => c.id === selectedCustomerId)?.status || 'ACTIVE'}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingContact(!isEditingContact)}
+                        className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 hover:underline flex items-center gap-1"
+                      >
+                        <Edit2 className="w-3 h-3" />
+                        <span>{isEditingContact ? 'Selesai Edit' : 'Perbarui No. WA / Alamat'}</span>
+                      </button>
+                    </div>
+
+                    {!isEditingContact ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1 border-t border-emerald-200/60 dark:border-emerald-900/40">
+                        <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
+                          <Phone className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                          <span className="font-mono font-bold">{customerPhone || '-'}</span>
+                          <span className="text-[10px] bg-emerald-200 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 px-1 py-0.2 rounded font-semibold">Nota WA</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
+                          <MapPin className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                          <span className="truncate">{customerAddress || '(Alamat belum dicatat)'}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="pt-2 border-t border-emerald-200 dark:border-emerald-900 space-y-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-0.5">Update No. WhatsApp:</label>
+                            <input
+                              type="text"
+                              value={customerPhone}
+                              onChange={e => setCustomerPhone(e.target.value)}
+                              placeholder="08xxxxxxxxxx"
+                              className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-xs font-mono font-bold text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-0.5">Update Alamat:</label>
+                            <input
+                              type="text"
+                              value={customerAddress}
+                              onChange={e => setCustomerAddress(e.target.value)}
+                              placeholder="Alamat pelanggan"
+                              className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                            />
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleUpdateCurrentCustomerContact}
+                          className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold transition-all"
+                        >
+                          Simpan Pembaruan Kontak
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                /* Mode Input Pelanggan Baru */
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-medium text-slate-700 dark:text-slate-400">Nama Pelanggan:</label>
+                        <div className="inline-flex rounded-lg p-0.5 bg-slate-200 dark:bg-slate-800">
+                          {(['Bapak', 'Ibu', 'Kak'] as const).map(sal => (
+                            <button
+                              key={sal}
+                              type="button"
+                              onClick={() => setSelectedSalutation(sal)}
+                              className={`px-2 py-0.5 text-[11px] font-bold rounded-md transition-all ${
+                                selectedSalutation === sal
+                                  ? 'bg-emerald-600 text-white shadow-sm'
+                                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                              }`}
+                            >
+                              {sal}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="relative flex items-center">
+                        <span className="absolute left-3 text-xs font-bold text-emerald-600 dark:text-emerald-400 select-none">
+                          {selectedSalutation}
+                        </span>
+                        <input
+                          type="text"
+                          required
+                          value={customerName}
+                          onChange={e => {
+                            const val = e.target.value;
+                            const { salutation, cleanName } = extractSalutation(val);
+                            if (salutation) {
+                              setSelectedSalutation(salutation);
+                              setCustomerName(cleanName);
+                            } else {
+                              setCustomerName(val);
+                            }
+                          }}
+                          placeholder="Nama Pelanggan Baru"
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg py-2.5 pr-2.5 pl-14 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 font-medium"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">No. HP WhatsApp (Target Nota):</label>
+                      <input
+                        type="text"
+                        required
+                        value={customerPhone}
+                        onChange={e => setCustomerPhone(e.target.value)}
+                        placeholder="Contoh: 08123456789"
+                        className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white font-mono focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">Alamat Pelanggan (Opsional):</label>
+                    <input
+                      type="text"
+                      value={customerAddress}
+                      onChange={e => setCustomerAddress(e.target.value)}
+                      placeholder="Alamat domisili atau pengantaran (jika ada)"
+                      className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+
+                  {customerPhone && (
+                    <div className="p-2 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 rounded-lg flex items-center justify-between text-xs text-emerald-800 dark:text-emerald-300">
+                      <span className="font-semibold flex items-center gap-1.5">
+                        <Phone className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                        <span>Nota WA akan dikirim ke:</span>
+                      </span>
+                      <span className="font-mono font-bold bg-emerald-200 dark:bg-emerald-900 px-2 py-0.5 rounded">
+                        {customerPhone}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
-            {/* Clear WhatsApp Target Badge */}
-            {customerPhone && (
-              <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 rounded-lg flex items-center justify-between text-xs text-emerald-800 dark:text-emerald-300">
-                <span className="font-semibold flex items-center gap-1.5">
-                  <Phone className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                  <span>Nota WA akan dikirim ke:</span>
-                </span>
-                <span className="font-mono font-bold bg-emerald-200 dark:bg-emerald-900 px-2 py-0.5 rounded">
-                  {customerPhone}
-                </span>
-              </div>
-            )}
+            {/* TAHAP 2: PILIH LAYANAN & BUAT TRANSAKSI */}
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-800 dark:text-slate-200 pt-1">
+              <span className="w-5 h-5 rounded-full bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 flex items-center justify-center text-[11px] font-black">2</span>
+              <span>Pilih Layanan / Produk &amp; Buat Transaksi</span>
+            </div>
 
             {catalog.length === 0 && (
               <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-xl flex items-center gap-2 text-xs text-amber-800 dark:text-amber-300 font-medium">
@@ -1455,12 +2385,13 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              {/* Hidden File Input for CSV Import */}
+              {/* Hidden File Input for Excel / CSV Import */}
               <input
                 ref={csvInputRef}
                 type="file"
-                accept=".csv,text/csv,text/plain"
+                accept=".xlsx,.xls,.csv,text/csv,text/plain"
                 onChange={handleImportCsvCustomers}
+                onClick={(e) => { (e.target as HTMLInputElement).value = ''; }}
                 className="hidden"
               />
 
@@ -1476,10 +2407,30 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
               <button
                 type="button"
                 onClick={() => csvInputRef.current?.click()}
+                className="px-3.5 py-2 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                title="Pilih file Excel (.xlsx) atau CSV dari komputer"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                <span>Impor Cepat File</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowImportExportModal(true)}
                 className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-95"
               >
                 <PlusCircle className="w-4 h-4" />
                 <span>Upload &amp; Import Pelanggan</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleRestoreCustomersBackup}
+                className="px-3.5 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-95"
+                title="Pulihkan dan satukan data pelanggan dari seluruh cadangan lokal & server"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span>Pulihkan Cadangan Data</span>
               </button>
 
               <button
@@ -1573,8 +2524,10 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
                     <th className="p-3">Nama Pelanggan</th>
                     <th className="p-3">No. WhatsApp</th>
                     <th className="p-3">Total Transaksi</th>
+                    <th className="p-3">Poin Loyalty</th>
+                    <th className="p-3">Saldo Deposit</th>
                     <th className="p-3">Kunjungan Terakhir</th>
-                    <th className="p-3">Aksi WA</th>
+                    <th className="p-3 text-right">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-slate-800 dark:text-slate-200">
@@ -1584,21 +2537,37 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
                       <td className="p-3 font-bold text-slate-900 dark:text-white">{c.name}</td>
                       <td className="p-3 font-mono text-emerald-600 dark:text-emerald-400">{c.phone}</td>
                       <td className="p-3 font-bold text-blue-600 dark:text-blue-400">{c.totalTrx} Trx</td>
+                      <td className="p-3 font-bold text-purple-600 dark:text-purple-400">{c.loyaltyPoints ?? 0} Pts</td>
+                      <td className="p-3 font-bold text-emerald-600 dark:text-emerald-400">
+                        Rp {(c.depositBalance ?? 0).toLocaleString('id-ID')}
+                      </td>
                       <td className="p-3 font-mono text-slate-500 dark:text-slate-400">{c.lastVisit}</td>
-                      <td className="p-3">
-                        <button
-                          onClick={() => {
-                            setWaSelectedCustomerId(c.id);
-                            setWaTargetName(c.name);
-                            setWaTargetPhone(c.phone);
-                            updateWaTemplateText(c.name, waCategory);
-                            setActiveBottomNav('CRM');
-                          }}
-                          className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded text-[11px] flex items-center gap-1"
-                        >
-                          <MessageSquare className="w-3 h-3" />
-                          <span>[Kirim]</span>
-                        </button>
+                      <td className="p-3 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenStandaloneTopup(c)}
+                            className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded text-[11px] flex items-center gap-1 shadow-sm cursor-pointer"
+                            title="Top-up Deposit Pelanggan"
+                          >
+                            <Wallet className="w-3 h-3" />
+                            <span>+ Top-Up</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setWaSelectedCustomerId(c.id);
+                              setWaTargetName(c.name);
+                              setWaTargetPhone(c.phone);
+                              updateWaTemplateText(c.name, waCategory);
+                              setActiveBottomNav('CRM');
+                            }}
+                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded text-[11px] flex items-center gap-1 shadow-sm cursor-pointer"
+                          >
+                            <MessageSquare className="w-3 h-3" />
+                            <span>WA</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1609,11 +2578,268 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
         </div>
       )}
 
-      {/* TAB 4: WA ENGINE / CRM (REMINDER, OVERDUE NOTA, MANDAT KC, KABAR BERKALA, TEMPLATE INDUSTRI) */}
+      {/* TAB 4: CRM — PROMO GENERAL, VOUCHER LOYAL, REMINDER & WA ENGINE */}
       {activeBottomNav === 'CRM' && (
         <div className="space-y-6">
-          {/* SECTION 1: OVERDUE NOTA REMINDERS (DUE FOR RETENTION) — NO FINANCIAL/MONEY FIGURES */}
-          <div className="bg-slate-50 dark:bg-slate-950 p-5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-4">
+          {/* Sub-Nav Pill Switcher for CRM */}
+          <div className="flex flex-wrap gap-2 p-1.5 bg-slate-100 dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={() => setPromoCrmSubTab('PROMO_GENERAL')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                promoCrmSubTab === 'PROMO_GENERAL'
+                  ? 'bg-emerald-600 text-white shadow-md'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>Promo General &amp; Gajian ({promoBundle.generals.filter(g => g.is_active).length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setPromoCrmSubTab('VOUCHER')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                promoCrmSubTab === 'VOUCHER'
+                  ? 'bg-emerald-600 text-white shadow-md'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <Gift className="w-4 h-4" />
+              <span>Voucher Konsumen Loyal ({promoBundle.vouchers.filter(v => v.is_active).length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setPromoCrmSubTab('OVERDUE_WA')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                promoCrmSubTab === 'OVERDUE_WA'
+                  ? 'bg-emerald-600 text-white shadow-md'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <Clock className="w-4 h-4" />
+              <span>Pengingat &amp; WA Engine</span>
+            </button>
+          </div>
+
+          {/* SUB-TAB 1: PROMO GENERAL & GAJIAN */}
+          {promoCrmSubTab === 'PROMO_GENERAL' && (
+            <div className="space-y-4">
+              <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                <h3 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-emerald-500" />
+                  <span>Daftar Promo General &amp; Awal Bulan / Gajian</span>
+                </h3>
+              </div>
+
+              {promoBundle.generals.filter(g => g.is_active).length === 0 ? (
+                <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 text-xs text-slate-400">
+                  Belum ada promo general yang diaktifkan oleh Owner.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {promoBundle.generals.filter(g => g.is_active).map(gen => {
+                    const profile = businessProfile || BusinessProfileService.getProfile(businessId);
+                    return (
+                      <div
+                        key={gen.id}
+                        className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3 flex flex-col justify-between"
+                      >
+                        <div className="space-y-2.5">
+                          {gen.image_url && (
+                            <div className="w-full h-44 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={gen.image_url} alt={gen.title} className="w-full h-full object-cover" />
+                            </div>
+                          )}
+
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="font-extrabold text-sm text-slate-900 dark:text-white leading-snug">
+                              {gen.title}
+                            </span>
+                            <span className="text-[10px] font-extrabold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-600 border border-emerald-500/40 shrink-0">
+                              {gen.discount_label}
+                            </span>
+                          </div>
+
+                          <div className="p-2.5 bg-slate-50 dark:bg-slate-950 rounded-lg text-xs space-y-1">
+                            <div className="text-[11px] font-bold text-slate-600 dark:text-slate-400">
+                              Periode Berlaku: {gen.start_date} s/d {gen.end_date}
+                            </div>
+                            <div className="text-[11px] text-slate-700 dark:text-slate-300 italic line-clamp-3">
+                              &ldquo;{gen.wa_message_template}&rdquo;
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Customer selector & Kirim WA button */}
+                        <div className="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-2">
+                          <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+                            Pilih Pelanggan Penerima WA:
+                          </label>
+                          <select
+                            value={promoGeneralCustomerTarget}
+                            onChange={e => setPromoGeneralCustomerTarget(e.target.value)}
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg p-2 text-xs font-bold text-slate-900 dark:text-white cursor-pointer"
+                          >
+                            <option value="">-- Pilih Pelanggan --</option>
+                            {customerList.map(c => (
+                              <option key={c.id} value={c.phone}>
+                                {c.name} ({c.phone})
+                              </option>
+                            ))}
+                          </select>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const targetPhone = promoGeneralCustomerTarget || (customerList[0]?.phone);
+                              if (!targetPhone) {
+                                setFeedback({ type: 'error', text: 'Silakan pilih pelanggan terlebih dahulu.' });
+                                return;
+                              }
+                              const targetCust = customerList.find(c => c.phone === targetPhone);
+                              const fullText = `*${profile.business_name.toUpperCase()}*\n*${gen.title}*\n${gen.discount_label}\nPeriode: ${gen.start_date} s/d ${gen.end_date}\n\n${gen.wa_message_template}\n\n--------------------------------\nHubungi No. WA Resmi Toko: ${profile.business_phone}`;
+                              RetentionDomainService.openDirectWhatsApp(targetPhone, fullText);
+                              setFeedback({
+                                type: 'success',
+                                text: `Membuka WhatsApp untuk mengirim Promo '${gen.title}' ke ${targetCust?.name || targetPhone}.`,
+                              });
+                            }}
+                            className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md cursor-pointer transition-all active:scale-95"
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                            <span>Kirim WA Promo General</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* SUB-TAB 2: VOUCHER KONSUMEN LOYAL */}
+          {promoCrmSubTab === 'VOUCHER' && (
+            <div className="space-y-4">
+              <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                <h3 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Gift className="w-4 h-4 text-purple-500" />
+                  <span>Daftar Voucher Apresiasi Konsumen Loyal</span>
+                </h3>
+              </div>
+
+              {promoBundle.vouchers.filter(v => v.is_active).length === 0 ? (
+                <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 text-xs text-slate-400">
+                  Belum ada voucher yang diaktifkan oleh Owner.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {promoBundle.vouchers.filter(v => v.is_active).map(vch => {
+                    const profile = businessProfile || BusinessProfileService.getProfile(businessId);
+                    const qualifiedCustomers = customerList.filter(c => (c.totalTrx || 0) >= vch.min_total_trx);
+                    return (
+                      <div
+                        key={vch.id}
+                        className="p-5 bg-white dark:bg-slate-900 rounded-2xl border border-purple-200 dark:border-purple-900/60 shadow-sm space-y-4"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-black text-xs px-2.5 py-1 rounded-lg bg-purple-600 text-white">
+                                {vch.code}
+                              </span>
+                              <span className="font-extrabold text-sm text-slate-900 dark:text-white">
+                                {vch.title}
+                              </span>
+                            </div>
+                            <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                              Potongan: Rp {vch.discount_value.toLocaleString('id-ID')} • Berlaku s/d {vch.valid_until}
+                            </div>
+                          </div>
+
+                          <span className="text-[10px] font-extrabold px-2.5 py-1 rounded-md bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-800">
+                            Syarat: Min. {vch.min_total_trx} Transaksi
+                          </span>
+                        </div>
+
+                        {vch.image_url && (
+                          <div className="w-full max-w-sm h-36 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={vch.image_url} alt={vch.title} className="w-full h-full object-cover" />
+                          </div>
+                        )}
+
+                        <div className="p-3 bg-purple-50/60 dark:bg-purple-950/40 rounded-xl border border-purple-200/60 dark:border-purple-800/40 text-xs text-purple-900 dark:text-purple-300 italic">
+                          &ldquo;{vch.wa_message_template}&rdquo;
+                        </div>
+
+                        {/* Qualified Loyal Customers Table */}
+                        <div className="space-y-2">
+                          <div className="text-xs font-extrabold uppercase tracking-wide text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                            <span>Pelanggan Loyal yang Memenuhi Syarat ({qualifiedCustomers.length}):</span>
+                          </div>
+
+                          {qualifiedCustomers.length === 0 ? (
+                            <div className="p-3 text-center bg-slate-50 dark:bg-slate-950 rounded-xl text-xs text-slate-400">
+                              Belum ada pelanggan yang memiliki minimal {vch.min_total_trx} transaksi.
+                            </div>
+                          ) : (
+                            <div className="overflow-x-auto max-h-48 border border-slate-200 dark:border-slate-800 rounded-xl">
+                              <table className="w-full text-left text-xs border-collapse">
+                                <thead>
+                                  <tr className="bg-slate-100 dark:bg-slate-950 text-slate-600 dark:text-slate-400 font-bold border-b border-slate-200 dark:border-slate-800">
+                                    <th className="p-2.5">Nama Pelanggan</th>
+                                    <th className="p-2.5">No. WhatsApp</th>
+                                    <th className="p-2.5">Total Trx</th>
+                                    <th className="p-2.5 text-right">Aksi Kasir</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                                  {qualifiedCustomers.map(cust => (
+                                    <tr key={cust.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                                      <td className="p-2.5 font-bold text-slate-900 dark:text-white">{cust.name}</td>
+                                      <td className="p-2.5 font-mono text-emerald-600 dark:text-emerald-400">{cust.phone}</td>
+                                      <td className="p-2.5 font-bold text-purple-600 dark:text-purple-400">{cust.totalTrx} Trx</td>
+                                      <td className="p-2.5 text-right">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const fullText = `*${profile.business_name.toUpperCase()}*\n*${vch.title}*\nKode Voucher: *${vch.code}*\nPotongan: Rp ${vch.discount_value.toLocaleString('id-ID')}\n\n${vch.wa_message_template}\n\n--------------------------------\nHubungi No. WA Resmi Toko: ${profile.business_phone}`;
+                                            RetentionDomainService.openDirectWhatsApp(cust.phone, fullText);
+                                            setFeedback({
+                                              type: 'success',
+                                              text: `Membuka WhatsApp untuk mengirim Voucher '${vch.code}' ke ${cust.name} (${cust.phone}).`,
+                                            });
+                                          }}
+                                          className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-lg text-xs inline-flex items-center gap-1 shadow-sm cursor-pointer transition-all active:scale-95"
+                                        >
+                                          <Send className="w-3 h-3" />
+                                          <span>Kirim WA Voucher</span>
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* SUB-TAB 3: OVERDUE NOTA & WA ENGINE */}
+          {promoCrmSubTab === 'OVERDUE_WA' && (
+            <div className="space-y-6">
+              {/* SECTION 1: OVERDUE NOTA REMINDERS (DUE FOR RETENTION) — NO FINANCIAL/MONEY FIGURES */}
+              <div className="bg-slate-50 dark:bg-slate-950 p-5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-rose-600 dark:text-rose-400 flex items-center gap-2">
                 <Clock className="w-4 h-4" />
@@ -1908,6 +3134,8 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
           </div>
         </div>
       )}
+    </div>
+  )}
 
       {/* TAB 5: BROADCAST TEKS & GAMBAR */}
       {activeTab === 'BROADCAST' && (
@@ -2351,7 +3579,7 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
             {/* Thermal 58 mm Preview Container */}
             <div className="bg-slate-100 dark:bg-slate-950 p-4 rounded-xl flex justify-center">
               {(() => {
-                const profile = BusinessProfileService.getProfile(businessId);
+                const profile = businessProfile || BusinessProfileService.getProfile(businessId);
                 return (
                   <div id="thermal-receipt-print-area" className="w-[280px] bg-white text-slate-900 p-4 rounded border border-slate-300 font-mono text-[11px] leading-tight space-y-2 shadow-inner">
                     <div className="text-center border-b border-dashed border-slate-400 pb-2 space-y-1">
@@ -2371,16 +3599,22 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
                       <div className="flex justify-between"><span>Kasir:</span><span>{actorName}</span></div>
                       <div className="flex justify-between"><span>Pelanggan:</span><span className="font-bold">{activeReceiptTrx.customer}</span></div>
                       <div className="flex justify-between"><span>No. WA:</span><span className="font-bold">{activeReceiptTrx.phone}</span></div>
-                      {activeReceiptTrx.estimatedCompletion && (
-                        <div className="flex justify-between font-bold text-amber-900 bg-amber-50 px-1 py-0.5 rounded border border-amber-200 mt-1">
-                          <span>EST. SELESAI:</span>
-                          <span>{activeReceiptTrx.estimatedCompletion}</span>
-                        </div>
+                      {activeReceiptTrx.customerAddress && (
+                        <div className="flex justify-between"><span>Alamat:</span><span className="font-medium text-right max-w-[160px] truncate">{activeReceiptTrx.customerAddress}</span></div>
                       )}
                     </div>
 
-                    {/* Rincian Pesanan / Layanan */}
+                    {/* Tanggal Selesai (Di atas sebelum daftar layanan) */}
+                    {activeReceiptTrx.estimatedCompletion && (
+                      <div className="border-t border-dashed border-slate-400 pt-1.5 pb-0.5">
+                        <div className="text-[10px] font-bold text-slate-700 uppercase">TANGGAL SELESAI:</div>
+                        <div className="text-[11px] font-extrabold text-slate-900">{activeReceiptTrx.estimatedCompletion}</div>
+                      </div>
+                    )}
+
+                    {/* Rincian Pesanan / Daftar Layanan */}
                     <div className="border-t border-dashed border-slate-400 pt-2 space-y-1">
+                      <div className="text-[10px] font-bold uppercase text-slate-700">DAFTAR LAYANAN:</div>
                       {activeReceiptTrx.items && activeReceiptTrx.items.length > 0 ? (
                         activeReceiptTrx.items.map((it, idx) => (
                           <div key={it.id || idx} className="flex justify-between text-[10px]">
@@ -2406,10 +3640,43 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
                     )}
 
                     <div className="border-t border-dashed border-slate-400 pt-2 text-xs space-y-0.5">
+                      {activeReceiptTrx.subtotal && (activeReceiptTrx.discount_amount || activeReceiptTrx.points_discount) ? (
+                        <>
+                          <div className="flex justify-between text-[10px]">
+                            <span>SUBTOTAL:</span>
+                            <span>Rp {activeReceiptTrx.subtotal.toLocaleString('id-ID')}</span>
+                          </div>
+                          {activeReceiptTrx.discount_amount && activeReceiptTrx.discount_amount > 0 ? (
+                            <div className="flex justify-between text-[10px] text-emerald-800">
+                              <span>PROMO ({activeReceiptTrx.promo_name || 'Diskon'}):</span>
+                              <span>-Rp {activeReceiptTrx.discount_amount.toLocaleString('id-ID')}</span>
+                            </div>
+                          ) : null}
+                          {activeReceiptTrx.points_discount && activeReceiptTrx.points_discount > 0 ? (
+                            <div className="flex justify-between text-[10px] text-purple-800">
+                              <span>DISKON POIN ({activeReceiptTrx.points_used || 0} Pts):</span>
+                              <span>-Rp {activeReceiptTrx.points_discount.toLocaleString('id-ID')}</span>
+                            </div>
+                          ) : null}
+                        </>
+                      ) : null}
+
                       <div className="flex justify-between font-black">
-                        <span>TOTAL:</span>
+                        <span>TOTAL TRANSAKSI:</span>
                         <span>Rp {activeReceiptTrx.total.toLocaleString('id-ID')}</span>
                       </div>
+                      {activeReceiptTrx.deposit_used && activeReceiptTrx.deposit_used > 0 ? (
+                        <div className="flex justify-between text-[10px] text-blue-800 font-bold">
+                          <span>POTONG DEPOSIT:</span>
+                          <span>-Rp {activeReceiptTrx.deposit_used.toLocaleString('id-ID')}</span>
+                        </div>
+                      ) : null}
+                      {activeReceiptTrx.points_earned && activeReceiptTrx.points_earned > 0 ? (
+                        <div className="flex justify-between text-[10px] text-purple-700 font-bold">
+                          <span>POIN DIPEROLEH:</span>
+                          <span>+{activeReceiptTrx.points_earned} Poin</span>
+                        </div>
+                      ) : null}
                       {activeReceiptTrx.payment_type === 'DP' ? (
                         <>
                           <div className="flex justify-between text-[10px] text-emerald-800 font-bold">
@@ -2424,7 +3691,23 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
                       ) : (
                         <div className="flex justify-between text-[10px] mt-0.5">
                           <span>PEMBAYARAN:</span>
-                          <span className="font-bold">{activeReceiptTrx.method} (LUNAS)</span>
+                          <span className="font-bold">
+                            {activeReceiptTrx.method === 'DEPOSIT'
+                              ? 'SALDO DEPOSIT (LUNAS)'
+                              : `${activeReceiptTrx.method} (LUNAS)`}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Saldo deposit yang tersisa (terletak di bawah setelah total transaksi) */}
+                      {activeReceiptTrx.remaining_deposit_balance !== undefined && (
+                        <div className="border-t border-dashed border-slate-400 pt-1.5 mt-1">
+                          <div className="flex justify-between text-[10px] font-bold text-slate-900 bg-blue-50 px-1.5 py-1 rounded border border-blue-200">
+                            <span>SISA SALDO DEPOSIT:</span>
+                            <span className="font-black text-blue-900">
+                              Rp {activeReceiptTrx.remaining_deposit_balance.toLocaleString('id-ID')}
+                            </span>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -2482,6 +3765,268 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
         </div>
       )}
 
+      {/* MODAL: TRANSAKSI TOP-UP DEPOSIT PELANGGAN (TERPISAH DARI NOTA REGULER) */}
+      {showTopupModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-md w-full p-5 space-y-4 text-slate-900 dark:text-slate-100 animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Wallet className="w-4 h-4 text-indigo-500" />
+                <span>Transaksi Top-Up Deposit Pelanggan</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowTopupModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleExecuteTopup} className="space-y-4">
+              {/* Seksi Pemilihan Pelanggan Target */}
+              {topupTargetCustomer ? (
+                <div className="p-3 bg-indigo-50 dark:bg-indigo-950/40 rounded-xl border border-indigo-200 dark:border-indigo-800 space-y-1.5 text-xs">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 dark:text-slate-400">Nama Pelanggan:</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-900 dark:text-white">{topupTargetCustomer.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTopupTargetCustomer(null);
+                          setTopupCustSearch('');
+                        }}
+                        className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline font-bold cursor-pointer"
+                      >
+                        (Ganti)
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 dark:text-slate-400">Nomor WhatsApp:</span>
+                    <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{topupTargetCustomer.phone}</span>
+                  </div>
+                  <div className="flex justify-between items-center pt-1 border-t border-indigo-200 dark:border-indigo-800 font-bold">
+                    <span className="text-slate-600 dark:text-slate-300">Saldo Deposit Saat Ini:</span>
+                    <span className="text-blue-600 dark:text-blue-400">
+                      Rp {(topupTargetCustomer.depositBalance ?? 0).toLocaleString('id-ID')}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2.5" ref={topupCustomerDropdownRef}>
+                  {!isNewTopupCustomer ? (
+                    <div className="relative">
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                        Pilih / Cari Pelanggan Penerima Deposit:
+                      </label>
+                      <div className="relative flex items-center">
+                        <input
+                          type="text"
+                          value={topupCustSearch}
+                          placeholder="Ketik nama atau no WA pelanggan..."
+                          onChange={e => {
+                            setTopupCustSearch(e.target.value);
+                            setShowTopupCustSuggestions(e.target.value.trim().length > 0);
+                          }}
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white font-bold focus:outline-none focus:border-indigo-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowTopupCustSuggestions(!showTopupCustSuggestions)}
+                          className="absolute right-2 p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+                          title="Tampilkan daftar pelanggan"
+                        >
+                          <ChevronDown className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {/* Dropdown Pencarian Pelanggan */}
+                      {showTopupCustSuggestions && (
+                        <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl z-30 max-h-48 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 animate-in fade-in zoom-in duration-100">
+                          {matchingTopupCustomers.length > 0 ? (
+                            matchingTopupCustomers.map(c => (
+                              <div
+                                key={c.id}
+                                onMouseDown={() => {
+                                  setTopupTargetCustomer(c);
+                                  setTopupCustSearch(c.name);
+                                  setShowTopupCustSuggestions(false);
+                                }}
+                                className="p-2.5 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 cursor-pointer flex items-center justify-between text-xs"
+                              >
+                                <div>
+                                  <div className="font-bold text-slate-900 dark:text-white">{c.name}</div>
+                                  <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-mono">{c.phone}</div>
+                                </div>
+                                <div className="text-right">
+                                  <div className="text-[11px] font-black text-blue-600 dark:text-blue-400">
+                                    Rp {(c.depositBalance ?? 0).toLocaleString('id-ID')}
+                                  </div>
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="p-3 text-center text-xs text-slate-500">
+                              Tidak ada data pelanggan &apos;{topupCustSearch}&apos;
+                            </div>
+                          )}
+
+                          <div
+                            onMouseDown={() => {
+                              setIsNewTopupCustomer(true);
+                              setTopupCustName(topupCustSearch);
+                              setShowTopupCustSuggestions(false);
+                            }}
+                            className="p-2.5 bg-slate-50 dark:bg-slate-950 text-indigo-600 dark:text-indigo-400 hover:bg-slate-100 text-xs font-bold text-center cursor-pointer flex items-center justify-center gap-1.5"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>+ Masukkan Sebagai Pelanggan Baru</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">Input Data Pelanggan Baru:</span>
+                        <button
+                          type="button"
+                          onClick={() => setIsNewTopupCustomer(false)}
+                          className="text-[11px] text-slate-400 hover:text-slate-600 cursor-pointer font-bold"
+                        >
+                          Cari dari Database
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        required
+                        value={topupCustName}
+                        onChange={e => setTopupCustName(e.target.value)}
+                        placeholder="Nama Lengkap Pelanggan..."
+                        className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-xs font-bold"
+                      />
+                      <input
+                        type="tel"
+                        required
+                        value={topupCustPhone}
+                        onChange={e => setTopupCustPhone(e.target.value)}
+                        placeholder="Nomor WhatsApp (misal: 08123456789)..."
+                        className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-xs font-mono font-bold"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Nominal Top-Up */}
+              <div>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Pilih / Masukkan Nominal Top-Up:
+                </label>
+                <div className="grid grid-cols-4 gap-1.5 mb-2">
+                  {[50000, 100000, 200000, 500000].map(amt => (
+                    <button
+                      key={amt}
+                      type="button"
+                      onClick={() => setTopupAmount(amt)}
+                      className={`py-1.5 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
+                        topupAmount === amt
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                          : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
+                      }`}
+                    >
+                      Rp {(amt / 1000)}k
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="number"
+                  required
+                  min={1000}
+                  value={topupAmount}
+                  onChange={e => setTopupAmount(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                  placeholder="Nominal deposit (Rp)..."
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white font-bold"
+                />
+              </div>
+
+              {/* Metode Pembayaran Top-Up */}
+              <div>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Metode Pembayaran Deposit:
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setTopupMethod('CASH')}
+                    className={`py-2 px-3 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                      topupMethod === 'CASH'
+                        ? 'bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 border-slate-800 dark:border-slate-200 shadow-sm'
+                        : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700'
+                    }`}
+                  >
+                    Tunai (Cash Kasir)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTopupMethod('QRIS_TRANSFER')}
+                    className={`py-2 px-3 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                      topupMethod === 'QRIS_TRANSFER'
+                        ? 'bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 border-slate-800 dark:border-slate-200 shadow-sm'
+                        : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700'
+                    }`}
+                  >
+                    Nontunai (QRIS / Transfer)
+                  </button>
+                </div>
+              </div>
+
+              {/* Catatan Keterangan */}
+              <div>
+                <label className="text-xs font-medium text-slate-700 dark:text-slate-300 block mb-1">
+                  Catatan / Keterangan (Opsional):
+                </label>
+                <input
+                  type="text"
+                  value={topupNotes}
+                  onChange={e => setTopupNotes(e.target.value)}
+                  placeholder="Contoh: Paket promo deposit bulanan"
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-xs text-slate-900 dark:text-white"
+                />
+              </div>
+
+              {/* Estimasi Saldo Baru */}
+              <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl border border-emerald-200 dark:border-emerald-800 flex justify-between items-center text-xs">
+                <span className="font-bold text-emerald-900 dark:text-emerald-300">Estimasi Saldo Baru:</span>
+                <span className="font-black text-emerald-700 dark:text-emerald-300 text-sm">
+                  Rp {(((topupTargetCustomer?.depositBalance ?? 0) + (Number(topupAmount) || 0))).toLocaleString('id-ID')}
+                </span>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowTopupModal(false)}
+                  className="px-4 py-2 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-md flex items-center gap-1.5 cursor-pointer"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Simpan Top-Up Deposit</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* MODAL: POS / BUAT NOTA */}
       {showPosModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto">
@@ -2508,129 +4053,202 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
               <div className="space-y-3 bg-slate-50 dark:bg-slate-950/40 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800">
                 <div className="flex items-center justify-between">
                   <div className="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                    <User className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[11px] font-black">1</span>
                     <span>Data Konsumen</span>
                   </div>
 
-                  {customerList.length > 0 ? (
-                    <div className="inline-flex rounded-lg p-0.5 bg-slate-200 dark:bg-slate-800 text-xs">
+                  {/* Salutation Selector */}
+                  <div className="inline-flex rounded-lg p-0.5 bg-slate-200 dark:bg-slate-800 text-xs">
+                    {(['Bapak', 'Ibu', 'Kak'] as const).map(sal => (
                       <button
+                        key={sal}
                         type="button"
-                        onClick={() => {
-                          setIsNewCustomerMode(false);
-                          if (customerList[0]) handlePOSCustomerSelect(customerList[0].id);
-                        }}
-                        className={`px-2.5 py-1 font-bold rounded-md transition-all ${
-                          !isNewCustomerMode
-                            ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-300 shadow-sm'
-                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                        }`}
-                      >
-                        Pilih dari Database ({customerList.length})
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsNewCustomerMode(true);
-                          setSelectedCustomerId('NEW_CUSTOMER');
-                          setCustomerName('');
-                          setCustomerPhone('');
-                        }}
-                        className={`px-2.5 py-1 font-bold rounded-md transition-all ${
-                          isNewCustomerMode
+                        onClick={() => setSelectedSalutation(sal)}
+                        className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition-all ${
+                          selectedSalutation === sal
                             ? 'bg-emerald-600 text-white shadow-sm'
                             : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                         }`}
                       >
-                        + Input Konsumen Baru
+                        {sal}
                       </button>
-                    </div>
-                  ) : (
-                    <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
-                      Mode Konsumen Baru (Database Kosong)
-                    </span>
-                  )}
+                    ))}
+                  </div>
                 </div>
 
-                {!isNewCustomerMode && customerList.length > 0 ? (
-                  <div>
-                    <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">
-                      Pilih Pelanggan dari Database:
-                    </label>
-                    <select
-                      value={selectedCustomerId}
-                      onChange={e => handlePOSCustomerSelect(e.target.value)}
-                      className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white font-bold focus:outline-none focus:border-emerald-500 cursor-pointer"
-                    >
-                      {customerList.map(c => (
-                        <option key={c.id} value={c.id}>
-                          👤 {c.name} ({c.phone})
-                        </option>
-                      ))}
-                      <option value="NEW_CUSTOMER">✏️ + Input Konsumen Baru Lainnya</option>
-                    </select>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-xs font-medium text-slate-700 dark:text-slate-400">Nama Pelanggan:</label>
-                        <div className="inline-flex rounded-lg p-0.5 bg-slate-200 dark:bg-slate-800">
-                          {(['Bapak', 'Ibu', 'Kak'] as const).map(sal => (
-                            <button
-                              key={sal}
-                              type="button"
-                              onClick={() => setSelectedSalutation(sal)}
-                              className={`px-2 py-0.5 text-[11px] font-bold rounded-md transition-all ${
-                                selectedSalutation === sal
-                                  ? 'bg-emerald-600 text-white shadow-sm'
-                                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                              }`}
-                            >
-                              {sal}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="relative flex items-center">
-                        <span className="absolute left-3 text-xs font-bold text-emerald-600 dark:text-emerald-400 select-none">
-                          {selectedSalutation}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Nama Pelanggan: Ketik Langsung atau Cari Database */}
+                  <div className="relative" ref={customerDropdownRef}>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-medium text-slate-700 dark:text-slate-400">
+                        Nama Konsumen (Ketik / Cari):
+                      </label>
+                      {currentSelectedCustomer && (
+                        <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950 px-1.5 py-0.2 rounded">
+                          Terdaftar ({currentSelectedCustomer.status})
                         </span>
-                        <input
-                          type="text"
-                          required
-                          placeholder="Nama Konsumen"
-                          value={customerName}
-                          onChange={e => {
-                            const val = e.target.value;
-                            const { salutation, cleanName } = extractSalutation(val);
-                            if (salutation) {
-                              setSelectedSalutation(salutation);
-                              setCustomerName(cleanName);
-                            } else {
-                              setCustomerName(val);
-                            }
-                          }}
-                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg py-2.5 pr-2.5 pl-14 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:border-emerald-500"
-                        />
-                      </div>
+                      )}
                     </div>
 
-                    <div>
-                      <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">
-                        No. WhatsApp:
+                    <div className="relative flex items-center">
+                      <span className="absolute left-3 text-xs font-bold text-emerald-600 dark:text-emerald-400 select-none">
+                        {selectedSalutation}
+                      </span>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Ketik nama pelanggan..."
+                        value={customerName}
+                        onFocus={() => {
+                          if (customerName.trim().length > 0) {
+                            setShowCustomerSuggestions(true);
+                          }
+                        }}
+                        onChange={e => {
+                          const val = e.target.value;
+                          const { salutation, cleanName } = extractSalutation(val);
+                          if (salutation) {
+                            setSelectedSalutation(salutation);
+                            setCustomerName(cleanName);
+                          } else {
+                            setCustomerName(val);
+                          }
+                          setShowCustomerSuggestions(val.trim().length > 0);
+                        }}
+                        className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg py-2.5 pr-8 pl-14 text-xs text-slate-900 dark:text-white font-bold focus:outline-none focus:border-emerald-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (customerName.trim().length > 0) {
+                            setShowCustomerSuggestions(!showCustomerSuggestions);
+                          }
+                        }}
+                        className="absolute right-2 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                        title="Tampilkan daftar pelanggan"
+                      >
+                        <ChevronDown className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {/* Floating Suggestions List when Typing Customer Name */}
+                    {showCustomerSuggestions && customerName.trim().length > 0 && (
+                      <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl z-30 max-h-64 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 animate-in fade-in zoom-in duration-100">
+                        {matchingCustomers.length > 0 ? (
+                          matchingCustomers.map(c => (
+                            <div
+                              key={c.id}
+                              onMouseDown={() => handleSelectCustomerFromSuggestion(c)}
+                              className={`p-2.5 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 cursor-pointer transition-colors flex items-center justify-between text-xs ${
+                                selectedCustomerId === c.id ? 'bg-emerald-50/70 dark:bg-emerald-950/40 border-l-4 border-emerald-500' : ''
+                              }`}
+                            >
+                              <div className="space-y-0.5">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-bold text-slate-900 dark:text-white">{c.name}</span>
+                                  <span className="text-[9px] px-1.5 py-0.2 rounded font-extrabold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                                    {c.status}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1 text-[11px] text-emerald-700 dark:text-emerald-400 font-mono font-bold">
+                                  <Phone className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                                  <span>{c.phone}</span>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-[11px] font-black text-blue-700 dark:text-blue-300">
+                                  Saldo: Rp {(c.depositBalance ?? 0).toLocaleString('id-ID')}
+                                </div>
+                                {c.loyaltyPoints ? (
+                                  <div className="text-[10px] text-purple-600 dark:text-purple-400 font-semibold">
+                                    {c.loyaltyPoints} Pts
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="p-3 text-xs text-slate-500 dark:text-slate-400 text-center">
+                            Tidak ditemukan konsumen bernama &quot;{customerName}&quot; di database.
+                          </div>
+                        )}
+
+                        <div
+                          onMouseDown={() => {
+                            setSelectedCustomerId('NEW_CUSTOMER');
+                            setIsNewCustomerMode(true);
+                            setShowCustomerSuggestions(false);
+                          }}
+                          className="p-2.5 bg-slate-50 dark:bg-slate-950/80 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold text-center cursor-pointer flex items-center justify-center gap-1.5 border-t border-slate-200 dark:border-slate-800"
+                        >
+                          <Plus className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Gunakan &quot;{customerName || 'Nama Baru'}&quot; sebagai Konsumen Baru</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* No. WhatsApp (Target Nota - Konfirmasi Nomor Aktif) */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-medium text-slate-700 dark:text-slate-400">
+                        No. WhatsApp (Konfirmasi No. Aktif):
                       </label>
+                      <span className="text-[10px] bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 px-1.5 py-0.2 rounded font-bold">
+                        Target Nota WA
+                      </span>
+                    </div>
+                    <div className="relative flex items-center">
+                      <Phone className="w-4 h-4 text-emerald-600 dark:text-emerald-400 absolute left-3 pointer-events-none" />
                       <input
                         type="text"
                         required
                         placeholder="Contoh: 081234567890"
                         value={customerPhone}
                         onChange={e => setCustomerPhone(e.target.value)}
-                        className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white font-mono focus:outline-none focus:border-emerald-500"
+                        className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg py-2.5 pr-2.5 pl-9 text-xs text-slate-900 dark:text-white font-mono font-bold focus:outline-none focus:border-emerald-500"
                       />
                     </div>
                   </div>
-                )}
+                </div>
+
+                {/* Alamat Pelanggan */}
+                <div>
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">
+                    Alamat Pelanggan (Opsional):
+                  </label>
+                  <div className="relative flex items-center">
+                    <MapPin className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
+                    <input
+                      type="text"
+                      placeholder="Alamat domisili atau pengantaran (jika ada)"
+                      value={customerAddress}
+                      onChange={e => setCustomerAddress(e.target.value)}
+                      className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg py-2.5 pr-2.5 pl-9 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 font-medium"
+                    />
+                  </div>
+                </div>
+
+                {/* Info Saldo Deposit Konsumen pada Form Nota */}
+                <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-800 text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <Wallet className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                    <span className="font-bold text-slate-700 dark:text-slate-300">Saldo Deposit Tersedia:</span>
+                    <span className="font-black text-blue-700 dark:text-blue-300">
+                      Rp {(customerDepositBalance ?? 0).toLocaleString('id-ID')}
+                    </span>
+                    {customerLoyaltyPoints > 0 && (
+                      <span className="ml-2 text-[11px] font-bold text-purple-600 dark:text-purple-400">
+                        • {customerLoyaltyPoints} Poin Loyalty
+                      </span>
+                    )}
+                  </div>
+                  {customerDepositBalance > 0 && (
+                    <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950 px-2 py-0.5 rounded">
+                      Dapat Dipotong di Nota
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* SEKSI 2: MULTI-LAYANAN & PRODUK */}
@@ -2655,31 +4273,117 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
                 ) : (
                   <div className="space-y-3">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                      <div className="sm:col-span-2">
-                        <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">
-                          Pilih Layanan / Produk:
-                        </label>
-                        <select
-                          value={selectedService}
-                          onChange={e => {
-                            const chosen = e.target.value;
-                            setSelectedService(chosen);
-                            const found = catalog.find(c => c.nama === chosen);
-                            setServicePrice(found ? found.base_harga : 0);
-                            if (found && found.item_type !== 'PRODUCT') {
-                              setEstimatedCompletion(calculateDefaultCompletion(found.duration_val, found.duration_unit, found.duration_hours));
-                            } else {
-                              setEstimatedCompletion('');
-                            }
-                          }}
-                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white font-bold focus:outline-none focus:border-blue-500 cursor-pointer"
-                        >
-                          {catalog.map(item => (
-                            <option key={item.id} value={item.nama}>
-                              {item.nama} — Rp {item.base_harga.toLocaleString('id-ID')} / {item.pricing_unit || (item.item_type === 'PRODUCT' ? 'unit' : 'sepasang')} {item.item_type === 'PRODUCT' ? `[Stok: ${item.stock_qty ?? 0}]` : `[Est. ${formatDurationLabel(item.duration_val, item.duration_unit) || ((item.duration_hours || 24) + ' Jam')}]`}
-                            </option>
-                          ))}
-                        </select>
+                      {/* Smart Search & Direct Input Layanan / Produk */}
+                      <div className="sm:col-span-2 relative" ref={serviceDropdownRef}>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-xs font-medium text-slate-700 dark:text-slate-400">
+                            Cari / Masukkan Layanan &amp; Produk:
+                          </label>
+                          {selectedService && (
+                            <span className="text-[10px] font-bold text-blue-700 dark:text-blue-400 bg-blue-100 dark:bg-blue-950 px-1.5 py-0.2 rounded">
+                              Rp {servicePrice.toLocaleString('id-ID')} / {catalog.find(c => c.nama === selectedService)?.pricing_unit || 'unit'}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="relative flex items-center">
+                          <input
+                            type="text"
+                            value={serviceSearchText}
+                            placeholder="Ketik nama layanan/produk (mis: Cuci, Deep Clean, Fast, dll)..."
+                            onFocus={() => {
+                              if (serviceSearchText.trim().length > 0) {
+                                setShowServiceSuggestions(true);
+                              }
+                            }}
+                            onChange={e => {
+                              const val = e.target.value;
+                              setServiceSearchText(val);
+                              setSelectedService(val);
+                              setShowServiceSuggestions(val.trim().length > 0);
+                              const found = catalog.find(c => c.nama.toLowerCase() === val.toLowerCase());
+                              if (found) {
+                                setServicePrice(found.base_harga);
+                                if (found.item_type !== 'PRODUCT') {
+                                  setEstimatedCompletion(calculateDefaultCompletion(found.duration_val, found.duration_unit, found.duration_hours));
+                                } else {
+                                  setEstimatedCompletion('');
+                                }
+                              } else {
+                                setServicePrice(0);
+                                setEstimatedCompletion('');
+                              }
+                            }}
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg py-2.5 pr-8 pl-3 text-xs text-slate-900 dark:text-white font-bold focus:outline-none focus:border-blue-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (serviceSearchText.trim().length > 0) {
+                                setShowServiceSuggestions(!showServiceSuggestions);
+                              }
+                            }}
+                            className="absolute right-2 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                            title="Tampilkan daftar katalog layanan"
+                          >
+                            <ChevronDown className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        {/* Floating Suggestions List when Typing Service Name */}
+                        {showServiceSuggestions && serviceSearchText.trim().length > 0 && (
+                          <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl z-30 max-h-60 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 animate-in fade-in zoom-in duration-100">
+                            {matchingServices.length > 0 ? (
+                              matchingServices.map(item => (
+                                <div
+                                  key={item.id}
+                                  onMouseDown={() => handleSelectServiceFromSuggestion(item)}
+                                  className={`p-2.5 hover:bg-blue-50 dark:hover:bg-blue-950/60 cursor-pointer transition-colors flex items-center justify-between text-xs ${
+                                    selectedService === item.nama ? 'bg-blue-50/70 dark:bg-blue-950/40 border-l-4 border-blue-500' : ''
+                                  }`}
+                                >
+                                  <div className="space-y-0.5">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="font-bold text-slate-900 dark:text-white">{item.nama}</span>
+                                      {item.item_type === 'PRODUCT' ? (
+                                        <span className="text-[9px] px-1.5 py-0.2 rounded font-extrabold bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+                                          RETAIL
+                                        </span>
+                                      ) : (
+                                        <span className="text-[9px] px-1.5 py-0.2 rounded font-extrabold bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300">
+                                          JASA
+                                        </span>
+                                      )}
+                                      {item.sku && (
+                                        <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 font-mono">
+                                          {item.sku}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                                      {item.item_type === 'PRODUCT'
+                                        ? `Stok: ${item.stock_qty ?? 0} unit`
+                                        : `Est. Selesai: ${formatDurationLabel(item.duration_val, item.duration_unit) || ((item.duration_hours || 24) + ' Jam')}`
+                                      }
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <div className="text-xs font-black text-blue-600 dark:text-blue-400">
+                                      Rp {item.base_harga.toLocaleString('id-ID')}
+                                    </div>
+                                    <div className="text-[10px] text-slate-400 font-medium">
+                                      per {item.pricing_unit || (item.item_type === 'PRODUCT' ? 'unit' : 'sepasang')}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <div className="p-3 text-center text-xs text-slate-500">
+                                Tidak ada layanan yang cocok dengan &apos;{serviceSearchText}&apos;
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       <div>
@@ -2732,6 +4436,17 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
                 {/* Daftar Item yang Sudah Dimasukkan */}
                 {orderItems.length > 0 ? (
                   <div className="space-y-2 border-t border-slate-200 dark:border-slate-800 pt-3">
+                    {longestEstimatedCompletion && (
+                      <div className="flex items-center justify-between p-2.5 bg-purple-50 dark:bg-purple-950/60 rounded-lg border border-purple-200 dark:border-purple-800 text-xs">
+                        <div className="flex items-center gap-1.5 text-purple-900 dark:text-purple-200 font-bold">
+                          <Clock className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                          <span>TANGGAL SELESAI TRANSAKSI:</span>
+                        </div>
+                        <span className="font-extrabold text-purple-800 dark:text-purple-300">
+                          {longestEstimatedCompletion}
+                        </span>
+                      </div>
+                    )}
                     <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase">
                       Daftar Layanan Dalam Nota:
                     </div>
@@ -2757,12 +4472,6 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
                                 </span>
                               )}
                             </div>
-                            {it.estimatedCompletion && (
-                              <div className="text-[10px] text-purple-700 dark:text-purple-400 flex items-center gap-1">
-                                <Clock className="w-3 h-3 inline" />
-                                <span>Est. Selesai: {it.estimatedCompletion}</span>
-                              </div>
-                            )}
                           </div>
 
                           <div className="flex items-center gap-3">
@@ -2958,6 +4667,196 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
                   </div>
                 )}
 
+                {/* Promo Basic Section */}
+                <div className="space-y-3 bg-slate-50 dark:bg-slate-950/40 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <Percent className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                      <span>Promo Basic (Persentase)</span>
+                    </div>
+                    {selectedPromoBasic && (
+                      <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase ${
+                        selectedPromoBasic.allow_cashier_override
+                          ? 'bg-emerald-500/20 text-emerald-600 border border-emerald-500/40'
+                          : 'bg-amber-500/20 text-amber-600 border border-amber-500/40'
+                      }`}>
+                        {selectedPromoBasic.allow_cashier_override ? 'Kasir Boleh Ubah %' : 'Terkunci Owner'}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div className="sm:col-span-2">
+                      <select
+                        value={selectedPromoBasicId}
+                        onChange={e => handlePromoBasicChange(e.target.value)}
+                        className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-900 dark:text-white font-bold cursor-pointer focus:outline-none focus:border-blue-500"
+                      >
+                        <option value="">-- Tanpa Promo Basic (0%) --</option>
+                        {promoBundle.basics.filter(b => b.is_active).map(b => (
+                          <option key={b.id} value={b.id}>
+                            🏷️ {b.name} ({b.percentage}%) {b.allow_cashier_override ? '[Dapat Diubah]' : '[Terkunci]'}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        disabled={!selectedPromoBasic || !selectedPromoBasic.allow_cashier_override}
+                        value={customDiscountPercent}
+                        onChange={e => {
+                          const val = Math.min(100, Math.max(0, parseInt(e.target.value, 10) || 0));
+                          setCustomDiscountPercent(val);
+                        }}
+                        className={`w-full border rounded-lg p-2.5 text-xs font-black text-center focus:outline-none ${
+                          !selectedPromoBasic || !selectedPromoBasic.allow_cashier_override
+                            ? 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed'
+                            : 'bg-white dark:bg-slate-900 border-blue-500 text-blue-600 dark:text-blue-300 focus:border-blue-600'
+                        }`}
+                      />
+                      <span className="absolute right-3 top-2.5 text-xs font-bold text-slate-400 pointer-events-none">%</span>
+                    </div>
+                  </div>
+
+                  {promoDiscountAmount > 0 && (
+                    <div className="flex items-center justify-between text-xs text-blue-700 dark:text-blue-300 font-bold bg-blue-50 dark:bg-blue-950/40 p-2 rounded-lg border border-blue-200 dark:border-blue-800">
+                      <span>Potongan Diskon Promo ({customDiscountPercent}%):</span>
+                      <span className="font-black">- Rp {promoDiscountAmount.toLocaleString('id-ID')}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Loyalty Points Section */}
+                {promoBundle.poin.is_active && (
+                  <div className="space-y-3 bg-slate-50 dark:bg-slate-950/40 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                        <Award className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                        <span>Poin Loyalty Pelanggan</span>
+                      </div>
+                      <span className="text-xs font-bold text-purple-700 dark:text-purple-300 font-mono">
+                        Saldo: {customerLoyaltyPoints} Poin
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800">
+                      <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-800 dark:text-slate-200 select-none">
+                        <input
+                          type="checkbox"
+                          checked={useLoyaltyPoints}
+                          disabled={customerLoyaltyPoints < (promoBundle.poin.min_redeem_points || 5)}
+                          onChange={e => {
+                            const checked = e.target.checked;
+                            setUseLoyaltyPoints(checked);
+                            if (checked) {
+                              setRedeemedPointsQty(customerLoyaltyPoints);
+                            } else {
+                              setRedeemedPointsQty(0);
+                            }
+                          }}
+                          className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 cursor-pointer"
+                        />
+                        <span>Tukarkan Poin Loyalty</span>
+                      </label>
+
+                      {customerLoyaltyPoints < (promoBundle.poin.min_redeem_points || 5) ? (
+                        <span className="text-[11px] text-slate-400 font-semibold">
+                          (Min. {promoBundle.poin.min_redeem_points} Poin)
+                        </span>
+                      ) : (
+                        <span className="text-xs font-bold text-purple-600 dark:text-purple-400">
+                          1 Poin = Rp {promoBundle.poin.point_redeem_value.toLocaleString('id-ID')}
+                        </span>
+                      )}
+                    </div>
+
+                    {useLoyaltyPoints && customerLoyaltyPoints >= (promoBundle.poin.min_redeem_points || 5) && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                            Poin Ditukar (Maks: {customerLoyaltyPoints}):
+                          </span>
+                          <input
+                            type="number"
+                            min={promoBundle.poin.min_redeem_points || 1}
+                            max={customerLoyaltyPoints}
+                            value={redeemedPointsQty}
+                            onChange={e => {
+                              const v = Math.min(customerLoyaltyPoints, Math.max(0, parseInt(e.target.value, 10) || 0));
+                              setRedeemedPointsQty(v);
+                            }}
+                            className="w-24 bg-white dark:bg-slate-900 border border-purple-300 dark:border-purple-700 rounded-lg p-1.5 text-xs font-bold text-center text-slate-900 dark:text-white"
+                          />
+                        </div>
+
+                        {pointsDiscountAmount > 0 && (
+                          <div className="flex items-center justify-between text-xs text-purple-800 dark:text-purple-300 font-bold bg-purple-50 dark:bg-purple-950/40 p-2 rounded-lg border border-purple-200 dark:border-purple-800">
+                            <span>Potongan Poin:</span>
+                            <span className="font-black">- Rp {pointsDiscountAmount.toLocaleString('id-ID')}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Saldo Deposit Pelanggan Section */}
+                <div className="space-y-3 bg-slate-50 dark:bg-slate-950/40 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <Wallet className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                      <span>Saldo Deposit Konsumen</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono font-bold text-blue-700 dark:text-blue-300">
+                        Saldo: Rp {customerDepositBalance.toLocaleString('id-ID')}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800">
+                    <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-800 dark:text-slate-200 select-none">
+                      <input
+                        type="checkbox"
+                        checked={useDeposit}
+                        disabled={customerDepositBalance <= 0}
+                        onChange={e => setUseDeposit(e.target.checked)}
+                        className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer disabled:opacity-40"
+                      />
+                      <span>Potong dari Saldo Deposit Konsumen</span>
+                    </label>
+
+                    {customerDepositBalance <= 0 ? (
+                      <span className="text-[11px] text-slate-400 font-semibold">
+                        (Saldo Kosong)
+                      </span>
+                    ) : (
+                      <span className="text-xs font-bold text-blue-600 dark:text-blue-400">
+                        Tersedia: Rp {customerDepositBalance.toLocaleString('id-ID')}
+                      </span>
+                    )}
+                  </div>
+
+                  {useDeposit && customerDepositBalance > 0 && (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-xs text-blue-800 dark:text-blue-300 font-bold bg-blue-50 dark:bg-blue-950/40 p-2 rounded-lg border border-blue-200 dark:border-blue-800">
+                        <span>Deposit Dipotong Dari Nota:</span>
+                        <span className="font-black">- Rp {depositDeductionAmount.toLocaleString('id-ID')}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-400 px-1 font-semibold">
+                        <span>Estimasi Sisa Saldo Deposit:</span>
+                        <span className="font-bold text-slate-900 dark:text-white">
+                          Rp {(customerDepositBalance - depositDeductionAmount).toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {/* Metode Pembayaran: Tunai vs QRIS */}
                 <div>
                   <label className="text-xs font-medium text-slate-700 dark:text-slate-400 block mb-1">
@@ -2991,16 +4890,58 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
 
                 {/* Ringkasan Biaya & Sisa Tagihan */}
                 <div className="p-3.5 bg-slate-100 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 space-y-1.5">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="font-bold text-slate-600 dark:text-slate-400">TOTAL TAGIHAN:</span>
+                  <div className="flex justify-between items-center text-xs text-slate-600 dark:text-slate-400">
+                    <span>Subtotal:</span>
+                    <span className="font-bold text-slate-900 dark:text-white">
+                      Rp {subtotalBill.toLocaleString('id-ID')}
+                    </span>
+                  </div>
+
+                  {promoDiscountAmount > 0 && (
+                    <div className="flex justify-between items-center text-xs text-blue-600 dark:text-blue-400 font-semibold">
+                      <span>Diskon Promo ({customDiscountPercent}%):</span>
+                      <span>- Rp {promoDiscountAmount.toLocaleString('id-ID')}</span>
+                    </div>
+                  )}
+
+                  {pointsDiscountAmount > 0 && (
+                    <div className="flex justify-between items-center text-xs text-purple-600 dark:text-purple-400 font-semibold">
+                      <span>Diskon Poin ({redeemedPointsQty} Poin):</span>
+                      <span>- Rp {pointsDiscountAmount.toLocaleString('id-ID')}</span>
+                    </div>
+                  )}
+
+                  <div className="flex justify-between items-center text-xs pt-1.5 border-t border-slate-200 dark:border-slate-800">
+                    <span className="font-bold text-slate-800 dark:text-slate-200">TOTAL TRANSAKSI:</span>
                     <span className="font-black text-slate-900 dark:text-white text-base">
                       Rp {totalBill.toLocaleString('id-ID')}
                     </span>
                   </div>
 
-                  {paymentType === 'DP' ? (
+                  {depositDeductionAmount > 0 && (
+                    <div className="flex justify-between items-center text-xs text-blue-700 dark:text-blue-300 font-bold bg-blue-50/80 dark:bg-blue-950/40 px-2 py-1 rounded">
+                      <span>POTONG SALDO DEPOSIT:</span>
+                      <span className="font-black">- Rp {depositDeductionAmount.toLocaleString('id-ID')}</span>
+                    </div>
+                  )}
+
+                  {projectedPointsEarned > 0 && (
+                    <div className="flex justify-between items-center text-[11px] text-purple-600 dark:text-purple-400 font-bold">
+                      <span>Poin Diperoleh:</span>
+                      <span>+{projectedPointsEarned} Poin Loyalty</span>
+                    </div>
+                  )}
+
+                  {payableBillAfterDeposit === 0 ? (
+                    <div className="flex justify-between items-center text-xs text-emerald-600 dark:text-emerald-400 font-black pt-1.5 border-t border-slate-200 dark:border-slate-800">
+                      <span>STATUS PEMBAYARAN:</span>
+                      <span className="px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300">
+                        LUNAS (SALDO DEPOSIT)
+                      </span>
+                    </div>
+                  ) : paymentType === 'DP' ? (
                     <>
-                      <div className="flex justify-between items-center text-xs text-emerald-600 dark:text-emerald-400 font-bold">
+                      <div className="flex justify-between items-center text-xs text-emerald-600 dark:text-emerald-400 font-bold pt-1">
                         <span>DP DITERIMA ({paymentMethod === 'CASH' ? 'Tunai' : 'QRIS'}):</span>
                         <span>Rp {finalDpAmount.toLocaleString('id-ID')}</span>
                       </div>
@@ -3012,9 +4953,19 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
                       </div>
                     </>
                   ) : (
-                    <div className="flex justify-between items-center text-[11px] text-emerald-600 dark:text-emerald-400 font-bold">
+                    <div className="flex justify-between items-center text-xs text-emerald-600 dark:text-emerald-400 font-bold pt-1">
                       <span>STATUS PEMBAYARAN:</span>
-                      <span>LUNAS ({paymentMethod === 'CASH' ? 'Tunai' : 'QRIS'})</span>
+                      <span>LUNAS ({paymentMethod === 'CASH' ? 'Tunai' : 'QRIS'}) — Rp {payableBillAfterDeposit.toLocaleString('id-ID')}</span>
+                    </div>
+                  )}
+
+                  {/* Sisa Saldo Deposit Tersisa (terletak di bawah setelah total transaksi) */}
+                  {(customerDepositBalance > 0 || depositDeductionAmount > 0) && (
+                    <div className="flex justify-between items-center text-[11px] text-slate-700 dark:text-slate-300 font-bold pt-1.5 border-t border-dashed border-slate-300 dark:border-slate-700">
+                      <span>SISA SALDO DEPOSIT:</span>
+                      <span className="text-blue-700 dark:text-blue-300 font-extrabold">
+                        Rp {remainingDepositBalance.toLocaleString('id-ID')}
+                      </span>
                     </div>
                   )}
                 </div>
@@ -3301,7 +5252,57 @@ Pesan nota ini dikirim resmi dari No. Bisnis Toko: ${profile.business_phone}`;
               >
                 Simpan Pelanggan Member Baru
               </button>
+
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 text-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowMemberModal(false);
+                    setShowImportExportModal(true);
+                  }}
+                  className="text-xs text-blue-600 dark:text-blue-400 font-bold hover:underline cursor-pointer"
+                >
+                  📥 Impor Banyak Pelanggan via Excel / CSV →
+                </button>
+              </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: PUSAT IMPOR & EKSPOR PELANGGAN / LAYANAN */}
+      {showImportExportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 shrink-0">
+              <div className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+                <span>Pusat Impor &amp; Ekspor Data (Excel / CSV)</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowImportExportModal(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto flex-1">
+              <DataImportExportManager
+                businessId={businessId}
+                branchId={branchId}
+                defaultTab="CUSTOMER"
+                onCustomerImportSuccess={(newList) => {
+                  saveCustomers(newList);
+                  if (newList.length > 0) {
+                    handlePOSCustomerSelect(newList[0].id);
+                  }
+                }}
+                onCatalogImportSuccess={(refreshed) => {
+                  setCatalog(refreshed);
+                }}
+              />
+            </div>
           </div>
         </div>
       )}

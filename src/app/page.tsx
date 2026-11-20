@@ -163,6 +163,7 @@ function MainErpAppContent() {
             businessId={targetBusinessId}
             branchId="branch-001"
             isDemo={isDemoMode}
+            onLogout={handleLogout}
           />
         </main>
       </div>

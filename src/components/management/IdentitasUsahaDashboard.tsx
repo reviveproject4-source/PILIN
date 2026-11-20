@@ -139,7 +139,7 @@ export function IdentitasUsahaDashboard({ businessId = 'tenant-001' }: Identitas
 
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                Nomor Kontak / WhatsApp Resmi *
+                Nomor Kontak / WhatsApp Resmi (Standar Pengirim Nota Toko) *
               </label>
               <input
                 type="text"

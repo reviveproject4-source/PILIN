@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { LogOut, Building2, User, Shield, Wrench, Info, X } from 'lucide-react';
+import { LogOut, Building2, User, Shield, Wrench, Info, X, RotateCcw } from 'lucide-react';
+import { getLiveCustomersAction } from '@/app/actions/importActions';
 import { createClient } from '@/lib/supabase/client';
 import { BusinessProfileService } from '@/domains/business/businessProfileService';
 
@@ -92,6 +93,72 @@ export function DashboardTopBar({
     }
   };
 
+  const handleGlobalRestoreBackup = async () => {
+    let restoredCount = 0;
+    const phoneMap = new Map<string, any>();
+
+    if (typeof window !== 'undefined') {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('pilin_kasir_customers_') || key.includes('customer'))) {
+          try {
+            const list = JSON.parse(localStorage.getItem(key) || '[]');
+            if (Array.isArray(list)) {
+              list.forEach((c: any) => {
+                if (c && c.name && c.phone && c.name.length >= 2) {
+                  if (!phoneMap.has(c.phone)) {
+                    phoneMap.set(c.phone, c);
+                    restoredCount++;
+                  }
+                }
+              });
+            }
+          } catch {}
+        }
+      }
+    }
+
+    try {
+      const serverList = await getLiveCustomersAction('ALL');
+      if (serverList && serverList.length > 0) {
+        serverList.forEach(s => {
+          if (!phoneMap.has(s.phone)) {
+            phoneMap.set(s.phone, {
+              id: s.id,
+              name: s.name,
+              phone: s.phone,
+              address: s.address,
+              status: s.status || 'NEW',
+              totalTrx: s.totalTrx || 1,
+              lastVisit: s.lastVisit || new Date().toISOString().substring(0, 10),
+            });
+            restoredCount++;
+          }
+        });
+      }
+    } catch {}
+
+    const allRestored = Array.from(phoneMap.values());
+    if (allRestored.length > 0 && typeof window !== 'undefined') {
+      try {
+        const json = JSON.stringify(allRestored);
+        localStorage.setItem(`pilin_kasir_customers_${businessId}`, json);
+        localStorage.setItem('pilin_kasir_customers_master', json);
+        localStorage.setItem('pilin_kasir_customers_global_backup', json);
+        localStorage.setItem('pilin_kasir_customers_default', json);
+        localStorage.setItem('pilin_kasir_customers_demo-tenant', json);
+        localStorage.setItem('pilin_kasir_customers_8ec99d6e-3f6f-47d4-910f-265cfe26c609', json);
+        localStorage.setItem('pilin_kasir_customers_tenant-001', json);
+        localStorage.setItem('pilin_kasir_customers_trio-r-laundry', json);
+        window.dispatchEvent(new Event('pilin_customer_restored'));
+        alert(`Berhasil memulihkan ${allRestored.length} data pelanggan! Halaman akan dimuat ulang.`);
+        window.location.reload();
+      } catch {}
+    } else {
+      alert('Tidak ditemukan data cadangan di browser atau server.');
+    }
+  };
+
   return (
     <header className="bg-[#0F2547] text-white px-3 sm:px-6 py-2.5 sm:py-3 border-b border-slate-800 flex items-center justify-between shadow-sm w-full shrink-0 select-none font-sans">
       {/* LEFT: [icon/avatar] Sedang Login: ROLE */}
@@ -150,6 +217,16 @@ export function DashboardTopBar({
             </button>
           </>
         )}
+
+        <button
+          type="button"
+          onClick={handleGlobalRestoreBackup}
+          className="px-2.5 sm:px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-lg text-[11px] sm:text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-md active:scale-95"
+          title="Pulihkan dan sinkronkan seluruh cadangan data pelanggan"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          <span>Pulihkan Cadangan Data</span>
+        </button>
 
         <button
           type="button"

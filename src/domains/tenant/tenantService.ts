@@ -17,12 +17,12 @@ export class TenantService {
 
   private static defaultLiveTenant: TenantOnboardingData = {
     businessId: '8ec99d6e-3f6f-47d4-910f-265cfe26c609',
-    businessName: 'Bengkel Tas Sepatu',
-    ownerName: 'Marlina',
-    contactNumber: '081280320505',
-    email: 'bengkeltassepatu@gmail.com',
+    businessName: 'Trio R Laundry',
+    ownerName: 'Pak Cece',
+    contactNumber: '081218388131',
+    email: 'triorlaundry@gmail.com',
     employeeCount: '1 Cabang',
-    businessType: 'HYBRID',
+    businessType: 'JASA',
     defaultServiceDurationHours: 24,
     trialStartDate: new Date().toISOString(),
     trialEndDate: new Date(Date.now() + 14 * 86400000).toISOString(),
@@ -35,6 +35,14 @@ export class TenantService {
         const raw = localStorage.getItem(this.STORAGE_KEY);
         if (raw) {
           const parsed = JSON.parse(raw);
+          // Koreksi jika akun kasir (salonspokat) sempat tertimpa menjadi owner
+          if (parsed && (parsed.email === 'salonspokat@gmail.com' || parsed.ownerName?.toLowerCase().includes('salon spokat'))) {
+            parsed.ownerName = 'Marlina';
+            parsed.email = 'bengkeltassepatu@gmail.com';
+            parsed.businessName = 'Bengkel Tas Sepatu';
+            parsed.contactNumber = '081280320505';
+            this.setOnboardingData(parsed);
+          }
           if (parsed && (parsed.businessId === 'tenant-001' || !parsed.businessId)) {
             parsed.businessId = this.defaultLiveTenant.businessId;
             parsed.businessName = parsed.businessName || this.defaultLiveTenant.businessName;

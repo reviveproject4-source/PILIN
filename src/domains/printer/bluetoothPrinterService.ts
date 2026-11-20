@@ -9,11 +9,19 @@ export interface PrintableTransaction {
   qty: number;
   pricing_unit?: string;
   price: number;
+  subtotal?: number;
+  discount_amount?: number;
+  promo_name?: string;
+  points_used?: number;
+  points_discount?: number;
+  points_earned?: number;
+  deposit_used?: number;
+  remaining_deposit_balance?: number;
   total: number;
   payment_type?: 'LUNAS' | 'DP';
   dp_amount?: number;
   remaining_amount?: number;
-  method: 'CASH' | 'QRIS_TRANSFER';
+  method: 'CASH' | 'QRIS_TRANSFER' | 'DEPOSIT';
   status: string;
   time: string;
   estimatedCompletion?: string;
@@ -242,13 +250,15 @@ class BluetoothThermalPrinterService {
     pushText(`Kasir    : ${actorName}\n`);
     pushText(`Pelanggan: ${trx.customer}\n`);
     pushText(`No. WA   : ${trx.phone}\n`);
+    pushText('--------------------------------\n');
 
     if (trx.estimatedCompletion) {
-      pushText(`Est.Selesai: ${trx.estimatedCompletion}\n`);
+      pushText('TANGGAL SELESAI:\n');
+      pushText(`${trx.estimatedCompletion}\n`);
+      pushText('--------------------------------\n');
     }
 
-    pushText('--------------------------------\n');
-    pushText('RINCIAN PESANAN:\n');
+    pushText('DAFTAR LAYANAN:\n');
 
     const items = trx.items && trx.items.length > 0 ? trx.items : [
       {
@@ -273,6 +283,28 @@ class BluetoothThermalPrinterService {
 
     pushText('--------------------------------\n');
 
+    // Subtotal & Discounts if applicable
+    if (trx.subtotal && (trx.discount_amount || trx.points_discount)) {
+      const subLabel = 'SUBTOTAL:';
+      const subVal = `Rp ${trx.subtotal.toLocaleString('id-ID')}`;
+      const subPad = Math.max(1, 32 - subLabel.length - subVal.length);
+      pushText(`${subLabel}${' '.repeat(subPad)}${subVal}\n`);
+
+      if (trx.discount_amount && trx.discount_amount > 0) {
+        const discLabel = `PROMO (${trx.promo_name || 'Diskon'}):`;
+        const discVal = `-Rp ${trx.discount_amount.toLocaleString('id-ID')}`;
+        const discPad = Math.max(1, 32 - discLabel.length - discVal.length);
+        pushText(`${discLabel}${' '.repeat(discPad)}${discVal}\n`);
+      }
+
+      if (trx.points_discount && trx.points_discount > 0) {
+        const ptsLabel = `DISKON POIN (${trx.points_used || 0} Pts):`;
+        const ptsVal = `-Rp ${trx.points_discount.toLocaleString('id-ID')}`;
+        const ptsPad = Math.max(1, 32 - ptsLabel.length - ptsVal.length);
+        pushText(`${ptsLabel}${' '.repeat(ptsPad)}${ptsVal}\n`);
+      }
+    }
+
     // Total & Payment
     const totalLabel = 'TOTAL:';
     const totalVal = `Rp ${trx.total.toLocaleString('id-ID')}`;
@@ -282,6 +314,20 @@ class BluetoothThermalPrinterService {
     bytes.push(0x1B, 0x21, 0x08);
     pushText(`${totalLabel}${' '.repeat(totalPad)}${totalVal}\n`);
     bytes.push(0x1B, 0x21, 0x00);
+
+    if (trx.deposit_used && trx.deposit_used > 0) {
+      const depLabel = 'POTONG DEPOSIT:';
+      const depVal = `-Rp ${trx.deposit_used.toLocaleString('id-ID')}`;
+      const depPad = Math.max(1, 32 - depLabel.length - depVal.length);
+      pushText(`${depLabel}${' '.repeat(depPad)}${depVal}\n`);
+    }
+
+    if (trx.points_earned && trx.points_earned > 0) {
+      const earnLabel = 'POIN DIPEROLEH:';
+      const earnVal = `+${trx.points_earned} Poin`;
+      const earnPad = Math.max(1, 32 - earnLabel.length - earnVal.length);
+      pushText(`${earnLabel}${' '.repeat(earnPad)}${earnVal}\n`);
+    }
 
     if (trx.payment_type === 'DP') {
       const dpLabel = `DP DITERIMA (${trx.method}):`;
@@ -298,9 +344,20 @@ class BluetoothThermalPrinterService {
       pushText('(Pelunasan saat pengambilan)\n');
     } else {
       const payLabel = 'PEMBAYARAN:';
-      const payVal = `${trx.method} (LUNAS)`;
+      const payVal = trx.method === 'DEPOSIT' ? 'SALDO DEPOSIT (LUNAS)' : `${trx.method} (LUNAS)`;
       const payPad = Math.max(1, 32 - payLabel.length - payVal.length);
       pushText(`${payLabel}${' '.repeat(payPad)}${payVal}\n`);
+    }
+
+    // Saldo Deposit yang tersisa (terletak di bawah setelah total transaksi)
+    if (trx.remaining_deposit_balance !== undefined) {
+      pushText('--------------------------------\n');
+      const sisaBalLabel = 'SISA SALDO DEPOSIT:';
+      const sisaBalVal = `Rp ${trx.remaining_deposit_balance.toLocaleString('id-ID')}`;
+      const sisaBalPad = Math.max(1, 32 - sisaBalLabel.length - sisaBalVal.length);
+      bytes.push(0x1B, 0x21, 0x08);
+      pushText(`${sisaBalLabel}${' '.repeat(sisaBalPad)}${sisaBalVal}\n`);
+      bytes.push(0x1B, 0x21, 0x00);
     }
 
     pushText('--------------------------------\n');

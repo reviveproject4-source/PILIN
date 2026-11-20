@@ -15,13 +15,13 @@ export interface BusinessProfileConfig {
 export class BusinessProfileService {
   private static defaultProfile: BusinessProfileConfig = {
     business_id: '8ec99d6e-3f6f-47d4-910f-265cfe26c609',
-    business_name: 'Bengkel Tas Sepatu',
-    business_address: 'Bengkel Tas Sepatu, Indonesia',
-    business_phone: '081280320505',
+    business_name: 'Trio R Laundry',
+    business_address: 'Trio R Laundry, Indonesia',
+    business_phone: '081218388131',
     logo_url: '/logo.png',
-    business_type: 'HYBRID',
+    business_type: 'JASA',
     default_service_duration_hours: 24,
-    terms_and_conditions: '1. Barang yang telah diserahkan wajib dicek kembali saat pengambilan.\n2. Garansi pengerjaan berlaku 3 hari setelah pengambilan barang.\n3. Pengambilan barang wajib membawa nota fisik atau nota WhatsApp resmi.',
+    terms_and_conditions: '1. Perhitungan nota dihitung berdasarkan nota resmi saat penyerahan pakaian.\n2. Komplain maksimal 1x24 jam setelah cucian diambil dengan membawa nota ini.\n3. Pakaian yang tidak diambil lebih dari 30 hari di luar tanggung jawab kami.',
     updated_at: new Date().toISOString(),
   };
 
@@ -30,11 +30,36 @@ export class BusinessProfileService {
   static getProfile(businessId: string = '8ec99d6e-3f6f-47d4-910f-265cfe26c609'): BusinessProfileConfig {
     if (typeof window !== 'undefined') {
       try {
+        // 1. Direct tenant match
         const stored = localStorage.getItem(`pilin_business_profile_${businessId}`);
         if (stored) {
           const parsed = JSON.parse(stored);
           this.inMemoryStore.set(businessId, parsed);
           return parsed;
+        }
+
+        // 2. Master / Global backup profile
+        const master = localStorage.getItem('pilin_business_profile_master') ||
+                       localStorage.getItem('pilin_business_profile_default');
+        if (master) {
+          const parsed = JSON.parse(master);
+          this.inMemoryStore.set(businessId, parsed);
+          return parsed;
+        }
+
+        // 3. Scan all localStorage keys for any valid business profile
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('pilin_business_profile_')) {
+            const raw = localStorage.getItem(key);
+            if (raw) {
+              const val = JSON.parse(raw);
+              if (val && val.business_phone && val.business_name) {
+                this.inMemoryStore.set(businessId, val);
+                return val;
+              }
+            }
+          }
         }
       } catch (e) {
         console.error('Failed to read business profile from localStorage', e);
@@ -62,13 +87,21 @@ export class BusinessProfileService {
 
     if (typeof window !== 'undefined') {
       try {
-        localStorage.setItem(`pilin_business_profile_${businessId}`, JSON.stringify(updated));
+        const json = JSON.stringify(updated);
+        localStorage.setItem(`pilin_business_profile_${businessId}`, json);
+        localStorage.setItem('pilin_business_profile_master', json);
+        localStorage.setItem('pilin_business_profile_default', json);
+        localStorage.setItem('pilin_business_profile_8ec99d6e-3f6f-47d4-910f-265cfe26c609', json);
+        localStorage.setItem('pilin_business_profile_tenant-001', json);
+        localStorage.setItem('pilin_business_profile_demo-tenant', json);
+        localStorage.setItem('pilin_business_profile_trio-r-laundry', json);
+        window.dispatchEvent(new Event('pilin_business_profile_updated'));
       } catch (e) {
         console.error('Failed to save business profile to localStorage', e);
       }
     }
 
-    // Background server sync to Supabase
+    // Background server sync
     try {
       saveLiveBusinessProfileAction(businessId, updates).catch(() => {});
     } catch {}

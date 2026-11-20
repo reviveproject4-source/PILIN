@@ -21,8 +21,8 @@ export interface SapaanLogRecord {
 
 export class RetentionDomainService {
   private static STORAGE_KEY = 'pilin_wa_retention_logs_v2';
-  private static DEFAULT_OWNER_BUSINESS_PHONE = '081280320505';
-  private static DEFAULT_BUSINESS_NAME = 'Bengkel Tas Sepatu';
+  private static DEFAULT_OWNER_BUSINESS_PHONE = '081218388131';
+  private static DEFAULT_BUSINESS_NAME = 'Trio R Laundry';
 
   private static defaultLogs: SapaanLogRecord[] = [
     {

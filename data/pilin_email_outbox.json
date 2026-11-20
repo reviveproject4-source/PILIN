@@ -1,0 +1,24 @@
+[
+  {
+    "messageId": "msg-mail-1795183282008-b0bc74cc",
+    "dispatchedAt": "2026-11-20T14:01:22.009Z",
+    "sender": "PILIN ERP Admin <admin@pilin.id>",
+    "recipient": "triorlaundryncarpet@gmail.com",
+    "subject": "[PILIN ERP] Kode OTP Reset Kata Sandi - 520968",
+    "otpCode": "520968",
+    "businessName": "Trio R Laundry",
+    "ownerName": "Marlina",
+    "status": "SENT"
+  },
+  {
+    "messageId": "msg-mail-1795183155504-d0d27b7a",
+    "dispatchedAt": "2026-11-20T13:59:15.505Z",
+    "sender": "PILIN ERP Admin <admin@pilin.id>",
+    "recipient": "triorlaundryncarpet@gmail.com",
+    "subject": "[PILIN ERP] Kode OTP Reset Kata Sandi - 862016",
+    "otpCode": "862016",
+    "businessName": "Trio R Laundry",
+    "ownerName": "Marlina",
+    "status": "SENT"
+  }
+]

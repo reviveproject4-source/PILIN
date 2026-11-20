@@ -2,7 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { ServiceCatalogService, ServiceCatalogItem, PricingUnit, DurationUnit, durationToHours } from '@/domains/catalog/serviceCatalogService';
-import { Plus, Trash2, Edit3, Tag, Percent, DollarSign, Package, Wrench, Clock, AlertTriangle, CheckCircle } from 'lucide-react';
+import { ImportExportService } from '@/domains/commerce/importExportService';
+import { DataImportExportManager } from '@/components/admin/DataImportExportManager';
+import { Plus, Trash2, Edit3, Tag, Percent, DollarSign, Package, Wrench, Clock, AlertTriangle, CheckCircle, Upload, Download, FileSpreadsheet, X } from 'lucide-react';
 
 const PRICING_UNITS: { value: string; label: string }[] = [
   { value: 'unit', label: 'unit' },
@@ -20,9 +22,14 @@ const PRICING_UNITS: { value: string; label: string }[] = [
   { value: 'set', label: 'set' },
 ];
 
-export function ProductMasterDashboard() {
+interface ProductMasterDashboardProps {
+  businessId?: string;
+}
+
+export function ProductMasterDashboard({ businessId = 'tenant-001' }: ProductMasterDashboardProps) {
   const [catalog, setCatalog] = useState<ServiceCatalogItem[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [editingItem, setEditingItem] = useState<ServiceCatalogItem | null>(null);
 
   // Form State
@@ -43,13 +50,13 @@ export function ProductMasterDashboard() {
   const [stockAlertThreshold, setStockAlertThreshold] = useState<number | ''>(5);
 
   const loadCatalog = () => {
-    const items = ServiceCatalogService.getMasterCatalog();
+    const items = ServiceCatalogService.getMasterCatalog(businessId);
     setCatalog(items);
   };
 
   useEffect(() => {
     loadCatalog();
-  }, []);
+  }, [businessId]);
 
   const handleOpenAdd = () => {
     setEditingItem(null);
@@ -120,39 +127,47 @@ export function ProductMasterDashboard() {
     const finalStockThreshold = itemType === 'PRODUCT' ? (Number(stockAlertThreshold) || 5) : 0;
 
     if (editingItem) {
-      ServiceCatalogService.updateMasterService(editingItem.id, {
-        nama,
-        base_harga: hargaJual,
-        pricing_unit: pricingUnit,
-        hpp: computedHpp,
-        hpp_mode: hppMode,
-        hpp_percent: pct,
-        item_type: itemType,
-        bahan_baku: bahanBaku || (itemType === 'SERVICE' ? 'Jasa Operasional' : 'Bahan Baku Standar'),
-        reminder_days: finalReminderDays,
-        duration_val: finalDurationVal,
-        duration_unit: finalDurationUnit,
-        duration_hours: finalDurationHours,
-        stock_qty: finalStockQty,
-        stock_alert_threshold: finalStockThreshold,
-      });
+      ServiceCatalogService.updateMasterService(
+        editingItem.id,
+        {
+          nama,
+          base_harga: hargaJual,
+          pricing_unit: pricingUnit,
+          hpp: computedHpp,
+          hpp_mode: hppMode,
+          hpp_percent: pct,
+          item_type: itemType,
+          bahan_baku: bahanBaku || (itemType === 'SERVICE' ? 'Jasa Operasional' : 'Bahan Baku Standar'),
+          reminder_days: finalReminderDays,
+          duration_val: finalDurationVal,
+          duration_unit: finalDurationUnit,
+          duration_hours: finalDurationHours,
+          stock_qty: finalStockQty,
+          stock_alert_threshold: finalStockThreshold,
+        },
+        businessId
+      );
     } else {
-      ServiceCatalogService.addMasterService({
-        nama,
-        base_harga: hargaJual,
-        pricing_unit: pricingUnit,
-        hpp: computedHpp,
-        hpp_mode: hppMode,
-        hpp_percent: pct,
-        item_type: itemType,
-        bahan_baku: bahanBaku || (itemType === 'SERVICE' ? 'Jasa Operasional' : 'Bahan Baku Standar'),
-        reminder_days: finalReminderDays,
-        duration_val: finalDurationVal,
-        duration_unit: finalDurationUnit,
-        duration_hours: finalDurationHours,
-        stock_qty: finalStockQty,
-        stock_alert_threshold: finalStockThreshold,
-      });
+      ServiceCatalogService.addMasterService(
+        {
+          business_id: businessId,
+          nama,
+          base_harga: hargaJual,
+          pricing_unit: pricingUnit,
+          hpp: computedHpp,
+          hpp_mode: hppMode,
+          hpp_percent: pct,
+          item_type: itemType,
+          bahan_baku: bahanBaku || (itemType === 'SERVICE' ? 'Jasa Operasional' : 'Bahan Baku Standar'),
+          reminder_days: finalReminderDays,
+          duration_val: finalDurationVal,
+          duration_unit: finalDurationUnit,
+          duration_hours: finalDurationHours,
+          stock_qty: finalStockQty,
+          stock_alert_threshold: finalStockThreshold,
+        },
+        businessId
+      );
     }
 
     // Reset Form
@@ -171,7 +186,7 @@ export function ProductMasterDashboard() {
 
   const handleDelete = (id: string) => {
     if (confirm('Apakah Anda yakin ingin menghapus catalog item ini?')) {
-      ServiceCatalogService.deleteMasterService(id);
+      ServiceCatalogService.deleteMasterService(id, businessId);
       loadCatalog();
     }
   };
@@ -183,18 +198,74 @@ export function ProductMasterDashboard() {
         <div>
           <h1 className="text-xl font-black text-[#0F2547] dark:text-white tracking-tight flex items-center gap-2">
             <Tag className="w-5 h-5 text-[#F26522]" />
-            <span>Master Katalog Layanan & Produk Retail</span>
+            <span>Master Katalog Layanan &amp; Produk Retail</span>
           </h1>
         </div>
 
-        <button
-          onClick={handleOpenAdd}
-          className="px-4 py-2.5 bg-[#F26522] hover:bg-[#d95416] text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center space-x-2 cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Tambah Item Baru</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => {
+              if (catalog.length === 0) {
+                alert('Belum ada data layanan untuk diekspor.');
+                return;
+              }
+              ImportExportService.exportServices(catalog, 'katalog_layanan_produk_pilin.xlsx');
+            }}
+            className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-bold transition-all border border-slate-300 dark:border-slate-700 flex items-center gap-1.5 cursor-pointer shadow-sm"
+          >
+            <Download className="w-4 h-4 text-emerald-600" />
+            <span>Ekspor Excel</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowImportModal(true)}
+            className="px-3.5 py-2.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 rounded-xl text-xs font-bold transition-all border border-blue-200 dark:border-blue-800 flex items-center gap-1.5 cursor-pointer shadow-sm"
+          >
+            <Upload className="w-4 h-4 text-[#2563EB]" />
+            <span>Impor Excel / CSV</span>
+          </button>
+
+          <button
+            onClick={handleOpenAdd}
+            className="px-4 py-2.5 bg-[#F26522] hover:bg-[#d95416] text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center space-x-2 cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Tambah Item Baru</span>
+          </button>
+        </div>
       </div>
+
+      {/* Modal: Pusat Impor & Ekspor */}
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 shrink-0">
+              <div className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <FileSpreadsheet className="w-4 h-4 text-[#F26522]" />
+                <span>Impor &amp; Ekspor Layanan / Produk</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowImportModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto flex-1">
+              <DataImportExportManager
+                businessId={businessId}
+                defaultTab="CATALOG"
+                onCatalogImportSuccess={(refreshed) => {
+                  setCatalog(refreshed);
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add / Edit Form Modal Card */}
       {showAddForm && (
@@ -590,8 +661,30 @@ export function ProductMasterDashboard() {
               {catalog.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="px-5 py-12 text-center text-slate-400">
-                    <Package className="w-8 h-8 mx-auto mb-2 text-slate-400 opacity-40" />
-                    <span className="font-bold text-slate-600 dark:text-slate-300">Belum ada layanan atau produk terdaftar</span>
+                    <div className="max-w-md mx-auto space-y-3">
+                      <Package className="w-10 h-10 mx-auto text-slate-400 opacity-50" />
+                      <div className="font-bold text-sm text-slate-700 dark:text-slate-300">
+                        Katalog Layanan &amp; Produk Masih Kosong
+                      </div>
+                      <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setShowImportModal(true)}
+                          className="px-3.5 py-2 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 rounded-xl text-xs font-bold transition-all border border-blue-200 dark:border-blue-800 flex items-center gap-1.5 cursor-pointer shadow-sm"
+                        >
+                          <Upload className="w-4 h-4 text-[#2563EB]" />
+                          <span>Impor Excel / CSV</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleOpenAdd}
+                          className="px-3.5 py-2 bg-[#F26522] hover:bg-[#d95416] text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>Tambah Item Baru</span>
+                        </button>
+                      </div>
+                    </div>
                   </td>
                 </tr>
               ) : (

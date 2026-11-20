@@ -4,9 +4,12 @@ import React, { useState, useEffect } from 'react';
 import { 
   TrendingUp, TrendingDown, DollarSign, Users, 
   CheckCircle2, ArrowUpRight, Shield, Calendar, 
-  HelpCircle, BarChart3, Database, Sparkles, Upload, Building2, Filter, Activity
+  HelpCircle, BarChart3, Database, Sparkles, Upload, Building2, Filter, Activity,
+  FileSpreadsheet, Tag, Receipt, Percent
 } from 'lucide-react';
 import { ManagementControlDashboard } from './ManagementControlDashboard';
+import { TransaksiPembatalanDashboard } from './TransaksiPembatalanDashboard';
+import { PromoLoyaltyDashboard } from './PromoLoyaltyDashboard';
 import { PeopleManagementDashboard } from '../people/PeopleManagementDashboard';
 import { FinanceHppDashboard } from '../finance/FinanceHppDashboard';
 import { ProductMasterDashboard } from '../catalog/ProductMasterDashboard';
@@ -14,6 +17,7 @@ import { LaporanPromosiOtomatis } from '../promotion/LaporanPromosiOtomatis';
 import { LaporanOtorisasiControl } from '../control/LaporanOtorisasiControl';
 import { AnalisisInteligensiBisnis } from '../intelligence/AnalisisInteligensiBisnis';
 import { IdentitasUsahaDashboard } from './IdentitasUsahaDashboard';
+import { DataImportExportManager } from '../admin/DataImportExportManager';
 import { DashboardTopBar, DashboardRole } from '../layout/DashboardTopBar';
 import { PeopleRepository, BranchItem } from '@/domains/people/peopleRepository';
 import { TenantService } from '@/domains/tenant/tenantService';
@@ -41,7 +45,8 @@ export function OwnerDashboard({
   onLogout,
 }: OwnerDashboardProps) {
   const [activeSidebarMenu, setActiveSidebarMenu] = useState<string>('EXECUTIVE_OVERVIEW');
-  const [masterDataSubTab, setMasterDataSubTab] = useState<'PEGAWAI' | 'CATALOG'>('PEGAWAI');
+  const [masterDataSubTab, setMasterDataSubTab] = useState<'PEGAWAI' | 'CATALOG' | 'IMPORT_EXPORT'>('PEGAWAI');
+  const [importExportDefaultTab, setImportExportDefaultTab] = useState<'CUSTOMER' | 'CATALOG'>('CUSTOMER');
   const [activeRole] = useState<'OWNER' | 'KEPALA_CABANG' | 'PEGAWAI'>('OWNER');
 
   const [isOnboarded, setIsOnboarded] = useState<boolean>(() => {
@@ -67,7 +72,7 @@ export function OwnerDashboard({
   useEffect(() => {
     PeopleRepository.listBranches(businessId, isDemo).then(setBranches);
     PeopleRepository.listEmployees(businessId).then(setEmployees);
-    setStockAlerts(ServiceCatalogService.getStockAlertItems());
+    setStockAlerts(ServiceCatalogService.getStockAlertItems(businessId));
     setCrmLogs(RetentionDomainService.getSapaanLogs(isDemo));
   }, [businessId, isDemo]);
 
@@ -98,6 +103,37 @@ export function OwnerDashboard({
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans flex flex-col selection:bg-[#F26522] selection:text-white transition-colors duration-200">
       {/* Top Bar Header */}
       <DashboardTopBar role="OWNER" onLogout={onLogout} onRoleChange={onRoleChange} isDemo={isDemo} businessId={businessId} />
+
+      {/* Mobile & Tablet Horizontal Scroll Navigation */}
+      <div className="lg:hidden bg-slate-900 border-b border-slate-800 p-2 overflow-x-auto flex space-x-2 shrink-0">
+        {[
+          { id: 'EXECUTIVE_OVERVIEW', label: '📊 Overview' },
+          { id: 'TRANSAKSI_PEMBATALAN', label: '🧾 Transaksi & Pembatalan' },
+          { id: 'MENU_PROMO', label: '🏷️ Menu Promo & Loyalty' },
+          { id: 'SYSTEM_IMPORT', label: '📥 Impor & Ekspor Data' },
+          { id: 'MASTER_DATA', label: '🗄️ Master Data' },
+          { id: 'PERFORMA_CABANG', label: '🏢 Cabang' },
+          { id: 'MANAJEMEN_PEGAWAI', label: '👥 Pegawai' },
+          { id: 'FINANCE_REPORT', label: '💰 Keuangan' },
+          { id: 'PROMOSI_OTOMATIS', label: '✨ Promosi' },
+          { id: 'OTORISASI_CONTROL', label: '🛡️ Otorisasi' },
+          { id: 'ANALISIS_INTELIGENSI', label: '📈 Analisis' },
+          { id: 'IDENTITAS_USAHA', label: '🏪 Identitas' },
+        ].map((item) => {
+          const isActive = activeSidebarMenu === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => setActiveSidebarMenu(item.id)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                isActive ? 'bg-[#2563EB] text-white shadow' : 'bg-slate-800 text-slate-300 hover:text-white'
+              }`}
+            >
+              {item.label}
+            </button>
+          );
+        })}
+      </div>
 
       {/* Main Body Grid Layout: Left Sidebar + Right Dashboard */}
       <div className="flex-1 flex overflow-hidden">
@@ -131,6 +167,9 @@ export function OwnerDashboard({
             <nav className="space-y-1">
               {[
                 { id: 'EXECUTIVE_OVERVIEW', label: 'Executive Overview', icon: LayoutDashboardIcon },
+                { id: 'TRANSAKSI_PEMBATALAN', label: 'Transaksi & Pembatalan', icon: ReceiptIcon },
+                { id: 'MENU_PROMO', label: 'Menu Promo & Loyalty', icon: PromoIcon },
+                { id: 'SYSTEM_IMPORT', label: '📥 Impor & Ekspor Data (Excel)', icon: UploadIcon },
                 { id: 'PERFORMA_CABANG', label: 'Performa Cabang', icon: BuildingIcon },
                 { id: 'MANAJEMEN_PEGAWAI', label: 'Manajemen Pegawai Organisasi', icon: UsersIcon },
                 { id: 'MASTER_DATA', label: 'Input Master Data (Pegawai, Layanan & BOM)', icon: DatabaseIcon },
@@ -139,7 +178,6 @@ export function OwnerDashboard({
                 { id: 'OTORISASI_CONTROL', label: 'Otorisasi & Control', icon: ShieldIcon },
                 { id: 'ANALISIS_INTELIGENSI', label: 'Analisis Inteligensi', icon: BarChartIcon },
                 { id: 'IDENTITAS_USAHA', label: 'Identitas Usaha & Nota', icon: StoreIcon },
-                { id: 'SYSTEM_IMPORT', label: 'System & Import', icon: UploadIcon },
               ].map((item) => {
                 const IconComponent = item.icon;
                 const isActive = activeSidebarMenu === item.id;
@@ -229,6 +267,47 @@ export function OwnerDashboard({
                     <div className="font-bold text-slate-900 dark:text-white">{currentDateFormatted}</div>
                     <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">Live Cloud Sync • Real-Time</div>
                   </div>
+                </div>
+              </div>
+
+              {/* PUSAT IMPOR & EKSPOR DATA (PELANGGAN & LAYANAN) */}
+              <div className="bg-gradient-to-r from-blue-900/60 via-slate-900 to-indigo-950 border border-blue-500/40 p-5 rounded-2xl shadow-sm flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center space-x-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black shadow-md shrink-0">
+                    <FileSpreadsheet className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-black text-white">
+                      Pusat Impor & Ekspor Data (Pelanggan & Layanan)
+                    </h2>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImportExportDefaultTab('CUSTOMER');
+                      setActiveSidebarMenu('SYSTEM_IMPORT');
+                      if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center gap-2 cursor-pointer"
+                  >
+                    <Users className="w-4 h-4" />
+                    <span>Impor / Ekspor Pelanggan (Excel/CSV)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImportExportDefaultTab('CATALOG');
+                      setActiveSidebarMenu('SYSTEM_IMPORT');
+                      if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center gap-2 cursor-pointer"
+                  >
+                    <Tag className="w-4 h-4" />
+                    <span>Impor / Ekspor Layanan (Excel/CSV)</span>
+                  </button>
                 </div>
               </div>
 
@@ -733,20 +812,49 @@ export function OwnerDashboard({
                   >
                     🏷️ Input Master Layanan & BOM
                   </button>
+                  <button
+                    onClick={() => setMasterDataSubTab('IMPORT_EXPORT')}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      masterDataSubTab === 'IMPORT_EXPORT'
+                        ? 'bg-[#F26522] text-white shadow-sm'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    📥 Impor & Ekspor Excel
+                  </button>
                 </div>
               </div>
 
-              {masterDataSubTab === 'PEGAWAI' ? (
+              {masterDataSubTab === 'PEGAWAI' && (
                 <PeopleManagementDashboard
                   businessId={businessId}
                   actorUserId={actorUserId}
                   actorRole={activeRole}
                   initialTab="EMPLOYEE"
                 />
-              ) : (
-                <ProductMasterDashboard />
+              )}
+              {masterDataSubTab === 'CATALOG' && (
+                <ProductMasterDashboard businessId={businessId} />
+              )}
+              {masterDataSubTab === 'IMPORT_EXPORT' && (
+                <DataImportExportManager
+                  businessId={businessId}
+                  branchId={branchId}
+                  defaultTab={importExportDefaultTab}
+                  onCatalogImportSuccess={() => {
+                    setStockAlerts(ServiceCatalogService.getStockAlertItems(businessId));
+                  }}
+                />
               )}
             </div>
+          )}
+
+          {activeSidebarMenu === 'TRANSAKSI_PEMBATALAN' && (
+            <TransaksiPembatalanDashboard businessId={businessId} actorUserId={actorUserId} />
+          )}
+
+          {activeSidebarMenu === 'MENU_PROMO' && (
+            <PromoLoyaltyDashboard businessId={businessId} />
           )}
 
           {activeSidebarMenu === 'FINANCE_REPORT' && (
@@ -758,21 +866,14 @@ export function OwnerDashboard({
           )}
 
           {activeSidebarMenu === 'SYSTEM_IMPORT' && (
-            <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-              <div className="flex items-center space-x-3 border-b border-slate-100 dark:border-slate-800 pb-4">
-                <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950 border border-blue-100 dark:border-blue-800 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold">
-                  ⚙️
-                </div>
-                <div>
-                  <h2 className="text-lg font-bold text-[#0F2547] dark:text-white">System & Import Master Data</h2>
-                </div>
-              </div>
-              <div className="p-6 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 text-center space-y-3">
-                <button className="px-4 py-2 bg-[#2563EB] text-white rounded-lg text-xs font-bold shadow-sm cursor-pointer">
-                  + Impor File Excel / CSV Master
-                </button>
-              </div>
-            </div>
+            <DataImportExportManager 
+              businessId={businessId} 
+              branchId={branchId} 
+              defaultTab={importExportDefaultTab}
+              onCatalogImportSuccess={() => {
+                setStockAlerts(ServiceCatalogService.getStockAlertItems(businessId));
+              }}
+            />
           )}
 
           {activeSidebarMenu === 'PROMOSI_OTOMATIS' && (
@@ -876,6 +977,8 @@ function OwnerPerformaCabangView({
 
 // Icon Helper Components
 function LayoutDashboardIcon(props: any) { return <BarChart3 {...props} />; }
+function ReceiptIcon(props: any) { return <Receipt {...props} />; }
+function PromoIcon(props: any) { return <Tag {...props} />; }
 function BuildingIcon(props: any) { return <Building2 {...props} />; }
 function UsersIcon(props: any) { return <Users {...props} />; }
 function DatabaseIcon(props: any) { return <Database {...props} />; }

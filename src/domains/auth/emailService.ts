@@ -1,4 +1,6 @@
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 
 export interface SendEmailPayload {
   to: string;
@@ -107,9 +109,39 @@ export class EmailDomainService {
       }
     }
 
-    // 2. Output to authoritative system mail audit log
+    // 2. Output to authoritative system mail audit log & persistent email outbox
     const messageId = `msg-mail-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
     console.log(`[EMAIL DISPATCH] From: ${sender} | To: ${recipient} | Subject: ${subject} | OTP: ${params.otpCode}`);
+
+    try {
+      const DATA_DIR = path.join(process.cwd(), 'data');
+      if (!fs.existsSync(DATA_DIR)) {
+        fs.mkdirSync(DATA_DIR, { recursive: true });
+      }
+      const outboxPath = path.join(DATA_DIR, 'pilin_email_outbox.json');
+      let currentOutbox: any[] = [];
+      if (fs.existsSync(outboxPath)) {
+        try {
+          const raw = fs.readFileSync(outboxPath, 'utf8');
+          currentOutbox = JSON.parse(raw);
+          if (!Array.isArray(currentOutbox)) currentOutbox = [];
+        } catch {}
+      }
+      currentOutbox.unshift({
+        messageId,
+        dispatchedAt: new Date().toISOString(),
+        sender,
+        recipient,
+        subject,
+        otpCode: params.otpCode,
+        businessName: params.businessName,
+        ownerName: params.ownerName,
+        status: 'SENT',
+      });
+      fs.writeFileSync(outboxPath, JSON.stringify(currentOutbox.slice(0, 100), null, 2), 'utf8');
+    } catch (e) {
+      console.warn('Failed writing to email outbox:', e);
+    }
 
     return {
       success: true,

@@ -5,6 +5,7 @@ import {
   CreateEmployeeDTO, UpdateEmployeeDTO 
 } from './people.types';
 import { createClient } from '@/lib/supabase/client';
+import { createLiveEmployeeAction, getLiveEmployeesAction, updateLiveEmployeeAction } from '@/app/actions/peopleActions';
 
 export interface BranchItem {
   id: string;
@@ -386,16 +387,30 @@ export class PeopleRepository {
       // Fallback
     }
 
+    // Try fetching from persistent server action first
+    try {
+      const serverEmps = await getLiveEmployeesAction(business_id);
+      if (serverEmps && serverEmps.length > 0) {
+        this.setStoredData(`pilin_employees_${business_id}`, serverEmps);
+        return serverEmps;
+      }
+    } catch {
+      // Fallback
+    }
+
     if (business_id === '8ec99d6e-3f6f-47d4-910f-265cfe26c609' || business_id === 'tenant-001') {
+      // This seed only runs when PersistentEmployeeStore is also empty.
+      // Once updateEmployee() persists edits via updateLiveEmployeeAction(),
+      // getLiveEmployeesAction() above will return the updated data and we won't reach here.
       const defaultLiveKasir: Employee[] = [
         {
-          id: '56f78a3b-8fe3-4d3b-aa40-514f2e9628c2',
+          id: 'emp-kasir-salonspokat',
           business_id,
-          employee_code: 'KASIR-01',
-          full_name: 'Kasir Bengkel Tas Sepatu',
-          nickname: 'Kasir',
-          phone: '081280320505',
-          email: 'bengkeltassepatu@gmail.com',
+          employee_code: 'KASIR-SPOKAT',
+          full_name: 'Kasir Salon Spokat',
+          nickname: 'Kasir Spokat',
+          phone: '081280320999',
+          email: 'salonspokat@gmail.com',
           employment_status: 'ACTIVE',
           branch_name: 'Cabang Utama Bengkel Tas Sepatu',
           division_name: 'Operasional Kasir',
@@ -406,6 +421,20 @@ export class PeopleRepository {
         }
       ];
       this.setStoredData(`pilin_employees_${business_id}`, defaultLiveKasir);
+      // Persist seed to server store so future reloads don't re-seed
+      createLiveEmployeeAction({
+        id: 'emp-kasir-salonspokat',
+        business_id,
+        employee_code: 'KASIR-SPOKAT',
+        full_name: 'Kasir Salon Spokat',
+        nickname: 'Kasir Spokat',
+        phone: '081280320999',
+        email: 'salonspokat@gmail.com',
+        employment_status: 'ACTIVE',
+        branch_name: 'Cabang Utama Bengkel Tas Sepatu',
+        division_name: 'Operasional Kasir',
+        position_name: 'Kasir',
+      }).catch(() => { /* non-critical */ });
       return defaultLiveKasir;
     }
 
@@ -520,6 +549,27 @@ export class PeopleRepository {
       current[existingCodeIdx] = updatedEmp;
       this.mockEmployees = current;
       this.setStoredData(`pilin_employees_${dto.business_id}`, current);
+      try {
+        createLiveEmployeeAction({
+          id: updatedEmp.id,
+          business_id: updatedEmp.business_id,
+          employee_code: updatedEmp.employee_code,
+          full_name: updatedEmp.full_name,
+          nickname: updatedEmp.nickname,
+          phone: updatedEmp.phone,
+          email: updatedEmp.email,
+          branch_id: updatedEmp.branch_id,
+          branch_name: updatedEmp.branch_name,
+          division_id: updatedEmp.division_id,
+          division_name: updatedEmp.division_name,
+          position_id: updatedEmp.position_id,
+          position_name: updatedEmp.position_name,
+          supervisor_id: updatedEmp.supervisor_id,
+          employment_status: updatedEmp.employment_status,
+          base_salary: updatedEmp.base_salary !== null ? updatedEmp.base_salary : undefined,
+          incentive_rate: updatedEmp.incentive_rate !== null ? updatedEmp.incentive_rate : undefined,
+        }).catch(() => {});
+      } catch {}
       return updatedEmp;
     }
 
@@ -555,6 +605,27 @@ export class PeopleRepository {
     const updated = [newEmp, ...current];
     this.mockEmployees = updated;
     this.setStoredData(`pilin_employees_${dto.business_id}`, updated);
+    try {
+      createLiveEmployeeAction({
+        id: newEmp.id,
+        business_id: newEmp.business_id,
+        employee_code: newEmp.employee_code,
+        full_name: newEmp.full_name,
+        nickname: newEmp.nickname,
+        phone: newEmp.phone,
+        email: newEmp.email,
+        branch_id: newEmp.branch_id,
+        branch_name: newEmp.branch_name,
+        division_id: newEmp.division_id,
+        division_name: newEmp.division_name,
+        position_id: newEmp.position_id,
+        position_name: newEmp.position_name,
+        supervisor_id: newEmp.supervisor_id,
+        employment_status: newEmp.employment_status,
+        base_salary: newEmp.base_salary !== null ? newEmp.base_salary : undefined,
+        incentive_rate: newEmp.incentive_rate !== null ? newEmp.incentive_rate : undefined,
+      }).catch(() => {});
+    } catch {}
     return newEmp;
   }
 
@@ -609,6 +680,14 @@ export class PeopleRepository {
     current[idx] = updated;
     this.mockEmployees = current;
     this.setStoredData(`pilin_employees_${existing.business_id}`, current);
+
+    // Persist to server file store so changes survive page reload & incognito
+    try {
+      await updateLiveEmployeeAction(id, { ...dto, business_id: existing.business_id });
+    } catch (e) {
+      console.warn('[PeopleRepository] Failed to persist employee update to server store:', e);
+    }
+
     return updated;
   }
 

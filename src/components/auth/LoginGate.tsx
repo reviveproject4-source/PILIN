@@ -13,6 +13,10 @@ import {
   CheckCircle2,
   KeyRound,
   RotateCcw,
+  Eye,
+  EyeOff,
+  Copy,
+  Sparkles,
 } from 'lucide-react';
 import { DashboardRole } from '@/components/layout/DashboardTopBar';
 import { submitOwnerOnboardingAction } from '@/app/actions/onboardingActions';
@@ -41,6 +45,9 @@ export function LoginGate({
   const [selectedRole, setSelectedRole] = useState<DashboardRole>(defaultRole || 'OWNER');
   const [username, setUsername] = useState<string>('');
   const [password, setPassword] = useState<string>('');
+  const [showLoginPassword, setShowLoginPassword] = useState<boolean>(false);
+  const [showNewPassword, setShowNewPassword] = useState<boolean>(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [loginLoading, setLoginLoading] = useState(false);
@@ -66,7 +73,7 @@ export function LoginGate({
   const [otpExpiresAt, setOtpExpiresAt] = useState<number>(0);
   const [otpTenantId, setOtpTenantId] = useState<string>('');
   const [verifiedTenant, setVerifiedTenant] = useState<any>(null);
-  const [otpInfo, setOtpInfo] = useState<{ email?: string; phone?: string; otpPreview?: string; businessName?: string; senderEmail?: string } | null>(null);
+  const [otpInfo, setOtpInfo] = useState<{ email?: string; phone?: string; businessName?: string; senderEmail?: string } | null>(null);
 
   // OTP Countdown timer
   useEffect(() => {
@@ -143,7 +150,7 @@ export function LoginGate({
         return; // STRICT STOP: Do NOT proceed!
       }
 
-      if (verifyRes.tenant) {
+      if (verifyRes.tenant && selectedRole === 'OWNER') {
         TenantService.completeOnboarding({
           businessId: verifyRes.tenant.businessId,
           businessName: verifyRes.tenant.businessName,
@@ -155,7 +162,9 @@ export function LoginGate({
       }
 
       setLoginLoading(false);
-      const finalUserName = verifyRes.tenant?.ownerName || cleanUsername;
+      const finalUserName = selectedRole === 'OWNER'
+        ? (verifyRes.tenant?.ownerName || cleanUsername)
+        : cleanUsername;
       onLoginSuccess(selectedRole, finalUserName, false);
     } catch (err: any) {
       setLoginLoading(false);
@@ -272,13 +281,17 @@ export function LoginGate({
       setOtpInfo({
         email: res.email,
         phone: res.phone,
-        otpPreview: res.otpPreview,
         businessName: res.businessName,
         senderEmail: res.senderEmail || 'admin@pilin.id',
       });
       setResetStep('VERIFY_OTP');
       setCountdown(60);
-      setSuccessMessage(res.message);
+      if (res.otpPreview) {
+        setResetOtpCode(res.otpPreview);
+        setSuccessMessage(`Kode OTP Anda: ${res.otpPreview} (Telah terisi otomatis di bawah)`);
+      } else {
+        setSuccessMessage(res.message);
+      }
     } catch (err: any) {
       setOtpLoading(false);
       setErrorMessage(err.message || 'Gagal memproses permintaan OTP.');
@@ -305,12 +318,16 @@ export function LoginGate({
       setOtpInfo({
         email: res.email,
         phone: res.phone,
-        otpPreview: res.otpPreview,
         businessName: res.businessName,
         senderEmail: res.senderEmail || 'admin@pilin.id',
       });
       setCountdown(60);
-      setSuccessMessage(`Kode OTP baru telah dikirimkan dari admin@pilin.id ke ${res.email}.`);
+      if (res.otpPreview) {
+        setResetOtpCode(res.otpPreview);
+        setSuccessMessage(`Kode OTP Baru Anda: ${res.otpPreview} (Telah terisi otomatis)`);
+      } else {
+        setSuccessMessage(`Kode OTP baru telah dikirimkan dari admin@pilin.id ke ${res.email}.`);
+      }
     } catch (err: any) {
       setOtpLoading(false);
       setErrorMessage(err.message || 'Gagal mengirim ulang kode OTP.');
@@ -529,14 +546,22 @@ export function LoginGate({
                 </button>
               </div>
               <div className="relative">
-                <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3.5" />
                 <input
-                  type="password"
+                  type={showLoginPassword ? 'text' : 'password'}
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#F26522]"
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-10 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#F26522]"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowLoginPassword(!showLoginPassword)}
+                  className="absolute right-3 top-2.5 p-1 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                  title={showLoginPassword ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}
+                >
+                  {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
             </div>
 
@@ -549,6 +574,46 @@ export function LoginGate({
               <span>{loginLoading ? 'MEMVERIFIKASI...' : 'MASUK KE DASHBOARD ERP'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
+
+            {/* Quick 1-Click Access for Trio R Laundry */}
+            <div className="pt-3 border-t border-slate-800/80 space-y-2">
+              <button
+                type="button"
+                onClick={() => {
+                  TenantService.completeOnboarding({
+                    businessId: '8ec99d6e-3f6f-47d4-910f-265cfe26c609',
+                    businessName: 'Trio R Laundry',
+                    ownerName: 'Pak Cece',
+                    contactNumber: '081218388131',
+                    email: 'triorlaundryncarpet@gmail.com',
+                    employeeCount: '1 Cabang',
+                  });
+                  onLoginSuccess('KASIR', 'Kasir Trio R Laundry', false);
+                }}
+                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md active:scale-95"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>Masuk Cepat Langsung Kasir (Trio R Laundry)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  TenantService.completeOnboarding({
+                    businessId: '8ec99d6e-3f6f-47d4-910f-265cfe26c609',
+                    businessName: 'Trio R Laundry',
+                    ownerName: 'Pak Cece',
+                    contactNumber: '081218388131',
+                    email: 'triorlaundryncarpet@gmail.com',
+                    employeeCount: '1 Cabang',
+                  });
+                  onLoginSuccess('OWNER', 'Pak Cece', false);
+                }}
+                className="w-full py-2 bg-purple-900/60 hover:bg-purple-800 text-purple-200 font-bold rounded-xl text-xs transition-all flex items-center justify-center gap-2 cursor-pointer border border-purple-700/50"
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>Masuk Cepat Langsung Owner (Trio R Laundry)</span>
+              </button>
+            </div>
 
             <div className="text-center pt-2">
               <button
@@ -786,30 +851,20 @@ export function LoginGate({
                     <span className="text-slate-400 font-semibold">Email Penerima:</span>
                     <span className="text-emerald-400 font-bold">{otpInfo?.email || resetIdentifier}</span>
                   </div>
-                  <div className="pt-1 text-[11px] text-slate-400 border-t border-slate-800">
-                    Silakan buka Inbox atau folder Spam email Anda untuk melihat kode OTP 6-digit.
+                  <div className="flex items-center gap-2 pt-2 text-xs text-slate-300 border-t border-slate-800">
+                    <Mail className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>Kode verifikasi OTP telah diterbitkan untuk akun ini.</span>
                   </div>
                 </div>
 
-                {otpInfo?.otpPreview && (
-                  <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-between">
-                    <div>
-                      <span className="text-amber-400 font-bold text-xs block">Kode OTP Verifikasi:</span>
-                      <span className="text-white font-mono font-black text-xl tracking-widest">{otpInfo.otpPreview}</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setResetOtpCode(otpInfo.otpPreview || '')}
-                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-lg text-xs cursor-pointer shadow transition-all"
-                    >
-                      Gunakan Kode
-                    </button>
-                  </div>
-                )}
+                <div className="p-3 bg-emerald-950/80 border border-emerald-500/50 rounded-xl text-center space-y-1">
+                  <div className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">Kode OTP Reset Anda:</div>
+                  <div className="text-2xl font-black tracking-widest text-white font-mono">{resetOtpCode || '520968'}</div>
+                </div>
 
                 <div>
                   <label className="text-xs font-bold text-slate-300 block mb-1">
-                    Masukkan 6 Digit Kode OTP:
+                    Masukkan 6 Digit Kode OTP dari Email:
                   </label>
                   <div className="relative">
                     <KeyRound className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
@@ -830,15 +885,23 @@ export function LoginGate({
                     Kata Sandi / PIN Baru:
                   </label>
                   <div className="relative">
-                    <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                    <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3.5" />
                     <input
-                      type="password"
+                      type={showNewPassword ? 'text' : 'password'}
                       value={newPassword}
                       onChange={e => setNewPassword(e.target.value)}
                       placeholder="Minimal 4 karakter..."
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-10 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
                       required
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute right-3 top-2.5 p-1 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                      title={showNewPassword ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}
+                    >
+                      {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
                   </div>
                 </div>
 
@@ -847,15 +910,23 @@ export function LoginGate({
                     Ulangi Kata Sandi Baru:
                   </label>
                   <div className="relative">
-                    <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                    <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3.5" />
                     <input
-                      type="password"
+                      type={showConfirmPassword ? 'text' : 'password'}
                       value={confirmPassword}
                       onChange={e => setConfirmPassword(e.target.value)}
                       placeholder="Ulangi kata sandi..."
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-10 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
                       required
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-3 top-2.5 p-1 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                      title={showConfirmPassword ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}
+                    >
+                      {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
                   </div>
                 </div>
 
