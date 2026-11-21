@@ -1653,26 +1653,6 @@ Pesan nota ini dikirim resmi dari No. WA Toko: ${profile.business_phone}`;
         </div>
       )}
 
-      {/* BANNER RECOVERY: CADANGAN DATA PELANGGAN (SELALU AKTIF DI SEMUA TAB) */}
-      <div className="bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-400 dark:border-amber-700 p-3.5 rounded-2xl flex flex-wrap items-center justify-between gap-3 shadow-md">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center font-black shrink-0 shadow-sm">
-            <RotateCcw className="w-4 h-4" />
-          </div>
-          <span className="font-black text-xs sm:text-sm text-slate-900 dark:text-white">
-            Pusat Pemulihan Data ({customerList.length} Pelanggan Terdaftar)
-          </span>
-        </div>
-        <button
-          type="button"
-          onClick={handleRestoreCustomersBackup}
-          className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold text-xs flex items-center gap-2 shadow-md transition-all cursor-pointer active:scale-95"
-        >
-          <RotateCcw className="w-4 h-4" />
-          <span>Pulihkan Cadangan Data</span>
-        </button>
-      </div>
-
       {/* BERANDA MAIN VIEW */}
       {activeBottomNav === 'BERANDA' && (
         <div className="space-y-6">
@@ -2420,16 +2400,6 @@ Pesan nota ini dikirim resmi dari No. WA Toko: ${profile.business_phone}`;
               >
                 <PlusCircle className="w-4 h-4" />
                 <span>Upload &amp; Import Pelanggan</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleRestoreCustomersBackup}
-                className="px-3.5 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-95"
-                title="Pulihkan dan satukan data pelanggan dari seluruh cadangan lokal & server"
-              >
-                <RotateCcw className="w-4 h-4" />
-                <span>Pulihkan Cadangan Data</span>
               </button>
 
               <button

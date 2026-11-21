@@ -218,15 +218,17 @@ export function DashboardTopBar({
           </>
         )}
 
-        <button
-          type="button"
-          onClick={handleGlobalRestoreBackup}
-          className="px-2.5 sm:px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-lg text-[11px] sm:text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-md active:scale-95"
-          title="Pulihkan dan sinkronkan seluruh cadangan data pelanggan"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-          <span>Pulihkan Cadangan Data</span>
-        </button>
+        {role === 'OWNER' && (
+          <button
+            type="button"
+            onClick={handleGlobalRestoreBackup}
+            className="px-2.5 sm:px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-lg text-[11px] sm:text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-md active:scale-95"
+            title="Pulihkan dan sinkronkan seluruh cadangan data pelanggan"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Pulihkan Cadangan Data</span>
+          </button>
+        )}
 
         <button
           type="button"
