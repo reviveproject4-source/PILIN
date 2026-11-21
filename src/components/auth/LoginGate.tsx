@@ -17,6 +17,8 @@ import {
   EyeOff,
   Copy,
   Sparkles,
+  MessageSquare,
+  Send,
 } from 'lucide-react';
 import { DashboardRole } from '@/components/layout/DashboardTopBar';
 import { submitOwnerOnboardingAction } from '@/app/actions/onboardingActions';
@@ -26,6 +28,7 @@ import {
   verifyTenantLoginAction,
 } from '@/app/actions/authActions';
 import { TenantService } from '@/domains/tenant/tenantService';
+import { RetentionDomainService } from '@/domains/retention/retentionDomainService';
 
 interface LoginGateProps {
   onLoginSuccess: (role: DashboardRole, username: string, isDemo: boolean) => void;
@@ -73,7 +76,7 @@ export function LoginGate({
   const [otpExpiresAt, setOtpExpiresAt] = useState<number>(0);
   const [otpTenantId, setOtpTenantId] = useState<string>('');
   const [verifiedTenant, setVerifiedTenant] = useState<any>(null);
-  const [otpInfo, setOtpInfo] = useState<{ email?: string; phone?: string; businessName?: string; senderEmail?: string } | null>(null);
+  const [otpInfo, setOtpInfo] = useState<{ email?: string; phone?: string; businessName?: string; senderEmail?: string; otpMessage?: string } | null>(null);
 
   // OTP Countdown timer
   useEffect(() => {
@@ -255,11 +258,11 @@ export function LoginGate({
     }
   };
 
-  // Handle Request OTP via EMAIL
+  // Handle Request OTP via WHATSAPP (WA CEPAT)
   const handleRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!resetIdentifier.trim()) {
-      setErrorMessage('Email atau Nomor WhatsApp terdaftar wajib diisi.');
+      setErrorMessage('Nomor WhatsApp atau Email usaha terdaftar wajib diisi.');
       return;
     }
     setErrorMessage(null);
@@ -283,6 +286,7 @@ export function LoginGate({
         phone: res.phone,
         businessName: res.businessName,
         senderEmail: res.senderEmail || 'admin@pilin.id',
+        otpMessage: res.otpMessage,
       });
       setResetStep('VERIFY_OTP');
       setCountdown(60);
@@ -292,13 +296,18 @@ export function LoginGate({
       } else {
         setSuccessMessage(res.message);
       }
+
+      // WA CEPAT: Alihkan layar langsung ke obrolan WhatsApp nomor terdaftar tanpa landing page wa.me
+      if (res.phone && res.otpMessage) {
+        RetentionDomainService.openDirectWhatsApp(res.phone, res.otpMessage);
+      }
     } catch (err: any) {
       setOtpLoading(false);
       setErrorMessage(err.message || 'Gagal memproses permintaan OTP.');
     }
   };
 
-  // Handle Resend OTP via EMAIL
+  // Handle Resend OTP via WHATSAPP (WA CEPAT)
   const handleResendOtp = async () => {
     if (countdown > 0) return;
     setErrorMessage(null);
@@ -320,13 +329,19 @@ export function LoginGate({
         phone: res.phone,
         businessName: res.businessName,
         senderEmail: res.senderEmail || 'admin@pilin.id',
+        otpMessage: res.otpMessage,
       });
       setCountdown(60);
       if (res.otpPreview) {
         setResetOtpCode(res.otpPreview);
         setSuccessMessage(`Kode OTP Baru Anda: ${res.otpPreview} (Telah terisi otomatis)`);
       } else {
-        setSuccessMessage(`Kode OTP baru telah dikirimkan dari admin@pilin.id ke ${res.email}.`);
+        setSuccessMessage(`Kode OTP baru telah disiapkan untuk dikirimkan ke WhatsApp ${res.phone}.`);
+      }
+
+      // WA CEPAT: Alihkan layar langsung ke obrolan WhatsApp nomor terdaftar
+      if (res.phone && res.otpMessage) {
+        RetentionDomainService.openDirectWhatsApp(res.phone, res.otpMessage);
       }
     } catch (err: any) {
       setOtpLoading(false);
@@ -368,6 +383,7 @@ export function LoginGate({
       const res = await verifyOtpAndSetPasswordAction({
         identifier: resetIdentifier.trim(),
         targetEmail: otpInfo?.email,
+        targetPhone: otpInfo?.phone,
         otpCode: resetOtpCode.trim(),
         newPassword: newPassword.trim(),
         signedToken: otpSignedToken,
@@ -781,13 +797,13 @@ export function LoginGate({
           </div>
         )}
 
-        {/* TAB 4: RESET PASSWORD VIA EMAIL OTP */}
+        {/* TAB 4: RESET PASSWORD VIA WHATSAPP OTP */}
         {activeTab === 'RESET_PASSWORD' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h2 className="text-sm font-extrabold text-white flex items-center gap-2">
-                <Mail className="w-4 h-4 text-amber-400" />
-                <span>Reset Kata Sandi via Email</span>
+                <MessageSquare className="w-4 h-4 text-emerald-400" />
+                <span>Reset Kata Sandi via WhatsApp</span>
               </h2>
               <button
                 type="button"
@@ -798,21 +814,21 @@ export function LoginGate({
               </button>
             </div>
 
-            {/* STEP 1: REQUEST OTP VIA EMAIL */}
+            {/* STEP 1: REQUEST OTP VIA WHATSAPP (WA CEPAT) */}
             {resetStep === 'REQUEST_OTP' && (
               <form onSubmit={handleRequestOtp} className="space-y-4">
                 <div>
                   <label className="text-xs font-bold text-slate-300 block mb-1">
-                    Email Usaha atau Nomor WhatsApp Terdaftar:
+                    Nomor WhatsApp Usaha Terdaftar:
                   </label>
                   <div className="relative">
-                    <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                    <Phone className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
                     <input
                       type="text"
                       value={resetIdentifier}
                       onChange={e => setResetIdentifier(e.target.value)}
-                      placeholder="email@usaha.com atau nomor WhatsApp..."
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                      placeholder="Contoh: 0812xxxx atau nomor WA terdaftar..."
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
                       required
                     />
                   </div>
@@ -821,10 +837,10 @@ export function LoginGate({
                 <button
                   type="submit"
                   disabled={otpLoading}
-                  className="w-full py-3 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-amber-950/40 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-emerald-950/40 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
-                  <Mail className="w-4 h-4" />
-                  <span>{otpLoading ? 'MENGIRIM OTP...' : 'KIRIM KODE OTP KE EMAIL'}</span>
+                  <MessageSquare className="w-4 h-4" />
+                  <span>{otpLoading ? 'MENGHUBUNGKAN KE WHATSAPP...' : 'KIRIM KODE OTP KE WHATSAPP (WA CEPAT)'}</span>
                 </button>
 
                 <div className="text-center pt-1">
@@ -844,18 +860,34 @@ export function LoginGate({
               <form onSubmit={handleVerifyOtpAndSave} className="space-y-3.5">
                 <div className="p-3.5 bg-slate-900 border border-slate-800 rounded-xl text-xs space-y-2">
                   <div className="flex justify-between items-center">
-                    <span className="text-slate-400 font-semibold">Pengirim Resmi:</span>
-                    <span className="text-amber-400 font-mono font-bold">admin@pilin.id</span>
+                    <span className="text-slate-400 font-semibold">Tujuan WhatsApp:</span>
+                    <span className="text-emerald-400 font-mono font-bold">{otpInfo?.phone || resetIdentifier}</span>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-400 font-semibold">Email Penerima:</span>
-                    <span className="text-emerald-400 font-bold">{otpInfo?.email || resetIdentifier}</span>
-                  </div>
+                  {otpInfo?.businessName && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-400 font-semibold">Nama Usaha:</span>
+                      <span className="text-white font-bold">{otpInfo.businessName}</span>
+                    </div>
+                  )}
                   <div className="flex items-center gap-2 pt-2 text-xs text-slate-300 border-t border-slate-800">
-                    <Mail className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span>Kode verifikasi OTP telah diterbitkan untuk akun ini.</span>
+                    <MessageSquare className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Kode OTP dikirim langsung ke WhatsApp nomor terdaftar via WA Cepat.</span>
                   </div>
                 </div>
+
+                {otpInfo?.phone && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const msg = otpInfo.otpMessage || `*PILIN ERP — KODE OTP RESET KATA SANDI*\n\nKode OTP Anda: *${resetOtpCode}*\n\nBerlaku selama 10 menit. Jangan berikan kode ini kepada siapapun demi keamanan.`;
+                      RetentionDomainService.openDirectWhatsApp(otpInfo.phone!, msg);
+                    }}
+                    className="w-full py-2.5 bg-emerald-950/70 hover:bg-emerald-900/80 border border-emerald-600/50 text-emerald-300 font-bold rounded-xl text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>Buka WhatsApp Lagi (WA Cepat)</span>
+                  </button>
+                )}
 
                 <div className="p-3 bg-emerald-950/80 border border-emerald-500/50 rounded-xl text-center space-y-1">
                   <div className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">Kode OTP Reset Anda:</div>
@@ -864,7 +896,7 @@ export function LoginGate({
 
                 <div>
                   <label className="text-xs font-bold text-slate-300 block mb-1">
-                    Masukkan 6 Digit Kode OTP dari Email:
+                    Masukkan 6 Digit Kode OTP:
                   </label>
                   <div className="relative">
                     <KeyRound className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
@@ -874,7 +906,7 @@ export function LoginGate({
                       value={resetOtpCode}
                       onChange={e => setResetOtpCode(e.target.value.replace(/[^0-9]/g, ''))}
                       placeholder="123456"
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-base tracking-widest font-mono text-center text-amber-400 placeholder-slate-600 focus:outline-none focus:border-amber-500 font-black"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-base tracking-widest font-mono text-center text-emerald-400 placeholder-slate-600 focus:outline-none focus:border-emerald-500 font-black"
                       required
                     />
                   </div>
@@ -891,7 +923,7 @@ export function LoginGate({
                       value={newPassword}
                       onChange={e => setNewPassword(e.target.value)}
                       placeholder="Minimal 4 karakter..."
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-10 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-10 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
                       required
                     />
                     <button
@@ -916,7 +948,7 @@ export function LoginGate({
                       value={confirmPassword}
                       onChange={e => setConfirmPassword(e.target.value)}
                       placeholder="Ulangi kata sandi..."
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-10 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-10 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
                       required
                     />
                     <button
@@ -935,17 +967,17 @@ export function LoginGate({
                     type="button"
                     onClick={handleResendOtp}
                     disabled={countdown > 0 || otpLoading}
-                    className="text-xs font-bold text-amber-400 hover:text-amber-300 transition-colors disabled:text-slate-600 cursor-pointer flex items-center gap-1"
+                    className="text-xs font-bold text-emerald-400 hover:text-emerald-300 transition-colors disabled:text-slate-600 cursor-pointer flex items-center gap-1"
                   >
                     <RotateCcw className="w-3 h-3" />
-                    <span>{countdown > 0 ? `Kirim Ulang OTP (${countdown}s)` : 'Kirim Ulang OTP'}</span>
+                    <span>{countdown > 0 ? `Kirim Ulang OTP (${countdown}s)` : 'Kirim Ulang OTP ke WA'}</span>
                   </button>
                 </div>
 
                 <button
                   type="submit"
                   disabled={otpLoading}
-                  className="w-full py-3 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-amber-950/40 flex items-center justify-center gap-2 cursor-pointer mt-2 disabled:opacity-50"
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-emerald-950/40 flex items-center justify-center gap-2 cursor-pointer mt-2 disabled:opacity-50"
                 >
                   <CheckCircle2 className="w-4 h-4" />
                   <span>{otpLoading ? 'MENYIMPAN KATA SANDI...' : 'VERIFIKASI & SIMPAN KATA SANDI'}</span>

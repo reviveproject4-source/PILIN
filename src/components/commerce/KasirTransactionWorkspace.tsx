@@ -1873,10 +1873,9 @@ Pesan nota ini dikirim resmi dari No. WA Toko: ${profile.business_phone}`;
                 <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-blue-500 transition-colors" />
               </button>
 
-              <a
-                href="https://wa.me/6281215566630?text=Halo%20CS%20PILIN%20ERP,%20saya%20butuh%20bantuan%20kasir"
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                type="button"
+                onClick={() => RetentionDomainService.openDirectWhatsApp('6281215566630', 'Halo CS PILIN ERP, saya butuh bantuan kasir')}
                 className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl hover:border-emerald-500 shadow-sm transition-all text-left flex items-center justify-between group cursor-pointer"
               >
                 <div className="flex items-center gap-3">
@@ -1888,7 +1887,7 @@ Pesan nota ini dikirim resmi dari No. WA Toko: ${profile.business_phone}`;
                   </div>
                 </div>
                 <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-purple-500 transition-colors" />
-              </a>
+              </button>
             </div>
           </div>
         </div>
@@ -3223,10 +3222,9 @@ Pesan nota ini dikirim resmi dari No. WA Toko: ${profile.business_phone}`;
             </button>
 
             {/* 4. BANTUAN & CS PILIN */}
-            <a
-              href="https://wa.me/6281215566630?text=Halo%20CS%20PILIN%20ERP,%20saya%20butuh%20bantuan%20kasir"
-              target="_blank"
-              rel="noopener noreferrer"
+            <button
+              type="button"
+              onClick={() => RetentionDomainService.openDirectWhatsApp('6281215566630', 'Halo CS PILIN ERP, saya butuh bantuan kasir')}
               className="w-full p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors text-left group cursor-pointer"
             >
               <div className="flex items-center space-x-3.5">
@@ -3234,12 +3232,12 @@ Pesan nota ini dikirim resmi dari No. WA Toko: ${profile.business_phone}`;
                   <Phone className="w-5 h-5" />
                 </div>
                 <div>
-                  <div className="font-bold text-sm text-slate-900 dark:text-white">Hubungi CS via WhatsApp</div>
+                  <div className="font-bold text-sm text-slate-900 dark:text-white">Hubungi CS via WhatsApp (WA Cepat)</div>
                   <div className="text-xs text-slate-500 dark:text-slate-400">CS PILIN 0812 15566630</div>
                 </div>
               </div>
               <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600 transition-colors" />
-            </a>
+            </button>
 
             {/* 5. TENTANG PILIN */}
             <button

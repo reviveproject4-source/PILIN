@@ -168,8 +168,8 @@ export async function POST(request: Request) {
     const rawPhone = prospect.whatsapp || prospect.phone || '';
     const cleanPhone = rawPhone.replace(/[^0-9]/g, '').replace(/^0/, '62');
 
-    const messageText = `Halo ${ownerName},\n\nPendaftaran usaha "${businessName}" di PILIN ERP telah DISETUJUI oleh Super Admin!\nAkun tenant Anda kini sudah AKTIF dan seluruh modul sistem siap digunakan.\n\n🔗 Akses Portal: https://pilin.id\n👤 Role Masuk: OWNER\n📧 Email / ID: ${email}\n🔑 PIN Masuk Sementara: ${tempPin}\n\n(Catatan: Anda dapat langsung masuk dengan PIN di atas atau mengatur kata sandi kapan saja melalui menu "Reset Password via Email" di halaman login. Kode OTP akan dikirimkan otomatis dari admin@pilin.id ke email terdaftar Anda).\n\nSelamat mengelola operasional cabang Anda bersama PILIN ERP!`;
-    const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(messageText)}`;
+    const messageText = `Halo ${ownerName},\n\nPendaftaran usaha "${businessName}" di PILIN ERP telah DISETUJUI oleh Super Admin!\nAkun tenant Anda kini sudah AKTIF dan seluruh modul sistem siap digunakan.\n\n🔗 Akses Portal: https://pilin.id\n👤 Role Masuk: OWNER\n📧 Email / ID: ${email}\n🔑 PIN Masuk Sementara: ${tempPin}\n\n(Catatan: Anda dapat langsung masuk dengan PIN di atas atau mengatur kata sandi kapan saja melalui menu "Reset Kata Sandi via WhatsApp" di halaman login. Kode OTP akan dikirimkan otomatis ke nomor WhatsApp terdaftar Anda).\n\nSelamat mengelola operasional cabang Anda bersama PILIN ERP!`;
+    const waUrl = `whatsapp://send?phone=${cleanPhone}&text=${encodeURIComponent(messageText)}`;
 
     return NextResponse.json({
       success: true,

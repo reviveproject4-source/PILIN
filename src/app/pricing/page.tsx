@@ -190,19 +190,14 @@ export default function PricingPage() {
                 <div className="inline-block bg-[#F26522] text-white text-[10px] font-extrabold px-3 py-1 rounded uppercase mb-2">
                   ENTERPRISE
                 </div>
-                <h3 className="text-xl font-bold text-white">Kebutuhan bisnis lebih besar atau lebih khusus?</h3>
-                <p className="text-xs text-slate-300 mt-1">
-                  Silakan hubungi Admin PILIN.
-                </p>
+                <h3 className="text-xl font-bold text-white">Kebutuhan Bisnis Khusus Enterprise</h3>
               </div>
 
               <a
-                href="https://wa.me/6281215566630"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="bg-[#F26522] hover:bg-[#d95516] text-white text-xs font-bold px-6 py-3.5 rounded-xl transition-all whitespace-nowrap shadow-md"
+                href="whatsapp://send?phone=6281215566630&text=Halo%20Admin%20PILIN%20ERP,%20saya%20tertarik%20dengan%20paket%20Enterprise"
+                className="bg-[#F26522] hover:bg-[#d95516] text-white text-xs font-bold px-6 py-3.5 rounded-xl transition-all whitespace-nowrap shadow-md cursor-pointer"
               >
-                Hubungi Admin
+                Hubungi Admin (WA Cepat)
               </a>
             </div>
 

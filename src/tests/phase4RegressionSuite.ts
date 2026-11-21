@@ -141,7 +141,7 @@ export function runPhase4RegressionSuite() {
 
   // --- TEST GROUP 12: BROADCAST CAMERA & CAPABILITY ---
   const broadcastWaUrl = RetentionDomainService.generateWaMeLink('08123456789', 'Foto hasil service');
-  assert(broadcastWaUrl.includes('https://wa.me/628123456789'), 'TEST 12A: WA broadcast link formatted correctly with country code');
+  assert(broadcastWaUrl.includes('628123456789') && broadcastWaUrl.includes('whatsapp://send'), 'TEST 12A: WA direct deep link formatted correctly with country code');
   assert(true, 'TEST 12B: Broadcast camera input equipped with accept="image/*" capture="environment"');
 
   console.log('\n============================================================');

@@ -97,6 +97,7 @@ export interface RequestOtpResult {
   expiresAt?: number;
   tenantId?: string;
   senderEmail?: string;
+  otpMessage?: string;
 }
 
 export interface VerifyOtpResult {
@@ -230,15 +231,16 @@ export async function requestPasswordResetOtpAction(
   const otpCode = crypto.randomInt(100000, 1000000).toString();
   const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
   const tenantId = record.id;
-  const targetEmail = record.email || cleanId;
-  const signedToken = generateHmacOtpToken(targetEmail, otpCode, expiresAt, tenantId);
+  const targetPhone = record.whatsapp || cleanId;
+  const targetEmail = record.email || (cleanId.includes('@') ? cleanId : `${normInput || 'tenant'}@pilin.id`);
+  const signedToken = generateHmacOtpToken(targetPhone, otpCode, expiresAt, tenantId);
 
   // Save to local cache as secondary fallback
   const cache = loadOtpCache();
-  const normKey = targetEmail.toLowerCase();
-  cache[normKey] = {
+  const phoneKey = targetPhone.replace(/[^0-9]/g, '');
+  cache[phoneKey] = {
     identifier: cleanId,
-    phone: record.whatsapp,
+    phone: targetPhone,
     email: targetEmail,
     code: otpCode,
     expiresAt,
@@ -246,28 +248,33 @@ export async function requestPasswordResetOtpAction(
     businessName: record.name,
     ownerName: record.ownerName,
   };
+  if (targetEmail) {
+    cache[targetEmail.toLowerCase()] = cache[phoneKey];
+  }
   saveOtpCache(cache);
 
-  // Send Email from admin@pilin.id to Tenant Email
-  await EmailDomainService.sendOtpEmail({
-    recipientEmail: targetEmail,
-    ownerName: record.ownerName,
-    businessName: record.name,
-    otpCode,
-  });
+  const otpMessage = `*PILIN ERP — KODE OTP RESET KATA SANDI*
+
+Halo ${record.ownerName},
+Kode OTP untuk verifikasi reset kata sandi akun usaha *${record.name}* adalah:
+
+👉 *${otpCode}*
+
+Kode ini berlaku selama 10 menit.
+Mohon jangan berikan kode OTP ini kepada siapa pun demi keamanan akun Anda.`;
 
   return {
     success: true,
-    message: `Kode OTP 6-digit berhasil dikirimkan dari admin@pilin.id ke email ${targetEmail}.`,
+    message: `Kode OTP 6-digit siap dikirim ke nomor WhatsApp terdaftar: ${targetPhone}.`,
     email: targetEmail,
-    phone: record.whatsapp,
+    phone: targetPhone,
     businessName: record.name,
     ownerName: record.ownerName,
     signedToken,
     expiresAt,
     tenantId,
-    senderEmail: 'admin@pilin.id',
     otpPreview: otpCode,
+    otpMessage,
   };
 }
 
@@ -283,6 +290,7 @@ export async function verifyOtpAndSetPasswordAction(params: {
   expiresAt?: number;
   tenantId?: string;
   targetEmail?: string;
+  targetPhone?: string;
   knownTenant?: {
     businessId?: string;
     businessName?: string;
@@ -295,9 +303,10 @@ export async function verifyOtpAndSetPasswordAction(params: {
   const cleanOtp = (params.otpCode || '').trim();
   const cleanPass = (params.newPassword || '').trim();
   const targetEmail = (params.targetEmail || cleanId).trim().toLowerCase();
+  const targetPhone = (params.targetPhone || cleanId).trim();
 
-  if (!cleanId && !targetEmail) {
-    return { success: false, message: 'Email atau Nomor WhatsApp wajib diisi.' };
+  if (!cleanId && !targetPhone && !targetEmail) {
+    return { success: false, message: 'Nomor WhatsApp atau Email wajib diisi.' };
   }
   if (!cleanOtp) {
     return { success: false, message: 'Kode OTP 6-digit wajib diisi.' };
@@ -319,6 +328,7 @@ export async function verifyOtpAndSetPasswordAction(params: {
 
     const tenantId = params.tenantId || '';
     if (
+      (targetPhone && verifyHmacOtpToken(targetPhone, cleanOtp, params.expiresAt, tenantId, params.signedToken)) ||
       verifyHmacOtpToken(targetEmail, cleanOtp, params.expiresAt, tenantId, params.signedToken) ||
       verifyHmacOtpToken(cleanId, cleanOtp, params.expiresAt, tenantId, params.signedToken)
     ) {
@@ -329,13 +339,15 @@ export async function verifyOtpAndSetPasswordAction(params: {
   // B. Fallback: Verify with Server Cache
   if (!verified) {
     const cache = loadOtpCache();
-    const normKey = targetEmail.toLowerCase();
+    const phoneDigits = targetPhone.replace(/[^0-9]/g, '');
+    let matchedEntry: OtpEntry | null = (phoneDigits && cache[phoneDigits]) || cache[targetEmail.toLowerCase()] || null;
 
-    let matchedEntry: OtpEntry | null = cache[normKey] || null;
     if (!matchedEntry) {
       for (const key of Object.keys(cache)) {
         const entry = cache[key];
+        const entryDigits = (entry.phone || '').replace(/[^0-9]/g, '');
         if (
+          (phoneDigits && entryDigits === phoneDigits) ||
           entry.email.toLowerCase() === targetEmail ||
           entry.identifier.toLowerCase() === cleanId.toLowerCase()
         ) {
@@ -355,13 +367,14 @@ export async function verifyOtpAndSetPasswordAction(params: {
   if (!verified) {
     return {
       success: false,
-      message: 'Kode OTP yang Anda masukkan salah atau sudah kedaluwarsa. Silakan periksa kembali email Anda.',
+      message: 'Kode OTP yang Anda masukkan salah atau sudah kedaluwarsa. Silakan periksa kembali pesan WhatsApp Anda.',
     };
   }
 
   // Update password in memory/file store
   PendingRegistrationStore.setPassword(cleanId, cleanPass);
-  PendingRegistrationStore.setPassword(targetEmail, cleanPass);
+  if (targetPhone) PendingRegistrationStore.setPassword(targetPhone, cleanPass);
+  if (targetEmail) PendingRegistrationStore.setPassword(targetEmail, cleanPass);
 
   const updatedRecord = PendingRegistrationStore.findByPhoneOrEmail(cleanId) || PendingRegistrationStore.findByPhoneOrEmail(targetEmail);
 

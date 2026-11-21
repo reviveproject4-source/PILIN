@@ -71,9 +71,7 @@ export default function Footer() {
                 <div>
                   <div className="font-semibold text-white">WhatsApp Admin PILIN</div>
                   <a
-                    href="https://wa.me/6281215566630"
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    href="whatsapp://send?phone=6281215566630&text=Halo%20Admin%20PILIN%20ERP"
                     className="hover:underline text-[#F26522] font-bold"
                   >
                     0812 1556 6630

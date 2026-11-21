@@ -14,6 +14,7 @@ import {
   PilinProspectRecord, 
   PilinProspectActivityRecord
 } from '@/app/super-admin/actions';
+import { RetentionDomainService } from '@/domains/retention/retentionDomainService';
 
 export function ProspectManagementView() {
   const [prospects, setProspects] = useState<PilinProspectRecord[]>([]);
@@ -242,10 +243,8 @@ export function ProspectManagementView() {
   };
 
   const formatWaUrl = (phone: string, name: string) => {
-    const cleanPhone = phone.replace(/[^0-9]/g, '');
-    const targetPhone = cleanPhone.startsWith('0') ? `62${cleanPhone.slice(1)}` : cleanPhone;
-    const text = encodeURIComponent(`Halo Kak ${name}, salam dari CS PILIN ERP. Kami mengonfirmasi pendaftaran usaha Anda. Ada yang bisa kami bantu?`);
-    return `https://wa.me/${targetPhone}?text=${text}`;
+    const text = `Halo Kak ${name}, salam dari CS PILIN ERP. Kami mengonfirmasi pendaftaran usaha Anda. Ada yang bisa kami bantu?`;
+    return RetentionDomainService.generateDirectWaLink(phone, text);
   };
 
   // Filtering & Sorting
@@ -797,15 +796,17 @@ export function ProspectManagementView() {
 
               {/* Direct WhatsApp Action Button */}
               <div className="pt-2">
-                <a
-                  href={formatWaUrl(selectedProspect.whatsapp, selectedProspect.owner_name || selectedProspect.name)}
-                  target="_blank"
-                  rel="noreferrer"
+                <button
+                  type="button"
+                  onClick={() => {
+                    const text = `Halo Kak ${selectedProspect.owner_name || selectedProspect.name}, salam dari CS PILIN ERP. Kami mengonfirmasi pendaftaran usaha Anda. Ada yang bisa kami bantu?`;
+                    RetentionDomainService.openDirectWhatsApp(selectedProspect.whatsapp, text);
+                  }}
                   className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <MessageSquare className="w-4 h-4" />
-                  <span>Hubungi via WhatsApp (wa.me) →</span>
-                </a>
+                  <span>Hubungi via WhatsApp (WA Cepat) →</span>
+                </button>
               </div>
             </div>
 

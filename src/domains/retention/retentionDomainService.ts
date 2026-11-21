@@ -148,21 +148,30 @@ export class RetentionDomainService {
     const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
     if (isMobile) {
-      // Mobile Device: WhatsApp app opens immediately into conversation with message ready
+      // Mobile Device: Langsung alihkan layar ke aplikasi WhatsApp tujuan dengan pesan siap kirim
       window.location.href = deepLink;
     } else {
-      // Desktop PC: Try launching WhatsApp Desktop app directly
+      // Desktop PC: Coba buka aplikasi WhatsApp Desktop langsung
+      let appOpened = false;
+      const onBlur = () => {
+        appOpened = true;
+      };
+      window.addEventListener('blur', onBlur, { once: true });
+
       const a = document.createElement('a');
       a.href = deepLink;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
 
-      // Fallback: If desktop app is not installed, open web.whatsapp.com directly (bypassing wa.me landing page)
+      // Fallback: Jika aplikasi WhatsApp Desktop belum terpasang di PC, buka WhatsApp Web langsung ke chat (bukan wa.me)
       setTimeout(() => {
-        const webDirectUrl = `https://web.whatsapp.com/send?phone=${targetPhone}&text=${encodedText}`;
-        window.open(webDirectUrl, '_blank');
-      }, 1000);
+        window.removeEventListener('blur', onBlur);
+        if (!appOpened) {
+          const webDirectUrl = `https://web.whatsapp.com/send?phone=${targetPhone}&text=${encodedText}`;
+          window.open(webDirectUrl, '_blank', 'noopener,noreferrer');
+        }
+      }, 1200);
     }
   }
 
