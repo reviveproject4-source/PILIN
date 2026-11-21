@@ -183,6 +183,7 @@ export function KasirTransactionWorkspace({
 
   // Promo & Loyalty State
   const [promoBundle, setPromoBundle] = useState<PromoBundleConfig>(() => PromoManagementService.getConfig(businessId));
+  const isLoyaltyActive = Boolean(promoBundle?.poin?.is_active);
   const [selectedPromoBasicId, setSelectedPromoBasicId] = useState<string>('');
   const [customDiscountPercent, setCustomDiscountPercent] = useState<number>(0);
   const [useLoyaltyPoints, setUseLoyaltyPoints] = useState<boolean>(false);
@@ -1572,24 +1573,26 @@ export function KasirTransactionWorkspace({
     if (trx.discount_amount && trx.discount_amount > 0) {
       discountLines.push(`Diskon Promo (${trx.promo_name || 'Promo'}) : -Rp ${trx.discount_amount.toLocaleString('id-ID')}`);
     }
-    if (trx.points_discount && trx.points_discount > 0) {
+    if (isLoyaltyActive && trx.points_discount && trx.points_discount > 0) {
       discountLines.push(`Diskon Poin Loyalty (${trx.points_used || 0} Poin) : -Rp ${trx.points_discount.toLocaleString('id-ID')}`);
     }
     const discountText = discountLines.length > 0 ? `\n${discountLines.join('\n')}` : '';
 
-    const subtotalText = trx.subtotal && (trx.discount_amount || trx.points_discount)
+    const subtotalText = trx.subtotal && (trx.discount_amount || (isLoyaltyActive && trx.points_discount))
       ? `Subtotal      : Rp ${trx.subtotal.toLocaleString('id-ID')}${discountText}\n`
       : '';
 
-    const pointsEarnedText = trx.points_earned && trx.points_earned > 0
+    const pointsEarnedText = isLoyaltyActive && trx.points_earned && trx.points_earned > 0
       ? `\nPoin Diperoleh: +${trx.points_earned} Poin`
       : '';
+
+    const hasDepositOnNota = (trx.deposit_used && trx.deposit_used > 0) || (trx.remaining_deposit_balance !== undefined && trx.remaining_deposit_balance > 0);
 
     const depositDeductionText = trx.deposit_used && trx.deposit_used > 0
       ? `\nPotong Deposit: -Rp ${trx.deposit_used.toLocaleString('id-ID')}`
       : '';
 
-    const remainingDepositText = trx.remaining_deposit_balance !== undefined
+    const remainingDepositText = hasDepositOnNota && trx.remaining_deposit_balance !== undefined
       ? `\n--------------------------------\n*SISA SALDO DEPOSIT: Rp ${trx.remaining_deposit_balance.toLocaleString('id-ID')}*`
       : '';
 
@@ -2493,8 +2496,7 @@ Pesan nota ini dikirim resmi dari No. WA Toko: ${profile.business_phone}`;
                     <th className="p-3">Nama Pelanggan</th>
                     <th className="p-3">No. WhatsApp</th>
                     <th className="p-3">Total Transaksi</th>
-                    <th className="p-3">Poin Loyalty</th>
-                    <th className="p-3">Saldo Deposit</th>
+                    {isLoyaltyActive && <th className="p-3">Poin Loyalty</th>}
                     <th className="p-3">Kunjungan Terakhir</th>
                     <th className="p-3 text-right">Aksi</th>
                   </tr>
@@ -2506,10 +2508,9 @@ Pesan nota ini dikirim resmi dari No. WA Toko: ${profile.business_phone}`;
                       <td className="p-3 font-bold text-slate-900 dark:text-white">{c.name}</td>
                       <td className="p-3 font-mono text-emerald-600 dark:text-emerald-400">{c.phone}</td>
                       <td className="p-3 font-bold text-blue-600 dark:text-blue-400">{c.totalTrx} Trx</td>
-                      <td className="p-3 font-bold text-purple-600 dark:text-purple-400">{c.loyaltyPoints ?? 0} Pts</td>
-                      <td className="p-3 font-bold text-emerald-600 dark:text-emerald-400">
-                        Rp {(c.depositBalance ?? 0).toLocaleString('id-ID')}
-                      </td>
+                      {isLoyaltyActive && (
+                        <td className="p-3 font-bold text-purple-600 dark:text-purple-400">{c.loyaltyPoints ?? 0} Pts</td>
+                      )}
                       <td className="p-3 font-mono text-slate-500 dark:text-slate-400">{c.lastVisit}</td>
                       <td className="p-3 text-right">
                         <div className="flex items-center justify-end gap-1.5">
@@ -3639,7 +3640,7 @@ Pesan nota ini dikirim resmi dari No. WA Toko: ${profile.business_phone}`;
                           <span>-Rp {activeReceiptTrx.deposit_used.toLocaleString('id-ID')}</span>
                         </div>
                       ) : null}
-                      {activeReceiptTrx.points_earned && activeReceiptTrx.points_earned > 0 ? (
+                      {isLoyaltyActive && activeReceiptTrx.points_earned && activeReceiptTrx.points_earned > 0 ? (
                         <div className="flex justify-between text-[10px] text-purple-700 font-bold">
                           <span>POIN DIPEROLEH:</span>
                           <span>+{activeReceiptTrx.points_earned} Poin</span>
@@ -3667,8 +3668,8 @@ Pesan nota ini dikirim resmi dari No. WA Toko: ${profile.business_phone}`;
                         </div>
                       )}
 
-                      {/* Saldo deposit yang tersisa (terletak di bawah setelah total transaksi) */}
-                      {activeReceiptTrx.remaining_deposit_balance !== undefined && (
+                      {/* Saldo deposit yang tersisa (terletak di bawah setelah total transaksi) - hanya terlihat jika pelanggan memang memiliki deposit */}
+                      {((activeReceiptTrx.deposit_used && activeReceiptTrx.deposit_used > 0) || (activeReceiptTrx.remaining_deposit_balance !== undefined && activeReceiptTrx.remaining_deposit_balance > 0)) && activeReceiptTrx.remaining_deposit_balance !== undefined && (
                         <div className="border-t border-dashed border-slate-400 pt-1.5 mt-1">
                           <div className="flex justify-between text-[10px] font-bold text-slate-900 bg-blue-50 px-1.5 py-1 rounded border border-blue-200">
                             <span>SISA SALDO DEPOSIT:</span>
@@ -4123,16 +4124,13 @@ Pesan nota ini dikirim resmi dari No. WA Toko: ${profile.business_phone}`;
                                   <span>{c.phone}</span>
                                 </div>
                               </div>
-                              <div className="text-right">
-                                <div className="text-[11px] font-black text-blue-700 dark:text-blue-300">
-                                  Saldo: Rp {(c.depositBalance ?? 0).toLocaleString('id-ID')}
-                                </div>
-                                {c.loyaltyPoints ? (
+                              {isLoyaltyActive && c.loyaltyPoints ? (
+                                <div className="text-right">
                                   <div className="text-[10px] text-purple-600 dark:text-purple-400 font-semibold">
                                     {c.loyaltyPoints} Pts
                                   </div>
-                                ) : null}
-                              </div>
+                                </div>
+                              ) : null}
                             </div>
                           ))
                         ) : (
@@ -4197,26 +4195,16 @@ Pesan nota ini dikirim resmi dari No. WA Toko: ${profile.business_phone}`;
                   </div>
                 </div>
 
-                {/* Info Saldo Deposit Konsumen pada Form Nota */}
-                <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-800 text-xs">
-                  <div className="flex items-center gap-1.5">
-                    <Wallet className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                    <span className="font-bold text-slate-700 dark:text-slate-300">Saldo Deposit Tersedia:</span>
-                    <span className="font-black text-blue-700 dark:text-blue-300">
-                      Rp {(customerDepositBalance ?? 0).toLocaleString('id-ID')}
-                    </span>
-                    {customerLoyaltyPoints > 0 && (
-                      <span className="ml-2 text-[11px] font-bold text-purple-600 dark:text-purple-400">
-                        • {customerLoyaltyPoints} Poin Loyalty
-                      </span>
-                    )}
+                {/* Info Loyalty Konsumen (Hanya jika program Poin Loyalty diaktifkan Owner) */}
+                {isLoyaltyActive && customerLoyaltyPoints > 0 && (
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-800 text-xs">
+                    <div className="flex items-center gap-1.5 text-purple-600 dark:text-purple-400 font-bold">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Poin Loyalty Pelanggan:</span>
+                      <span className="font-black">{customerLoyaltyPoints} Pts</span>
+                    </div>
                   </div>
-                  {customerDepositBalance > 0 && (
-                    <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950 px-2 py-0.5 rounded">
-                      Dapat Dipotong di Nota
-                    </span>
-                  )}
-                </div>
+                )}
               </div>
 
               {/* SEKSI 2: MULTI-LAYANAN & PRODUK */}
@@ -4772,58 +4760,54 @@ Pesan nota ini dikirim resmi dari No. WA Toko: ${profile.business_phone}`;
                   </div>
                 )}
 
-                {/* Saldo Deposit Pelanggan Section */}
-                <div className="space-y-3 bg-slate-50 dark:bg-slate-950/40 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800">
-                  <div className="flex items-center justify-between">
-                    <div className="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                      <Wallet className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                      <span>Saldo Deposit Konsumen</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono font-bold text-blue-700 dark:text-blue-300">
-                        Saldo: Rp {customerDepositBalance.toLocaleString('id-ID')}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800">
-                    <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-800 dark:text-slate-200 select-none">
-                      <input
-                        type="checkbox"
-                        checked={useDeposit}
-                        disabled={customerDepositBalance <= 0}
-                        onChange={e => setUseDeposit(e.target.checked)}
-                        className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer disabled:opacity-40"
-                      />
-                      <span>Potong dari Saldo Deposit Konsumen</span>
-                    </label>
-
-                    {customerDepositBalance <= 0 ? (
-                      <span className="text-[11px] text-slate-400 font-semibold">
-                        (Saldo Kosong)
-                      </span>
-                    ) : (
-                      <span className="text-xs font-bold text-blue-600 dark:text-blue-400">
-                        Tersedia: Rp {customerDepositBalance.toLocaleString('id-ID')}
-                      </span>
-                    )}
-                  </div>
-
-                  {useDeposit && customerDepositBalance > 0 && (
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between text-xs text-blue-800 dark:text-blue-300 font-bold bg-blue-50 dark:bg-blue-950/40 p-2 rounded-lg border border-blue-200 dark:border-blue-800">
-                        <span>Deposit Dipotong Dari Nota:</span>
-                        <span className="font-black">- Rp {depositDeductionAmount.toLocaleString('id-ID')}</span>
+                {/* Saldo Deposit Pelanggan Section - Hanya tampil jika pelanggan memang memiliki saldo deposit */}
+                {customerDepositBalance > 0 && (
+                  <div className="space-y-3 bg-slate-50 dark:bg-slate-950/40 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                        <Wallet className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                        <span>Saldo Deposit Konsumen</span>
                       </div>
-                      <div className="flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-400 px-1 font-semibold">
-                        <span>Estimasi Sisa Saldo Deposit:</span>
-                        <span className="font-bold text-slate-900 dark:text-white">
-                          Rp {(customerDepositBalance - depositDeductionAmount).toLocaleString('id-ID')}
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-mono font-bold text-blue-700 dark:text-blue-300">
+                          Saldo: Rp {customerDepositBalance.toLocaleString('id-ID')}
                         </span>
                       </div>
                     </div>
-                  )}
-                </div>
+
+                    <div className="flex items-center justify-between bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800">
+                      <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-800 dark:text-slate-200 select-none">
+                        <input
+                          type="checkbox"
+                          checked={useDeposit}
+                          disabled={customerDepositBalance <= 0}
+                          onChange={e => setUseDeposit(e.target.checked)}
+                          className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer disabled:opacity-40"
+                        />
+                        <span>Potong dari Saldo Deposit Konsumen</span>
+                      </label>
+
+                      <span className="text-xs font-bold text-blue-600 dark:text-blue-400">
+                        Tersedia: Rp {customerDepositBalance.toLocaleString('id-ID')}
+                      </span>
+                    </div>
+
+                    {useDeposit && (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between text-xs text-blue-800 dark:text-blue-300 font-bold bg-blue-50 dark:bg-blue-950/40 p-2 rounded-lg border border-blue-200 dark:border-blue-800">
+                          <span>Deposit Dipotong Dari Nota:</span>
+                          <span className="font-black">- Rp {depositDeductionAmount.toLocaleString('id-ID')}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-400 px-1 font-semibold">
+                          <span>Estimasi Sisa Saldo Deposit:</span>
+                          <span className="font-bold text-slate-900 dark:text-white">
+                            Rp {(customerDepositBalance - depositDeductionAmount).toLocaleString('id-ID')}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Metode Pembayaran: Tunai vs QRIS */}
                 <div>
@@ -4893,7 +4877,7 @@ Pesan nota ini dikirim resmi dari No. WA Toko: ${profile.business_phone}`;
                     </div>
                   )}
 
-                  {projectedPointsEarned > 0 && (
+                  {isLoyaltyActive && projectedPointsEarned > 0 && (
                     <div className="flex justify-between items-center text-[11px] text-purple-600 dark:text-purple-400 font-bold">
                       <span>Poin Diperoleh:</span>
                       <span>+{projectedPointsEarned} Poin Loyalty</span>

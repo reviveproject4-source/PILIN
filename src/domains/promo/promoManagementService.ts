@@ -118,7 +118,7 @@ export class PromoManagementService {
       },
     ],
     poin: {
-      is_active: true,
+      is_active: false, // Default nonaktif: hanya tampil jika owner memang mengaktifkan fitur ini
       earning_threshold: 10000, // Belanja Rp 10.000 = 1 Poin
       point_redeem_value: 1000, // 1 Poin = Rp 1.000 potongan
       min_redeem_points: 5, // Minimal tukar 5 poin (Rp 5.000)
