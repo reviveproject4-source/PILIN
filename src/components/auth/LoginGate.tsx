@@ -536,7 +536,7 @@ export function LoginGate({
                   type="text"
                   value={username}
                   onChange={e => setUsername(e.target.value)}
-                  placeholder="Masukkan email usaha atau nomor WhatsApp..."
+                  placeholder={selectedRole === 'OWNER' ? 'Email usaha atau nomor WhatsApp terdaftar...' : 'Kode Pegawai, email, atau nomor HP...'}
                   className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#F26522]"
                 />
               </div>
@@ -556,9 +556,9 @@ export function LoginGate({
                     setErrorMessage(null);
                     setSuccessMessage(null);
                   }}
-                  className="text-[11px] font-bold text-amber-400 hover:text-amber-300 transition-colors cursor-pointer"
+                  className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer"
                 >
-                  Lupa Password? Reset via Email
+                  Lupa Kata Sandi? Reset via WhatsApp
                 </button>
               </div>
               <div className="relative">
@@ -590,46 +590,6 @@ export function LoginGate({
               <span>{loginLoading ? 'MEMVERIFIKASI...' : 'MASUK KE DASHBOARD ERP'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
-
-            {/* Quick 1-Click Access for Trio R Laundry */}
-            <div className="pt-3 border-t border-slate-800/80 space-y-2">
-              <button
-                type="button"
-                onClick={() => {
-                  TenantService.completeOnboarding({
-                    businessId: '8ec99d6e-3f6f-47d4-910f-265cfe26c609',
-                    businessName: 'Trio R Laundry',
-                    ownerName: 'Pak Cece',
-                    contactNumber: '081218388131',
-                    email: 'triorlaundryncarpet@gmail.com',
-                    employeeCount: '1 Cabang',
-                  });
-                  onLoginSuccess('KASIR', 'Kasir Trio R Laundry', false);
-                }}
-                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md active:scale-95"
-              >
-                <Sparkles className="w-4 h-4" />
-                <span>Masuk Cepat Langsung Kasir (Trio R Laundry)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  TenantService.completeOnboarding({
-                    businessId: '8ec99d6e-3f6f-47d4-910f-265cfe26c609',
-                    businessName: 'Trio R Laundry',
-                    ownerName: 'Pak Cece',
-                    contactNumber: '081218388131',
-                    email: 'triorlaundryncarpet@gmail.com',
-                    employeeCount: '1 Cabang',
-                  });
-                  onLoginSuccess('OWNER', 'Pak Cece', false);
-                }}
-                className="w-full py-2 bg-purple-900/60 hover:bg-purple-800 text-purple-200 font-bold rounded-xl text-xs transition-all flex items-center justify-center gap-2 cursor-pointer border border-purple-700/50"
-              >
-                <ShieldCheck className="w-3.5 h-3.5" />
-                <span>Masuk Cepat Langsung Owner (Trio R Laundry)</span>
-              </button>
-            </div>
 
             <div className="text-center pt-2">
               <button

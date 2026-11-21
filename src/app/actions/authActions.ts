@@ -628,15 +628,16 @@ export async function verifyTenantLoginAction(
       };
     }
 
+    const empBiz = matchedEmployee.business_id ? PendingRegistrationStore.findById(matchedEmployee.business_id) : null;
     return {
       success: true,
       tenant: {
-        businessId: matchedEmployee.business_id || '8ec99d6e-3f6f-47d4-910f-265cfe26c609',
-        businessName: matchedEmployee.branch_name || 'Trio R Laundry',
-        ownerName: 'Pak Cece',
-        whatsapp: '081218388131',
-        email: 'triorlaundry@gmail.com',
-        employeeCount: '1 Cabang',
+        businessId: matchedEmployee.business_id || empBiz?.id || '8ec99d6e-3f6f-47d4-910f-265cfe26c609',
+        businessName: empBiz?.name || matchedEmployee.branch_name || 'Usaha Anda',
+        ownerName: empBiz?.ownerName || 'Owner',
+        whatsapp: empBiz?.whatsapp || matchedEmployee.phone || '',
+        email: empBiz?.email || matchedEmployee.email || '',
+        employeeCount: empBiz?.employeeCount || '1 Cabang',
       },
     };
   }
@@ -704,18 +705,17 @@ export async function verifyTenantLoginAction(
     }
   }
 
-  // 2c. Direct Access for registered Trio R Laundry (Pak Cece)
+  // 2c. Account resolution for registered Trio R Laundry (Pak Cece)
   if (isTrioOwnerAccount) {
-    return {
-      success: true,
-      tenant: {
-        businessId: '8ec99d6e-3f6f-47d4-910f-265cfe26c609',
-        businessName: 'Trio R Laundry',
-        ownerName: 'Pak Cece',
-        whatsapp: '081218388131',
-        email: 'triorlaundryncarpet@gmail.com',
-        employeeCount: '1 Cabang',
-      },
+    matchedOwner = {
+      id: '8ec99d6e-3f6f-47d4-910f-265cfe26c609',
+      name: 'Trio R Laundry',
+      contact_name: 'Pak Cece',
+      phone: '081218388131',
+      email: 'triorlaundryncarpet@gmail.com',
+      password: storeRecord?.password || '8131',
+      temporaryPin: storeRecord?.temporaryPin || '8131',
+      employeeCount: '1 Cabang',
     };
   }
 
@@ -762,7 +762,7 @@ export async function verifyTenantLoginAction(
     if (!validOwnerPassword) {
       return {
         success: false,
-        message: 'Kata sandi atau PIN Owner salah. Anda dapat mereset kata sandi melalui menu "Lupa Password".',
+        message: 'Kata sandi atau PIN Owner salah. Anda dapat mereset kata sandi melalui tombol "Lupa Kata Sandi? Reset via WhatsApp".',
       };
     }
 

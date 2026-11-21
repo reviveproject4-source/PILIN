@@ -207,6 +207,12 @@ export class PendingRegistrationStore {
     );
   }
 
+  static findById(id: string): RegistrationRecord | null {
+    if (!id) return null;
+    const all = this.getAll();
+    return all.find((r) => r.id === id || id.includes(r.id) || r.id.includes(id)) || null;
+  }
+
   static setPassword(identifier: string, newPassword: string): boolean {
     const cleanId = (identifier || '').trim().toLowerCase();
     let target = this.findByPhoneOrEmail(identifier);
